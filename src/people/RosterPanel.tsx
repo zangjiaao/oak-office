@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { rosterLabel, rosterNote, type DraftPreview } from "../office/seats";
 import type { HairStyle, Look } from "../office/types";
-import { hirePerson, updatePerson } from "./api";
+import { dismissPerson, hirePerson, updatePerson } from "./api";
 import {
   GENDER_LABEL,
   GENDERS,
@@ -10,6 +10,7 @@ import {
   STAFF_FULL,
   applyPerson,
   canHire,
+  dropPerson,
   identityOf,
   lookOf,
   parseDraft,
@@ -51,6 +52,7 @@ export function RosterPanel({
   const [form, setForm] = useState<FormState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const handledPick = useRef<number | null>(pickRequest?.n ?? null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -76,23 +78,27 @@ export function RosterPanel({
     handledPick.current = pickRequest.n;
     setForm(editForm(person));
     setError(null);
+    setLeaving(false);
   }, [pickRequest, people]);
 
   function startHire() {
     onSelect(null);
     setForm(createForm());
     setError(null);
+    setLeaving(false);
   }
 
   function open(person: PersonRow) {
     onSelect(person.id);
     setForm(editForm(person));
     setError(null);
+    setLeaving(false);
   }
 
   function closeForm() {
     setForm(null);
     setError(null);
+    setLeaving(false);
   }
 
   async function save(event: FormEvent) {
@@ -130,9 +136,32 @@ export function RosterPanel({
         const person = await updatePerson(form.id, parsed.value);
         onPeople(applyPerson(people ?? [], person));
         setForm(editForm(person));
+        setLeaving(false);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "档案没有写成。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function leave() {
+    if (!form || form.kind !== "edit" || !form.id || saving) return;
+    if (!leaving) {
+      setLeaving(true);
+      setError(null);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await dismissPerson(form.id);
+      onPeople(dropPerson(people ?? [], form.id));
+      if (selectedId === form.id) onSelect(null);
+      setForm(null);
+      setLeaving(false);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "档案没有去掉。");
     } finally {
       setSaving(false);
     }
@@ -303,9 +332,15 @@ export function RosterPanel({
       <div className="staff-bar">
         {form ? (
           <>
+            {leaving ? <p className="hint">确认后，这份档案去掉，桌子也收走。</p> : null}
             <button type="submit" form="person-form" className="save" disabled={saving}>
               {form.kind === "create" ? "入职" : "保存"}
             </button>
+            {form.kind === "edit" ? (
+              <button type="button" className="leave" onClick={() => void leave()} disabled={saving}>
+                {leaving ? "确认离职" : "离职"}
+              </button>
+            ) : null}
             <button type="button" onClick={closeForm} disabled={saving}>
               取消
             </button>

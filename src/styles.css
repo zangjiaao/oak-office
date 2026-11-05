@@ -334,15 +334,23 @@ button, input {
 
 .staff-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 14px 16px;
   border-top: 1px solid #e0d2b8;
 }
 
+.staff-bar .hint { width: 100%; margin: 0; }
+
 .staff-bar button.save {
   background: #1f3a32;
   border-color: #1f3a32;
   color: #f3ead7;
+}
+
+.staff-bar button.leave {
+  border-color: #a8322a;
+  color: #a8322a;
 }
 
 .staff-bar button:disabled { opacity: 0.55; cursor: default; }

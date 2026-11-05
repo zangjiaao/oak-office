@@ -121,6 +121,22 @@ export async function updatePerson(
   }
 }
 
+export async function dismissPerson(
+  db: D1Database,
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string; status: number } | null> {
+  try {
+    const existing = await db.prepare("SELECT id FROM people WHERE id = ?").bind(id).first<{ id: string }>();
+    if (!existing) return null;
+    await db.prepare("DELETE FROM people WHERE id = ?").bind(id).run();
+    return { ok: true };
+  } catch (error) {
+    const refusal = refusalFrom(error);
+    if (refusal) return refusal;
+    throw error;
+  }
+}
+
 export function readDraft(input: unknown) {
   return parseDraft(input);
 }

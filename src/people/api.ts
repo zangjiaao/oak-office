@@ -15,6 +15,16 @@ export async function updatePerson(id: string, draft: PersonDraft): Promise<Pers
   return (body as { person: PersonRow }).person;
 }
 
+export async function dismissPerson(id: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/people/${id}`, { method: "DELETE" });
+  } catch {
+    throw new Error("档案库没连上。");
+  }
+  if (!response.ok) throw new Error(await errorMessage(response));
+}
+
 async function send(path: string, options?: { method: "POST" | "PATCH"; draft: PersonDraft }) {
   let response: Response;
   try {

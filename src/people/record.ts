@@ -196,6 +196,10 @@ export function applyPerson(people: PersonRow[], person: PersonRow): PersonRow[]
   return found ? next : [...next, person];
 }
 
+export function dropPerson(people: PersonRow[], id: string) {
+  return people.filter((person) => person.id !== id);
+}
+
 function leadFlag(value: unknown): 0 | 1 | null {
   if (value === true || value === 1) return 1;
   if (value === false || value === 0) return 0;

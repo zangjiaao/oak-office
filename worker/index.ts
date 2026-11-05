@@ -1,4 +1,4 @@
-import { readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
+import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import type { Env } from "./env";
 import type { PersonDraft } from "../src/people/record";
 
@@ -31,11 +31,17 @@ export default {
       }
       const match = /^\/api\/people\/([^/]+)$/.exec(url.pathname);
       if (match) {
-        if (request.method !== "PATCH") {
-          return new Response(null, { status: 405, headers: { allow: "PATCH" } });
-        }
         const id = decodeURIComponent(match[1]);
         if (!UUID.test(id)) return json({ error: "没有这个人。" }, 404);
+        if (request.method === "DELETE") {
+          const result = await dismissPerson(env.DB, id);
+          if (!result) return json({ error: "没有这个人。" }, 404);
+          if (!result.ok) return json({ error: result.error }, result.status);
+          return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+        }
+        if (request.method !== "PATCH") {
+          return new Response(null, { status: 405, headers: { allow: "PATCH, DELETE" } });
+        }
         return write(request, async (draft) => {
           const result = await updatePerson(env.DB, id, draft);
           if (!result) return json({ error: "没有这个人。" }, 404);
