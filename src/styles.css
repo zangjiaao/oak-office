@@ -41,6 +41,7 @@ button, input {
 }
 
 .floor-bar {
+  flex-wrap: wrap;
   padding: 12px 16px 8px;
 }
 
@@ -170,6 +171,8 @@ button, input {
   color: #241c16;
   padding: 10px 12px;
 }
+
+.chat > form input:disabled { opacity: 0.7; }
 
 .roster {
   list-style: none;

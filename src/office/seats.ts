@@ -1,6 +1,6 @@
 import { STAFF_LIMIT, canHire, identityOf, lookOf, openSeat, staffFits, type PersonRow, type SeatChange } from "../people/record";
 import { ROOM, SPOTS } from "./roster";
-import type { ActorFrame, Look, Point } from "./types";
+import type { ActorFrame, Look, Point, Pose } from "./types";
 
 const COLS = [52, 148, 244, 340];
 const ROW_Y = [188, 250];
@@ -29,9 +29,14 @@ type Placed = {
   point: Point;
 };
 
-export function rosterView(people: PersonRow[], draft: DraftPreview | null, selectedId: string | null) {
+export function rosterView(
+  people: PersonRow[],
+  draft: DraftPreview | null,
+  selectedId: string | null,
+  floor?: Record<string, { pose: Pose; label: string }>,
+) {
   return {
-    actors: layout(people, fittingDraft(people, draft), selectedId).map((person) => actor(person)),
+    actors: layout(people, fittingDraft(people, draft), selectedId).map((person) => actor(person, floor?.[person.id])),
     desks: fixedDesks(),
     room: { w: ROOM.w, h: ROW_Y[1] + (ROOM.h - ROW_Y[0]) },
   };
@@ -141,13 +146,13 @@ function staffPoint(seat: number): Point {
   return { x: COLS[seat % COLS.length], y: ROW_Y[Math.floor(seat / COLS.length)] };
 }
 
-function actor(person: Placed): ActorFrame {
+function actor(person: Placed, mark?: { pose: Pose; label: string }): ActorFrame {
   return {
     id: person.id,
     name: person.name,
     look: person.look,
-    pose: "idle",
-    label: person.lead ? "主管" : "闲置",
+    pose: mark?.pose ?? "idle",
+    label: mark?.label ?? (person.lead ? "主管" : "闲置"),
     x: person.point.x,
     y: person.point.y,
     face: person.point.x > 200 ? -1 : 1,

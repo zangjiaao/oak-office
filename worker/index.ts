@@ -1,4 +1,5 @@
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
+import { getWork, speak } from "./work";
 import type { Env } from "./env";
 import type { PersonDraft } from "../src/people/record";
 
@@ -17,6 +18,23 @@ export default {
     try {
       if (request.method === "GET" && url.pathname === "/api/health") {
         return json({ ok: true, name: "oak-office" });
+      }
+      if (url.pathname === "/api/work") {
+        if (request.method === "GET") return json(await getWork(env.DB));
+        if (request.method === "POST") {
+          let body: unknown;
+          try {
+            body = await request.json();
+          } catch {
+            return json({ error: "看不懂这句话。" }, 400);
+          }
+          const text = body && typeof body === "object" && "text" in body ? (body as { text: unknown }).text : undefined;
+          if (typeof text !== "string") return json({ error: "看不懂这句话。" }, 400);
+          const result = await speak(env, text, request.signal);
+          if (!result.ok) return json({ error: result.error }, result.status);
+          return json(result.office);
+        }
+        return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
       }
       if (url.pathname === "/api/people") {
         if (request.method === "GET") return json({ people: await listPeople(env.DB) });
