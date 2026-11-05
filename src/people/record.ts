@@ -82,6 +82,22 @@ export function canHire(people: { id: string; is_lead: 0 | 1 }[]) {
   );
 }
 
+/** Lowest empty employee desk. Leads do not occupy one, and ignored ids are treated as already gone. */
+export function openSeat(
+  people: { id: string; is_lead: 0 | 1; seat: number | null }[],
+  ignore: string[] = [],
+): number | null {
+  const taken = new Set<number>();
+  for (const person of people) {
+    if (ignore.includes(person.id) || person.is_lead === 1 || person.seat === null) continue;
+    taken.add(person.seat);
+  }
+  for (let seat = 0; seat < STAFF_LIMIT; seat += 1) {
+    if (!taken.has(seat)) return seat;
+  }
+  return null;
+}
+
 /**
  * One row in D1 table `people`.
  * `brief` and `dossier` are null when the file leaves them blank.
@@ -99,6 +115,8 @@ export type PersonRow = {
   brief: string | null;
   dossier: string | null;
   is_lead: 0 | 1;
+  /** Employee desk 0–7. Null while this person is the lead. */
+  seat: number | null;
   created_at: number;
   updated_at: number;
 };
@@ -190,7 +208,9 @@ export function applyPerson(people: PersonRow[], person: PersonRow): PersonRow[]
       found = true;
       return person;
     }
-    if (person.is_lead === 1 && item.is_lead === 1) return { ...item, is_lead: 0 as const };
+    if (person.is_lead === 1 && item.is_lead === 1) {
+      return { ...item, is_lead: 0 as const, seat: openSeat(people, [person.id, item.id]) };
+    }
     return item;
   });
   return found ? next : [...next, person];

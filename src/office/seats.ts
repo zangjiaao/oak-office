@@ -1,4 +1,4 @@
-import { canHire, identityOf, lookOf, staffFits, type PersonRow, type SeatChange } from "../people/record";
+import { STAFF_LIMIT, canHire, identityOf, lookOf, openSeat, staffFits, type PersonRow, type SeatChange } from "../people/record";
 import { ROOM, SPOTS } from "./roster";
 import type { ActorFrame, Look, Point } from "./types";
 
@@ -30,12 +30,10 @@ type Placed = {
 };
 
 export function rosterView(people: PersonRow[], draft: DraftPreview | null, selectedId: string | null) {
-  const placed = layout(people, fittingDraft(people, draft), selectedId);
-  const staff = placed.filter((person) => !person.lead).length;
   return {
-    actors: placed.map((person) => actor(person)),
-    desks: placed.map((person) => ({ x: person.point.x, y: person.point.y, lead: person.lead })),
-    room: rosterRoom(staff),
+    actors: layout(people, fittingDraft(people, draft), selectedId).map((person) => actor(person)),
+    desks: fixedDesks(),
+    room: { w: ROOM.w, h: ROW_Y[1] + (ROOM.h - ROW_Y[0]) },
   };
 }
 
@@ -61,48 +59,86 @@ function fittingDraft(people: PersonRow[], draft: DraftPreview | null): DraftPre
 }
 
 function layout(people: PersonRow[], draft: DraftPreview | null, selectedId: string | null): Placed[] {
-  const rows = people.map((person) => {
-    const editing = draft?.kind === "edit" && draft.id === person.id;
-    return {
+  const placed: Placed[] = [];
+  const draftId = draft?.kind === "edit" ? draft.id : undefined;
+
+  for (const person of people) {
+    const editing = Boolean(draft?.kind === "edit" && draft.id === person.id);
+    const name = editing && draft ? draft.name.trim() || person.name : person.name;
+    const look = editing && draft ? draft.look : lookOf(person);
+    if (editing && draft) {
+      const point = draft.isLead ? SPOTS.lead : staffSpot(keptSeat(people, person, draft.isLead));
+      if (!point) continue;
+      placed.push({ id: person.id, name, look, lead: draft.isLead, selected: true, point });
+      continue;
+    }
+    if (draft?.isLead && person.is_lead === 1) {
+      const seat = openSeat(people, [person.id, ...(draftId ? [draftId] : [])]);
+      if (seat === null) continue;
+      placed.push({
+        id: person.id,
+        name,
+        look,
+        lead: false,
+        selected: selectedId === person.id,
+        point: staffPoint(seat),
+      });
+      continue;
+    }
+    if (person.is_lead === 1) {
+      placed.push({ id: person.id, name, look, lead: true, selected: selectedId === person.id, point: SPOTS.lead });
+      continue;
+    }
+    if (person.seat === null) continue;
+    placed.push({
       id: person.id,
-      name: editing ? draft.name.trim() || person.name : person.name,
-      look: editing ? draft.look : lookOf(person),
-      lead: shownAsLead(person, draft),
+      name,
+      look,
+      lead: false,
       selected: selectedId === person.id,
-    };
-  });
-  if (draft?.kind === "create") {
-    rows.push({
-      id: "draft",
-      name: draft.name.trim() || "新人",
-      look: draft.look,
-      lead: draft.isLead,
-      selected: true,
+      point: staffPoint(person.seat),
     });
   }
-  const leadIndex = rows.findIndex((person) => person.lead);
-  const staff = rows.filter((_, index) => index !== leadIndex);
-  const lead = leadIndex === -1 ? undefined : rows[leadIndex];
-  const placed: Placed[] = staff.map((person, index) => ({ ...person, point: staffPoint(index) }));
-  if (lead) placed.push({ ...lead, point: SPOTS.lead });
+
+  if (draft?.kind === "create") {
+    const seat = draft.isLead ? null : openSeat(people);
+    const point = draft.isLead ? SPOTS.lead : seat === null ? null : staffPoint(seat);
+    if (point) {
+      placed.push({
+        id: "draft",
+        name: draft.name.trim() || "新人",
+        look: draft.look,
+        lead: draft.isLead,
+        selected: true,
+        point,
+      });
+    }
+  }
   return placed;
 }
 
-function shownAsLead(person: PersonRow, draft: DraftPreview | null) {
-  if (draft?.kind === "edit" && draft.id === person.id) return draft.isLead;
-  if (draft?.isLead) return false;
-  return person.is_lead === 1;
+function keptSeat(people: PersonRow[], person: PersonRow, isLead: boolean) {
+  if (isLead) return null;
+  if (person.is_lead === 0 && person.seat !== null) return person.seat;
+  return openSeat(people, [person.id]);
 }
 
-function staffPoint(index: number): Point {
-  const row = Math.min(Math.floor(index / COLS.length), ROW_Y.length - 1);
-  return { x: COLS[index % COLS.length], y: ROW_Y[row] };
+function staffSpot(seat: number | null) {
+  return seat === null ? null : staffPoint(seat);
 }
 
-function rosterRoom(staff: number) {
-  const rows = staff === 0 ? 1 : Math.ceil(staff / COLS.length);
-  if (rows <= 1) return { w: ROOM.w, h: ROOM.h };
-  return { w: ROOM.w, h: ROW_Y[1] + (ROOM.h - ROW_Y[0]) };
+function fixedDesks(): DeskSpot[] {
+  const desks: DeskSpot[] = [];
+  for (let seat = 0; seat < STAFF_LIMIT; seat += 1) {
+    const point = staffPoint(seat);
+    desks.push({ x: point.x, y: point.y, lead: false });
+  }
+  desks.push({ x: SPOTS.lead.x, y: SPOTS.lead.y, lead: true });
+  return desks;
+}
+
+function staffPoint(seat: number): Point {
+  return { x: COLS[seat % COLS.length], y: ROW_Y[Math.floor(seat / COLS.length)] };
 }
 
 function actor(person: Placed): ActorFrame {

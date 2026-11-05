@@ -332,7 +332,7 @@ export function RosterPanel({
       <div className="staff-bar">
         {form ? (
           <>
-            {leaving ? <p className="hint">确认后，这份档案去掉，桌子也收走。</p> : null}
+            {leaving ? <p className="hint">确认后，这份档案去掉，工位留着。</p> : null}
             <button type="submit" form="person-form" className="save" disabled={saving}>
               {form.kind === "create" ? "入职" : "保存"}
             </button>
