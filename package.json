@@ -5,7 +5,8 @@
   "description": "A virtual office where you talk to a department lead while hired agents work at their desks.",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "CI=1 wrangler d1 migrations apply oak-office --local && vite",
+    "db:migrate": "CI=1 wrangler d1 migrations apply oak-office --local",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

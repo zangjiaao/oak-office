@@ -1,5 +1,5 @@
 import { DESKS, ROOM, SPOTS } from "./roster";
-import type { ActorFrame, Pose } from "./types";
+import type { ActorFrame, Point, Pose } from "./types";
 
 type Screen = "off" | "read" | "type" | "run" | "ok" | "error";
 
@@ -104,6 +104,7 @@ function drawPerson(
   const step = Math.floor(frame / 8) % 2;
   ctx.save();
   ctx.translate(Math.round(actor.x), Math.round(actor.y + bob));
+  if (actor.selected) rect(ctx, -8, -1, 16, 3, "#c6a15b");
   if (actor.face < 0) ctx.scale(-1, 1);
 
   const leg = actor.walking ? (step ? 2 : -2) : 0;
@@ -141,6 +142,29 @@ function drawPerson(
   }
 }
 
+export function roomTransform(width: number, height: number) {
+  const scale = Math.max(1, Math.floor(Math.min(width / ROOM.w, height / ROOM.h)));
+  const ox = Math.floor((width - ROOM.w * scale) / 2);
+  const oy = Math.floor((height - ROOM.h * scale) / 2);
+  return { scale, ox, oy };
+}
+
+export function actorAt(actors: ActorFrame[], roomX: number, roomY: number) {
+  const ordered = [...actors].sort((a, b) => b.y - a.y);
+  return ordered.find((actor) => {
+    const dx = Math.abs(roomX - actor.x);
+    const dy = actor.y - roomY;
+    return dx <= 14 && dy >= -6 && dy <= 34;
+  });
+}
+
+function occupant(actors: ActorFrame[], deskId: string, spot: Point) {
+  const named = actors.find((actor) => actor.id === deskId);
+  const near = (actor: ActorFrame) => Math.hypot(actor.x - spot.x, actor.y - spot.y) < 8;
+  if (named) return near(named) ? named : undefined;
+  return actors.find(near);
+}
+
 export function drawOffice(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -151,9 +175,7 @@ export function drawOffice(
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#1a1714";
   ctx.fillRect(0, 0, width, height);
-  const scale = Math.max(1, Math.floor(Math.min(width / ROOM.w, height / ROOM.h)));
-  const ox = Math.floor((width - ROOM.w * scale) / 2);
-  const oy = Math.floor((height - ROOM.h * scale) / 2);
+  const { scale, ox, oy } = roomTransform(width, height);
   ctx.save();
   ctx.translate(ox, oy);
   ctx.scale(scale, scale);
@@ -162,13 +184,12 @@ export function drawOffice(
 
   for (const id of DESKS) {
     const spot = SPOTS[id];
-    const owner = actors.find((actor) => actor.id === id);
-    const atDesk = owner ? Math.hypot(owner.x - spot.x, owner.y - spot.y) < 8 : false;
+    const owner = occupant(actors, id, spot);
     drawDesk(
       ctx,
       spot.x,
       spot.y - 8,
-      screenFor(owner?.pose ?? "idle", atDesk),
+      screenFor(owner?.pose ?? "idle", Boolean(owner)),
       frame,
       id === "lead",
     );

@@ -62,14 +62,22 @@ button, input {
   font-variant-numeric: tabular-nums;
 }
 
-.transport button, .poses span {
+.transport button, .modes button, .poses span {
   border: 1px solid #6b5340;
   background: transparent;
   color: #f3ead7;
   padding: 4px 10px;
 }
 
-.transport button { cursor: pointer; }
+.transport button, .modes button { cursor: pointer; }
+
+.modes { display: flex; gap: 6px; }
+
+.modes button.on {
+  background: #c6a15b;
+  border-color: #c6a15b;
+  color: #1a1714;
+}
 
 .stage { min-height: 0; position: relative; }
 
@@ -78,6 +86,8 @@ button, input {
   width: 100%;
   height: 100%;
 }
+
+.stage canvas.pick { cursor: pointer; }
 
 .poses {
   justify-content: flex-start;
@@ -112,6 +122,7 @@ button, input {
 
 .log {
   overflow: auto;
+  min-height: 0;
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -152,7 +163,7 @@ button, input {
 
 .chat form { border-top: 1px solid #e0d2b8; }
 
-.chat input {
+.chat > form input {
   width: 100%;
   border: 1px solid #d9c7a4;
   background: #fffaf2;
@@ -180,6 +191,120 @@ button, input {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+.chat.staff { grid-template-rows: auto minmax(0, 1fr) auto; }
+
+.people {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.people button, .choices button, .staff-bar button, .file-error button, .presets button {
+  font: inherit;
+  cursor: pointer;
+}
+
+.people button {
+  width: 100%;
+  text-align: left;
+  border: 1px solid #d9c7a4;
+  background: #fffaf2;
+  color: #241c16;
+  padding: 8px 10px;
+}
+
+.people button.on, .choices button.on {
+  background: #1f3a32;
+  border-color: #1f3a32;
+  color: #f3ead7;
+}
+
+.people b, .people em { display: block; }
+
+.people em {
+  color: #7a6a56;
+  font-style: normal;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.people button.on em { color: #d7c4a2; }
+
+.file {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.file label, .field, .colors label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #7a6a56;
+  font-size: 13px;
+}
+
+.file input[type="text"], .file input:not([type="color"]), .file textarea {
+  width: 100%;
+  border: 1px solid #d9c7a4;
+  background: #fffaf2;
+  color: #241c16;
+  padding: 8px 10px;
+}
+
+.file textarea { min-height: 88px; resize: vertical; }
+
+.choices, .presets, .colors { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.colors { display: grid; grid-template-columns: 1fr 1fr; }
+
+.colors label {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.choices button, .staff-bar button, .file-error button {
+  border: 1px solid #d9c7a4;
+  background: transparent;
+  color: #241c16;
+  padding: 4px 10px;
+}
+
+.presets button {
+  width: 22px;
+  height: 22px;
+  border: 1px solid #6b4428;
+  padding: 0;
+}
+
+.presets button.on { outline: 2px solid #1f3a32; outline-offset: 1px; }
+
+.hint { margin: 12px 0 0; color: #7a6a56; font-size: 13px; line-height: 1.45; }
+
+.file-error { margin: 12px 0 0; color: #a8322a; }
+
+.staff-bar {
+  display: flex;
+  gap: 8px;
+  padding: 14px 16px;
+  border-top: 1px solid #e0d2b8;
+}
+
+.staff-bar button.save {
+  background: #1f3a32;
+  border-color: #1f3a32;
+  color: #f3ead7;
+}
+
+.staff-bar button:disabled { opacity: 0.55; cursor: default; }
 
 @media (max-width: 800px) {
   .app { grid-template-columns: 1fr; grid-template-rows: minmax(280px, 1fr) minmax(240px, 42vh); }
