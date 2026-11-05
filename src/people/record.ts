@@ -67,6 +67,7 @@ export type PersonRow = {
   hair_style: HairStyle;
   brief: string | null;
   dossier: string | null;
+  is_lead: 0 | 1;
   created_at: number;
   updated_at: number;
 };
@@ -81,6 +82,7 @@ export type PersonDraft = {
   hair_style: HairStyle;
   brief: string | null;
   dossier: string | null;
+  is_lead: 0 | 1;
 };
 
 const NAME_MAX = 32;
@@ -131,6 +133,8 @@ export function parseDraft(input: unknown): { ok: true; value: PersonDraft } | {
   if (!brief.ok) return brief;
   const dossier = optionalText(body.dossier, DOSSIER_MAX, false, "详细设定太长。");
   if (!dossier.ok) return dossier;
+  const isLead = leadFlag(body.is_lead);
+  if (isLead === null) return { ok: false, error: "要选是不是主管。" };
   return {
     ok: true,
     value: {
@@ -143,8 +147,28 @@ export function parseDraft(input: unknown): { ok: true; value: PersonDraft } | {
       hair_style: body.hair_style as HairStyle,
       brief: brief.value,
       dossier: dossier.value,
+      is_lead: isLead,
     },
   };
+}
+
+export function applyPerson(people: PersonRow[], person: PersonRow): PersonRow[] {
+  let found = false;
+  const next = people.map((item) => {
+    if (item.id === person.id) {
+      found = true;
+      return person;
+    }
+    if (person.is_lead === 1 && item.is_lead === 1) return { ...item, is_lead: 0 as const };
+    return item;
+  });
+  return found ? next : [...next, person];
+}
+
+function leadFlag(value: unknown): 0 | 1 | null {
+  if (value === true || value === 1) return 1;
+  if (value === false || value === 0) return 0;
+  return null;
 }
 
 function filled(value: string | null | undefined) {

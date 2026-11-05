@@ -7,6 +7,7 @@ import {
   GENDERS,
   HAIR_LABEL,
   LOOK_PRESETS,
+  applyPerson,
   identityOf,
   lookOf,
   parseDraft,
@@ -22,6 +23,7 @@ type FormState = {
   look: Look;
   brief: string;
   dossier: string;
+  isLead: boolean;
 };
 
 export function RosterPanel({
@@ -54,7 +56,7 @@ export function RosterPanel({
       onDraft(null);
       return;
     }
-    onDraft({ kind: form.kind, id: form.id, name: form.name, look: form.look });
+    onDraft({ kind: form.kind, id: form.id, name: form.name, look: form.look, isLead: form.isLead });
   }, [form, onDraft]);
 
   useEffect(() => () => onDraft(null), [onDraft]);
@@ -103,6 +105,7 @@ export function RosterPanel({
       hair_style: form.look.hairStyle,
       brief: form.brief,
       dossier: form.dossier,
+      is_lead: form.isLead ? 1 : 0,
     });
     if (!parsed.ok) {
       setError(parsed.error);
@@ -113,12 +116,12 @@ export function RosterPanel({
     try {
       if (form.kind === "create") {
         const person = await hirePerson(parsed.value);
-        onPeople([...(people ?? []), person]);
+        onPeople(applyPerson(people ?? [], person));
         onSelect(person.id);
         setForm(null);
       } else if (form.id) {
         const person = await updatePerson(form.id, parsed.value);
-        onPeople((people ?? []).map((item) => (item.id === person.id ? person : item)));
+        onPeople(applyPerson(people ?? [], person));
         setForm(editForm(person));
       }
     } catch (caught) {
@@ -128,7 +131,12 @@ export function RosterPanel({
     }
   }
 
-  const note = people ? rosterNote(people, form && { kind: form.kind, name: form.name, look: form.look, id: form.id }) : null;
+  const note = people
+    ? rosterNote(
+        people,
+        form && { kind: form.kind, name: form.name, look: form.look, id: form.id, isLead: form.isLead },
+      )
+    : null;
   const identity = form ? identityOf({ brief: form.brief, dossier: form.dossier }) : null;
 
   return (
@@ -180,6 +188,19 @@ export function RosterPanel({
                 maxLength={32}
               />
             </label>
+            <div className="field">
+              <span>主管</span>
+              <button
+                type="button"
+                className={form.isLead ? "switch on" : "switch"}
+                aria-pressed={form.isLead}
+                onClick={() => setForm({ ...form, isLead: !form.isLead })}
+              >
+                <i />
+                {form.isLead ? "是主管" : "不是主管"}
+              </button>
+              {form.isLead ? <p className="hint">这个部门只有一位主管。保存后，原来的主管回到员工桌。</p> : null}
+            </div>
             <div className="field">
               <span>性别</span>
               <div className="choices">
@@ -310,6 +331,7 @@ function createForm(): FormState {
     look: LOOK_PRESETS[0],
     brief: "",
     dossier: "",
+    isLead: false,
   };
 }
 
@@ -322,6 +344,7 @@ function editForm(person: PersonRow): FormState {
     look: lookOf(person),
     brief: person.brief ?? "",
     dossier: person.dossier ?? "",
+    isLead: person.is_lead === 1,
   };
 }
 
