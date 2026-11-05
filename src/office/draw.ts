@@ -1,5 +1,10 @@
 import { DESKS, ROOM, SPOTS } from "./roster";
-import type { ActorFrame, Point, Pose } from "./types";
+import type { DeskSpot } from "./seats";
+import type { ActorFrame, Pose } from "./types";
+
+export function rehearsalDesks(): DeskSpot[] {
+  return DESKS.map((id) => ({ x: SPOTS[id].x, y: SPOTS[id].y, lead: id === "lead", id }));
+}
 
 type Screen = "off" | "read" | "type" | "run" | "ok" | "error";
 
@@ -25,14 +30,14 @@ function rect(
   ctx.fillRect(Math.round(x), Math.round(y), w, h);
 }
 
-function drawRoom(ctx: CanvasRenderingContext2D, frame: number) {
-  rect(ctx, 0, 0, ROOM.w, 78, "#243f36");
-  rect(ctx, 0, 0, ROOM.w, 8, "#1b312a");
-  rect(ctx, 0, 62, ROOM.w, 8, "#c6a15b");
-  rect(ctx, 0, 70, ROOM.w, 8, "#1a1714");
-  rect(ctx, 0, 78, ROOM.w, ROOM.h - 78, "#c4a574");
-  for (let y = 90; y < ROOM.h; y += 14) {
-    rect(ctx, 0, y, ROOM.w, 1, "#b08a58");
+function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: number; h: number }) {
+  rect(ctx, 0, 0, room.w, 78, "#243f36");
+  rect(ctx, 0, 0, room.w, 8, "#1b312a");
+  rect(ctx, 0, 62, room.w, 8, "#c6a15b");
+  rect(ctx, 0, 70, room.w, 8, "#1a1714");
+  rect(ctx, 0, 78, room.w, room.h - 78, "#c4a574");
+  for (let y = 90; y < room.h; y += 14) {
+    rect(ctx, 0, y, room.w, 1, "#b08a58");
   }
 
   rect(ctx, 18, 18, 46, 40, "#6b4428");
@@ -142,10 +147,10 @@ function drawPerson(
   }
 }
 
-export function roomTransform(width: number, height: number) {
-  const scale = Math.max(1, Math.floor(Math.min(width / ROOM.w, height / ROOM.h)));
-  const ox = Math.floor((width - ROOM.w * scale) / 2);
-  const oy = Math.floor((height - ROOM.h * scale) / 2);
+export function roomTransform(width: number, height: number, room = ROOM) {
+  const scale = Math.max(1, Math.floor(Math.min(width / room.w, height / room.h)));
+  const ox = Math.floor((width - room.w * scale) / 2);
+  const oy = Math.floor((height - room.h * scale) / 2);
   return { scale, ox, oy };
 }
 
@@ -158,10 +163,12 @@ export function actorAt(actors: ActorFrame[], roomX: number, roomY: number) {
   });
 }
 
-function occupant(actors: ActorFrame[], deskId: string, spot: Point) {
-  const named = actors.find((actor) => actor.id === deskId);
-  const near = (actor: ActorFrame) => Math.hypot(actor.x - spot.x, actor.y - spot.y) < 8;
-  if (named) return near(named) ? named : undefined;
+function occupant(actors: ActorFrame[], desk: DeskSpot) {
+  const near = (actor: ActorFrame) => Math.hypot(actor.x - desk.x, actor.y - desk.y) < 8;
+  if (desk.id) {
+    const named = actors.find((actor) => actor.id === desk.id);
+    if (named) return near(named) ? named : undefined;
+  }
   return actors.find(near);
 }
 
@@ -171,27 +178,28 @@ export function drawOffice(
   height: number,
   actors: ActorFrame[],
   frame: number,
+  room = ROOM,
+  desks: DeskSpot[] = rehearsalDesks(),
 ) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#1a1714";
   ctx.fillRect(0, 0, width, height);
-  const { scale, ox, oy } = roomTransform(width, height);
+  const { scale, ox, oy } = roomTransform(width, height, room);
   ctx.save();
   ctx.translate(ox, oy);
   ctx.scale(scale, scale);
   ctx.imageSmoothingEnabled = false;
-  drawRoom(ctx, frame);
+  drawRoom(ctx, frame, room);
 
-  for (const id of DESKS) {
-    const spot = SPOTS[id];
-    const owner = occupant(actors, id, spot);
+  for (const desk of desks) {
+    const owner = occupant(actors, desk);
     drawDesk(
       ctx,
-      spot.x,
-      spot.y - 8,
+      desk.x,
+      desk.y - 8,
       screenFor(owner?.pose ?? "idle", Boolean(owner)),
       frame,
-      id === "lead",
+      desk.lead,
     );
   }
 

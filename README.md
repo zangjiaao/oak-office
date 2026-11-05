@@ -4,7 +4,7 @@ A virtual office where you talk to a department lead while hired agents work at 
 
 The office has two states.
 
-**编制** is the roster for this one department. People exist before a scene. A lead and a staff member use the same file: name, gender, and appearance are required; a one-line brief and a longer dossier are optional. Blank text resolves to a generic identity. The hire form has one lead switch. The department has a single lead, who sits at the inner desk; turning the switch on sends the previous lead back to a staff desk. Files live in D1. The page hires and edits through the Worker, and it does not start a model.
+**编制** is the roster for this one department. People exist before a scene. A lead and a staff member use the same file: name, gender, and appearance are required; a one-line brief and a longer dossier are optional. Blank text resolves to a generic identity. The hire form has one lead switch. The department has a single lead, who sits at the inner desk; turning the switch on sends the previous lead back to a staff desk. Employee desks follow the people who are hired: four in a row, two rows at most, eight employees. A ninth employee is refused. Files live in D1. The page hires and edits through the Worker, and it does not start a model.
 
 **排练** is the scripted scene. The left side is the pixel office. The right side is the department lead. Both play from the same timeline so the working states can be checked before any agent runtime is connected. The scene covers idle, arrival, thinking, reading, typing, running, waiting, handoff, report, done, and blocked. It keeps the original four people and the original lines. Roster edits do not change the rehearsal.
 

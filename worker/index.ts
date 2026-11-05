@@ -21,7 +21,11 @@ export default {
       if (url.pathname === "/api/people") {
         if (request.method === "GET") return json({ people: await listPeople(env.DB) });
         if (request.method === "POST") {
-          return write(request, async (draft) => json({ person: await hirePerson(env.DB, draft) }, 201));
+          return write(request, async (draft) => {
+            const result = await hirePerson(env.DB, draft);
+            if (!result.ok) return json({ error: result.error }, result.status);
+            return json({ person: result.person }, 201);
+          });
         }
         return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
       }
@@ -33,9 +37,10 @@ export default {
         const id = decodeURIComponent(match[1]);
         if (!UUID.test(id)) return json({ error: "没有这个人。" }, 404);
         return write(request, async (draft) => {
-          const person = await updatePerson(env.DB, id, draft);
-          if (!person) return json({ error: "没有这个人。" }, 404);
-          return json({ person });
+          const result = await updatePerson(env.DB, id, draft);
+          if (!result) return json({ error: "没有这个人。" }, 404);
+          if (!result.ok) return json({ error: result.error }, result.status);
+          return json({ person: result.person });
         });
       }
       return new Response(null, { status: 404 });

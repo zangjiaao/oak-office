@@ -51,6 +51,37 @@ export const LOOK_PRESETS: Look[] = [
 export const GENERIC_BRIEF = "办公室里的人。";
 export const GENERIC_DOSSIER = "没有额外设定。做交给他们的事。";
 
+/** Employee desks. The lead's desk is separate and does not count. */
+export const STAFF_LIMIT = 8;
+export const STAFF_FULL = "工位已满。员工最多八个。";
+
+export type SeatChange = { kind: "create" | "edit"; id?: string; isLead: boolean };
+
+export function staffCount(people: { id: string; is_lead: 0 | 1 }[], change?: SeatChange) {
+  const rows = people.map((person) => ({
+    lead:
+      change?.kind === "edit" && change.id === person.id
+        ? change.isLead
+        : change?.isLead
+          ? false
+          : person.is_lead === 1,
+  }));
+  if (change?.kind === "create") rows.push({ lead: change.isLead });
+  const leads = rows.filter((row) => row.lead).length;
+  return rows.length - (leads > 0 ? 1 : 0);
+}
+
+export function staffFits(people: { id: string; is_lead: 0 | 1 }[], change?: SeatChange) {
+  return staffCount(people, change) <= STAFF_LIMIT;
+}
+
+export function canHire(people: { id: string; is_lead: 0 | 1 }[]) {
+  return (
+    staffFits(people, { kind: "create", isLead: false }) ||
+    staffFits(people, { kind: "create", isLead: true })
+  );
+}
+
 /**
  * One row in D1 table `people`.
  * `brief` and `dossier` are null when the file leaves them blank.

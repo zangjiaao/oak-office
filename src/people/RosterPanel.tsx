@@ -7,10 +7,13 @@ import {
   GENDERS,
   HAIR_LABEL,
   LOOK_PRESETS,
+  STAFF_FULL,
   applyPerson,
+  canHire,
   identityOf,
   lookOf,
   parseDraft,
+  staffFits,
   type Gender,
   type PersonRow,
 } from "./record";
@@ -111,6 +114,10 @@ export function RosterPanel({
       setError(parsed.error);
       return;
     }
+    if (!staffFits(people ?? [], { kind: form.kind, id: form.id, isLead: form.isLead })) {
+      setError(STAFF_FULL);
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -131,12 +138,8 @@ export function RosterPanel({
     }
   }
 
-  const note = people
-    ? rosterNote(
-        people,
-        form && { kind: form.kind, name: form.name, look: form.look, id: form.id, isLead: form.isLead },
-      )
-    : null;
+  const note = people ? rosterNote(people) : null;
+  const roomForHire = people ? canHire(people) : false;
   const identity = form ? identityOf({ brief: form.brief, dossier: form.dossier }) : null;
 
   return (
@@ -200,6 +203,9 @@ export function RosterPanel({
                 {form.isLead ? "是主管" : "不是主管"}
               </button>
               {form.isLead ? <p className="hint">这个部门只有一位主管。保存后，原来的主管回到员工桌。</p> : null}
+              {people && !staffFits(people, { kind: form.kind, id: form.id, isLead: form.isLead }) ? (
+                <p className="file-error">{STAFF_FULL}</p>
+              ) : null}
             </div>
             <div className="field">
               <span>性别</span>
@@ -305,7 +311,7 @@ export function RosterPanel({
             </button>
           </>
         ) : (
-          <button type="button" className="save" onClick={startHire} disabled={people === null}>
+          <button type="button" className="save" onClick={startHire} disabled={people === null || !roomForHire}>
             入职
           </button>
         )}

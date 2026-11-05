@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { rehearsalDesks } from "./office/draw";
 import { OfficeStage } from "./office/OfficeStage";
+import { ROOM } from "./office/roster";
 import { DURATION } from "./office/script";
 import { activePoses, actorsAt, linesAt } from "./office/scene";
-import { rosterActors, type DraftPreview } from "./office/seats";
+import { rosterView, type DraftPreview } from "./office/seats";
 import { POSE_NAME, type Pose } from "./office/types";
 import { listPeople } from "./people/api";
 import { RosterPanel } from "./people/RosterPanel";
@@ -84,7 +86,8 @@ export function App() {
 
   const lines = mode === "rehearsal" ? linesAt(time) : [];
   const rehearsalActors = mode === "rehearsal" ? actorsAt(time) : [];
-  const actors = mode === "rehearsal" ? rehearsalActors : rosterActors(people ?? [], draft, selectedId);
+  const roster = rosterView(people ?? [], draft, selectedId);
+  const actors = mode === "rehearsal" ? rehearsalActors : roster.actors;
   const poses = activePoses(time);
 
   useEffect(() => {
@@ -142,6 +145,8 @@ export function App() {
         <OfficeStage
           actors={actors}
           clock={mode === "rehearsal" ? time : null}
+          room={mode === "rehearsal" ? ROOM : roster.room}
+          desks={mode === "rehearsal" ? rehearsalDesks() : roster.desks}
           onPick={mode === "roster" ? pick : undefined}
         />
         {mode === "rehearsal" ? (

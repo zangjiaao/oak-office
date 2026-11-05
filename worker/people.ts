@@ -1,5 +1,7 @@
 import {
+  STAFF_FULL,
   parseDraft,
+  staffFits,
   type PersonDraft,
   type PersonRow,
 } from "../src/people/record";
@@ -28,10 +30,18 @@ export async function listPeople(db: D1Database): Promise<PersonRow[]> {
   }
 }
 
-export async function hirePerson(db: D1Database, draft: PersonDraft): Promise<PersonRow> {
+export type PersonWrite =
+  | { ok: true; person: PersonRow }
+  | { ok: false; error: string; status: number };
+
+export async function hirePerson(db: D1Database, draft: PersonDraft): Promise<PersonWrite> {
   const now = Date.now();
   const row: PersonRow = { id: crypto.randomUUID(), ...draft, created_at: now, updated_at: now };
   try {
+    const people = await listPeople(db);
+    if (!staffFits(people, { kind: "create", isLead: row.is_lead === 1 })) {
+      return { ok: false, error: STAFF_FULL, status: 400 };
+    }
     await db.batch([
       ...leadRelease(db, row),
       db
@@ -54,23 +64,29 @@ export async function hirePerson(db: D1Database, draft: PersonDraft): Promise<Pe
           row.updated_at,
         ),
     ]);
+    return { ok: true, person: row };
   } catch (error) {
-    throw stored(error);
+    const refusal = refusalFrom(error);
+    if (refusal) return refusal;
+    throw error;
   }
-  return row;
 }
 
 export async function updatePerson(
   db: D1Database,
   id: string,
   draft: PersonDraft,
-): Promise<PersonRow | null> {
+): Promise<PersonWrite | null> {
   try {
     const existing = await db
       .prepare("SELECT created_at FROM people WHERE id = ?")
       .bind(id)
       .first<{ created_at: number }>();
     if (!existing) return null;
+    const people = await listPeople(db);
+    if (!staffFits(people, { kind: "edit", id, isLead: draft.is_lead === 1 })) {
+      return { ok: false, error: STAFF_FULL, status: 400 };
+    }
     const updated_at = Date.now();
     const row: PersonRow = { id, ...draft, created_at: existing.created_at, updated_at };
     await db.batch([
@@ -97,9 +113,11 @@ export async function updatePerson(
           row.id,
         ),
     ]);
-    return row;
+    return { ok: true, person: row };
   } catch (error) {
-    throw stored(error);
+    const refusal = refusalFrom(error);
+    if (refusal) return refusal;
+    throw error;
   }
 }
 
@@ -114,6 +132,12 @@ function leadRelease(db: D1Database, row: PersonRow) {
       .prepare("UPDATE people SET is_lead = 0, updated_at = ? WHERE is_lead = 1 AND id != ?")
       .bind(row.updated_at, row.id),
   ];
+}
+
+function refusalFrom(error: unknown): { ok: false; error: string; status: number } | null {
+  const wrapped = error instanceof RosterDbError ? error : stored(error);
+  if (!(wrapped instanceof RosterDbError)) return null;
+  return { ok: false, error: wrapped.message, status: wrapped.status };
 }
 
 function stored(error: unknown): unknown {

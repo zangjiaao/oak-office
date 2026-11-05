@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { actorAt, drawOffice, roomTransform } from "./draw";
+import { ROOM } from "./roster";
+import type { DeskSpot } from "./seats";
 import type { ActorFrame } from "./types";
 
 export function OfficeStage({
   actors,
   clock,
+  room = ROOM,
+  desks,
   onPick,
 }: {
   actors: ActorFrame[];
   clock: number | null;
+  room?: { w: number; h: number };
+  desks?: DeskSpot[];
   onPick?: (id: string) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -59,15 +65,15 @@ export function OfficeStage({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawOffice(ctx, size.w, size.h, actors, drawn);
-  }, [size, actors, drawn]);
+    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks);
+  }, [size, actors, drawn, room, desks]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
     const choose = onPickRef.current;
     const canvas = canvasRef.current;
     if (!choose || !canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const { scale, ox, oy } = roomTransform(rect.width, rect.height);
+    const { scale, ox, oy } = roomTransform(rect.width, rect.height, room);
     const hit = actorAt(
       actorsRef.current,
       (event.clientX - rect.left - ox) / scale,
