@@ -321,6 +321,7 @@ function sceneOf(leadId: string, jobs: Job[], plan?: WorkLine): WorkBeat[] {
   if (jobs.length === 0) return beats;
   beats.push({ person_id: leadId, pose: "idle", label: "等他们", hold: 600, line: plan, lineAt: plan ? "start" : undefined });
   for (const job of jobs) {
+    beats.push({ person_id: job.personId, pose: "arrive", label: "进来了", hold: 3200 });
     beats.push({ person_id: job.personId, pose: job.pose, label: job.label, hold: holdFor(job.pose, job.label) });
     const next = job.next;
     if (

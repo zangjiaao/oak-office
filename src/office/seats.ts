@@ -147,6 +147,7 @@ function staffPoint(seat: number): Point {
 }
 
 function actor(person: Placed, mark?: { pose: Pose; label: string }): ActorFrame {
+  const entering = mark?.pose === "arrive" && mark.label === "进来了" && !person.lead;
   const reporting = mark?.pose === "report" && !person.lead;
   const point = reporting ? { x: person.point.x < SPOTS.lead.x ? 168 : 232, y: 168 } : person.point;
   return {
@@ -159,6 +160,7 @@ function actor(person: Placed, mark?: { pose: Pose; label: string }): ActorFrame
     y: point.y,
     face: point.x > SPOTS.lead.x ? -1 : 1,
     walking: false,
+    walkFrom: entering ? { x: SPOTS.door.x, y: SPOTS.door.y } : undefined,
     selected: person.selected,
   };
 }

@@ -22,7 +22,15 @@ export function useWalk(actors: ActorFrame[], enabled: boolean) {
   const actorsRef = useRef(actors);
   const [offset, setOffset] = useState<Record<string, ReturnType<typeof approach>>>({});
   actorsRef.current = actors;
-  const key = enabled ? actors.map((actor) => `${actor.id}:${Math.round(actor.x)}:${Math.round(actor.y)}`).join("|") : "";
+  const key = enabled
+    ? actors
+        .map((actor) => {
+          const from = actor.walkFrom;
+          const origin = from ? `${Math.round(from.x)},${Math.round(from.y)}` : "";
+          return `${actor.id}:${Math.round(actor.x)}:${Math.round(actor.y)}:${origin}`;
+        })
+        .join("|")
+    : "";
 
   useLayoutEffect(() => {
     if (!enabled) return;
@@ -30,7 +38,7 @@ export function useWalk(actors: ActorFrame[], enabled: boolean) {
     const from: Record<string, Point> = {};
     let moving = false;
     for (const actor of current) {
-      const start = settled.current[actor.id] ?? { x: actor.x, y: actor.y };
+      const start = actor.walkFrom ?? settled.current[actor.id] ?? { x: actor.x, y: actor.y };
       from[actor.id] = start;
       if (Math.hypot(actor.x - start.x, actor.y - start.y) >= 1) moving = true;
     }
