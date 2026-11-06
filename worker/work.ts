@@ -113,6 +113,9 @@ export async function speak(
   if ([...said].length > TEXT_MAX) return { ok: false, error: "这句话太长。", status: 400 };
   if (running) return { ok: false, error: "主管还在忙。", status: 409 };
   running = true;
+  let touched = false;
+  let placed = false;
+  let desks: DeskRow[] = [];
   try {
     const runtime = openPi(env);
     if (!runtime.ok) return runtime;
@@ -120,11 +123,17 @@ export async function speak(
     const lead = people.find((person) => person.is_lead === 1);
     if (!lead) return { ok: false, error: "先指定一位主管。", status: 400 };
     const staff = people.filter((person) => person.is_lead === 0);
-    const desks = await desksOf(env.DB);
+    desks = await desksOf(env.DB);
     const duties = await listDuties(env.DB);
     const prior = await linesOf(env.DB);
     const model = runtime.modelFor(lead.model);
     if (!model) return { ok: false, error: `${lead.name}的模型不在目录里。`, status: 400 };
+    const userLine: WorkLine = { id: crypto.randomUUID(), role: from, person_id: null, text: said };
+    await env.DB.prepare(
+      "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, ?, NULL, ?, NULL, ?)",
+    )
+      .bind(userLine.id, userLine.role, userLine.text, Date.now())
+      .run();
     const turn: Turn = { jobs: new Map(), leadSteps: [] };
     let calls = 0;
     const agent = new Agent({
@@ -153,6 +162,7 @@ export async function speak(
     signal?.addEventListener("abort", stop, { once: true });
     const before = agent.state.messages.length;
     try {
+      touched = true;
       await setDesk(env.DB, lead.id, "think", "在听");
       await agent.prompt(said);
     } finally {
@@ -160,6 +170,7 @@ export async function speak(
       signal?.removeEventListener("abort", stop);
     }
     if (agent.state.errorMessage || signal?.aborted) {
+      await restoreDesks(env.DB, desks);
       return { ok: false, error: "主管这回没接上。", status: 502 };
     }
     const produced = agent.state.messages.slice(before).filter((message) => message.role === "assistant");
@@ -169,7 +180,10 @@ export async function speak(
     const spoken = produced.map((message) => visibleText(message)).filter((text) => text.length > 0);
     const final = [...produced].reverse().find((message) => visibleText(message));
     const reply = spoken.at(-1) || (calls > 0 ? "人已经安排好了。" : "");
-    if (!reply || !final) return { ok: false, error: "主管没有说完。", status: 502 };
+    if (!reply || !final) {
+      await restoreDesks(env.DB, desks);
+      return { ok: false, error: "主管没有说完。", status: 502 };
+    }
     const jobs = [...turn.jobs.values()];
     const inside = new Set(desks.filter((desk) => stillWorking(desk, Date.now())).map((desk) => desk.person_id));
     const plan =
@@ -190,16 +204,12 @@ export async function speak(
       armCrew(job.personId, rest + DONE_MS + IDLE_MS);
     }
     await setDesk(env.DB, lead.id, "idle", "等你一句话");
+    placed = true;
     const now = Date.now();
-    const userLine: WorkLine = { id: crypto.randomUUID(), role: from, person_id: null, text: said };
     const closing: WorkLine = { id: crypto.randomUUID(), role: "lead", person_id: null, text: reply };
     const spokenDuring = play.flatMap((step) => (step.line ? [step.line] : []));
     let at = now;
-    const writes = [
-      env.DB.prepare(
-        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, ?, NULL, ?, NULL, ?)",
-      ).bind(userLine.id, userLine.role, userLine.text, at),
-    ];
+    const writes = [];
     for (const line of spokenDuring) {
       at += 1;
       writes.push(
@@ -218,6 +228,7 @@ export async function speak(
     const office = await getWork(env.DB);
     return { ok: true, office: { ...office, play, closing } };
   } catch (error) {
+    if (touched && !placed) await restoreDesks(env.DB, desks).catch(() => {});
     console.error(error);
     const message = error instanceof Error ? error.message : "";
     if (message.includes("no such table") || message.includes("no such column")) {
@@ -529,6 +540,31 @@ async function hired(db: Env["DB"], id: string) {
     )
     .bind(id)
     .first<PersonRow>();
+}
+
+async function restoreDesks(db: Env["DB"], before: DeskRow[]) {
+  const current = await desksOf(db);
+  const known = new Set(before.map((desk) => desk.person_id));
+  const writes = current
+    .filter((desk) => !known.has(desk.person_id))
+    .map((desk) => db.prepare("DELETE FROM work_desk WHERE person_id = ?").bind(desk.person_id));
+  for (const desk of before) {
+    writes.push(
+      db
+        .prepare(
+          `INSERT INTO work_desk (person_id, pose, label, task, note, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(person_id) DO UPDATE SET
+             pose = excluded.pose,
+             label = excluded.label,
+             task = excluded.task,
+             note = excluded.note,
+             updated_at = excluded.updated_at`,
+        )
+        .bind(desk.person_id, desk.pose, desk.label, desk.task, desk.note, desk.updated_at),
+    );
+  }
+  if (writes.length > 0) await db.batch(writes);
 }
 
 async function setDesk(

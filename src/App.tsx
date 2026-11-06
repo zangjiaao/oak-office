@@ -243,9 +243,10 @@ export function App() {
           resizeChat(chatWidthRef.current + (event.key === "ArrowLeft" ? 24 : -24));
         }}
       />
-      {mode === "work" ? (
+      <div className={mode === "work" ? "pane-on" : "pane-off"}>
         <WorkPanel people={people} loadError={loadError} onFloor={onFloor} onRetry={() => void load()} />
-      ) : mode === "roster" ? (
+      </div>
+      {mode === "roster" ? (
         <RosterPanel
           people={people}
           loadError={loadError}
@@ -256,7 +257,7 @@ export function App() {
           onRetry={() => void load()}
           onDraft={onDraft}
         />
-      ) : (
+      ) : mode === "rehearsal" ? (
         <aside className="chat">
           <header>
             <strong>周衡</strong>
@@ -287,7 +288,7 @@ export function App() {
             ))}
           </ul>
         </aside>
-      )}
+      ) : null}
     </main>
   );
 }

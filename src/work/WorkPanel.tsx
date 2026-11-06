@@ -114,10 +114,17 @@ export function WorkPanel({
       showFloor(office.floor);
       setFloor(office.floor);
     } catch (caught) {
-      setLines(previousLines);
-      showFloor(previousFloor);
       setText(said);
       setError(caught instanceof Error ? caught.message : "主管这回没接上。");
+      try {
+        const office = await loadWork();
+        setLead(office.lead);
+        setLines(office.lines);
+        showFloor(office.floor);
+      } catch {
+        setLines(previousLines);
+        showFloor(previousFloor);
+      }
     } finally {
       sendingRef.current = false;
       setSending(false);

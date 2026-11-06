@@ -30,6 +30,9 @@ button, input {
   touch-action: none;
 }
 
+.pane-on { display: contents; }
+.pane-off { display: none; }
+
 .floor {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
