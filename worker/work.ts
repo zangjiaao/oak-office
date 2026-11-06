@@ -338,7 +338,15 @@ export async function runStaffDuty(
       ...deskTools(env, steps, (pose, label) => setDesk(env.DB, person.id, pose, label)),
       rememberTool(env, person.id),
     ];
-    await setDesk(env.DB, person.id, "type", clip(jobText, 16), jobText, null);
+    const thinking = thinkingFor(person.model, person.thinking);
+    await setDesk(
+      env.DB,
+      person.id,
+      thinking === "off" ? "type" : "think",
+      thinking === "off" ? "在写" : "在想",
+      jobText,
+      null,
+    );
     const timer = setTimeout(() => staff.abort(), 50_000);
     try {
       await staff.prompt(`到点了。请现在完成这件事，用简短中文给出结果。不要派别人：${jobText}`);

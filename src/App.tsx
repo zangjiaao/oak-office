@@ -119,7 +119,7 @@ export function App() {
     Object.entries(floor).map(([id, mark]) => {
       const dutyLabel = holding.find((duty) => duty.person_id === id)?.label ?? "";
       const view = shift(mark, now, dutyLabel);
-      return [id, { ...mark, pose: view.pose, label: nameLabel(mark.label, view.label, dutyLabel) }];
+      return [id, { ...mark, pose: view.pose, label: nameLabel(mark.label, view.label, dutyLabel, view.pose) }];
     }),
   );
   const roster = rosterView(
