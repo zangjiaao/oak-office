@@ -15,6 +15,13 @@ export function shift(mark: { pose: Pose; label: string; updated_at?: number }, 
   return { pose: "idle" as const, label: "不在" };
 }
 
+const BEAT_LABEL = new Set(["进来了", "在想", "在听", "卡住", "来回报", "做完", "下班", "不在", "闲置", "等人"]);
+
+export function nameLabel(stored: string, view: string, dutyLabel: string) {
+  if (!dutyLabel || BEAT_LABEL.has(stored)) return view;
+  return dutyLabel;
+}
+
 export function stillWorking(mark: { pose: Pose; label: string; updated_at?: number } | undefined, now: number, held = false) {
   if (!mark) return false;
   const view = shift(mark, now, held ? "等人" : "");

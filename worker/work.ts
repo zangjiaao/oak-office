@@ -429,7 +429,7 @@ function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], dutie
     promptMemory(lead.memories),
     "你只和用户说话，用简短中文。要派人时，先单独说一句安排谁做什么，再调用 ask，用他们的 id。",
     "以后还用得上的事实用 remember 记一句。档案和最近的对话不用再记。",
-    "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字，最少 1。到点会再叫你：员工的事用 ask 派给指定的人，等他做完后用一句话把他的结果告诉用户；你自己的事就自己做完再告诉用户。不要再 schedule 或 unschedule。取消时用 unschedule。",
+    "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字，最少 1。这个人已经有一条定时时，再用 schedule 就是改间隔和内容，不要另加一条。到点会再叫你：员工的事用 ask 派给指定的人，等他做完后用一句话把他的结果告诉用户；你自己的事就自己做完再告诉用户。不要再 schedule 或 unschedule。取消时用 unschedule。",
     dutyList(duties, [lead, ...staff]),
     "不能发明员工，不能派给自己。问完之后用 mark 标成回报或卡住。全部做完后，再单独说一句总结，不要和安排写在同一句里。",
     "需要外界信息时用 search。要写脚本或改文件时用 read、write、edit、bash，文件都在办公室的工作目录里，path 用相对路径。",

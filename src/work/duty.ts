@@ -18,6 +18,11 @@ export function everyLabel(ms: number) {
 
 const DUTY_LABEL_MAX = 16;
 
+export function reviseTarget<T extends { task: string }>(mine: T[], task: string) {
+  const wanted = task.replace(/\s+/g, "");
+  return mine.find((duty) => duty.task.replace(/\s+/g, "") === wanted) ?? (mine.length === 1 ? mine[0] : undefined);
+}
+
 export function dutyHoldLabel(duty: { every_ms: number; task: string }) {
   const text = `${everyLabel(duty.every_ms)}${duty.task}`.replace(/\s+/g, "");
   const label = [...text].slice(0, DUTY_LABEL_MAX).join("");

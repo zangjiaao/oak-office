@@ -5,7 +5,7 @@ import { ROOM } from "./office/roster";
 import { DURATION } from "./office/script";
 import { activePoses, actorsAt, linesAt } from "./office/scene";
 import { rosterView, type DraftPreview } from "./office/seats";
-import { shift, useNow } from "./office/shift";
+import { nameLabel, shift, useNow } from "./office/shift";
 import { useWalk } from "./office/walk";
 import { POSE_NAME, type Pose } from "./office/types";
 import { listPeople } from "./people/api";
@@ -117,8 +117,9 @@ export function App() {
   const now = useNow(mode !== "rehearsal");
   const shownFloor = Object.fromEntries(
     Object.entries(floor).map(([id, mark]) => {
-      const view = shift(mark, now, holding.find((duty) => duty.person_id === id)?.label ?? "");
-      return [id, { ...mark, pose: view.pose, label: view.label }];
+      const dutyLabel = holding.find((duty) => duty.person_id === id)?.label ?? "";
+      const view = shift(mark, now, dutyLabel);
+      return [id, { ...mark, pose: view.pose, label: nameLabel(mark.label, view.label, dutyLabel) }];
     }),
   );
   const roster = rosterView(

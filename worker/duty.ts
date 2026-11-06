@@ -1,5 +1,5 @@
 import { obj, str, type Static } from "@earendil-works/pi-schema";
-import { DUTY_MAX_MINUTES, DUTY_MIN_MINUTES, everyLabel, type Duty } from "../src/work/duty";
+import { DUTY_MAX_MINUTES, DUTY_MIN_MINUTES, everyLabel, reviseTarget, type Duty } from "../src/work/duty";
 import { disarmCrew } from "./crew";
 import type { Env } from "./env";
 
@@ -30,7 +30,7 @@ export function scheduleTool(env: Env) {
     name: "schedule",
     label: "定时",
     description:
-      `安排一件周期工作。person_id 是主管自己或员工的 id。task 是到点要做的事。every_minutes 是间隔分钟，最少 ${DUTY_MIN_MINUTES}，最多 ${DUTY_MAX_MINUTES}。第一次在大约半分钟后。`,
+      `安排或修改一件周期工作。person_id 是主管自己或员工的 id。task 是到点要做的事。every_minutes 是间隔分钟，最少 ${DUTY_MIN_MINUTES}，最多 ${DUTY_MAX_MINUTES}。这个人只有一条定时、或任务文字相同，就是改原来那条的间隔和内容。第一次在大约半分钟后。`,
     parameters: ScheduleArgs,
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Static<typeof ScheduleArgs>) => {
@@ -46,12 +46,25 @@ export function scheduleTool(env: Env) {
         .first<{ id: string; name: string }>();
       if (!person) return miss("没有这个员工。");
       const existing = await listDuties(env.DB);
-      if (existing.length >= DUTY_LIMIT) return miss("定时已经够多了。先取消一个。");
       const now = Date.now();
+      const taskText = [...task].slice(0, TASK_MAX).join("");
+      const prior = reviseTarget(
+        existing.filter((duty) => duty.person_id === person.id),
+        taskText,
+      );
+      if (prior) {
+        const nextAt = prior.next_at <= now ? now : now + every * 60_000;
+        await env.DB.prepare("UPDATE duty SET task = ?, every_ms = ?, next_at = ? WHERE id = ?")
+          .bind(taskText, every * 60_000, nextAt, prior.id)
+          .run();
+        disarmCrew(person.id);
+        return text(`已改成。${person.name}${everyLabel(every * 60_000)}做一次：${taskText}。编号 ${prior.id}。`);
+      }
+      if (existing.length >= DUTY_LIMIT) return miss("定时已经够多了。先取消一个。");
       const duty: StoredDuty = {
         id: crypto.randomUUID(),
         person_id: person.id,
-        task: [...task].slice(0, TASK_MAX).join(""),
+        task: taskText,
         every_ms: every * 60_000,
         next_at: now,
         created_at: now,
