@@ -1,0 +1,1 @@
+ALTER TABLE department ADD COLUMN pets TEXT NOT NULL DEFAULT '';

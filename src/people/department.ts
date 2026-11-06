@@ -1,3 +1,4 @@
+import { petIds } from "../office/pets";
 import { readRoomLook, type RoomLook } from "../office/room";
 
 export const SEAT_CAP = 8;
@@ -11,6 +12,7 @@ export type Department = RoomLook & {
   name: string;
   rules: string;
   seats: number;
+  pets: string;
   created_at: number;
   updated_at: number;
 };
@@ -20,6 +22,7 @@ export type DepartmentDraft = RoomLook & {
   name: string;
   rules: string;
   seats: number;
+  pets: string;
 };
 
 export function parseDepartment(input: unknown): { ok: true; value: DepartmentDraft } | { ok: false; error: string } {
@@ -35,7 +38,9 @@ export function parseDepartment(input: unknown): { ok: true; value: DepartmentDr
   if (seats === null || seats < 1 || seats > SEAT_CAP) return { ok: false, error: `工位用 1 到 ${SEAT_CAP} 的数字。` };
   const look = readRoomLook(body);
   if (!look) return { ok: false, error: "楼的颜色不对。" };
-  return { ok: true, value: { floor, name, rules, seats, ...look } };
+  const pets = petIds(body.pets);
+  if (!pets) return { ok: false, error: "宠物不对。" };
+  return { ok: true, value: { floor, name, rules, seats, pets: pets.join(","), ...look } };
 }
 
 function whole(value: unknown) {

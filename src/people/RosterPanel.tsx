@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { PET_CHOICES, petIds, type PetId } from "../office/pets";
 import { DEFAULT_ROOM, ROOM_PRESETS, ROOM_STYLE_LABEL, ROOM_STYLES, sameRoom, type RoomLook, type RoomStyle } from "../office/room";
 import { rosterLabel, rosterNote, type DraftPreview } from "../office/seats";
 import type { HairStyle, Look } from "../office/types";
@@ -53,6 +54,7 @@ export function RosterPanel({
   onDepartment,
   onRemoveFloor,
   onLook,
+  onPets,
 }: {
   people: PersonRow[] | null;
   loadError: string | null;
@@ -66,6 +68,7 @@ export function RosterPanel({
   onDepartment: (department: Department) => void;
   onRemoveFloor: (id: string) => Promise<void>;
   onLook: (look: RoomLook | null) => void;
+  onPets: (pets: PetId[] | null) => void;
 }) {
   const [form, setForm] = useState<FormState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -257,6 +260,7 @@ export function RosterPanel({
             onDepartment={onDepartment}
             onRemoveFloor={onRemoveFloor}
             onLook={onLook}
+            onPets={onPets}
           />
         ) : null}
         {loadError ? (
@@ -557,11 +561,13 @@ function DepartmentForm({
   onDepartment,
   onRemoveFloor,
   onLook,
+  onPets,
 }: {
   department: Department;
   onDepartment: (department: Department) => void;
   onRemoveFloor: (id: string) => Promise<void>;
   onLook: (look: RoomLook | null) => void;
+  onPets: (pets: PetId[] | null) => void;
 }) {
   const [floor, setFloor] = useState(String(department.floor));
   const [name, setName] = useState(department.name);
@@ -572,6 +578,7 @@ function DepartmentForm({
   const [ground, setGround] = useState(department.ground ?? DEFAULT_ROOM.ground);
   const [trim, setTrim] = useState(department.trim ?? DEFAULT_ROOM.trim);
   const [wood, setWood] = useState(department.wood ?? DEFAULT_ROOM.wood);
+  const [pets, setPets] = useState<PetId[]>(petIds(department.pets) ?? []);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -586,6 +593,7 @@ function DepartmentForm({
     setGround(department.ground ?? DEFAULT_ROOM.ground);
     setTrim(department.trim ?? DEFAULT_ROOM.trim);
     setWood(department.wood ?? DEFAULT_ROOM.wood);
+    setPets(petIds(department.pets) ?? []);
     setError(null);
     setRemoving(false);
   }, [department]);
@@ -595,6 +603,12 @@ function DepartmentForm({
   }, [onLook, style, wall, ground, trim, wood]);
 
   useEffect(() => () => onLook(null), [onLook]);
+
+  useEffect(() => {
+    onPets(pets);
+  }, [onPets, pets]);
+
+  useEffect(() => () => onPets(null), [onPets]);
 
   async function remove() {
     if (saving) return;
@@ -629,6 +643,7 @@ function DepartmentForm({
         ground,
         trim,
         wood,
+        pets: pets.join(","),
       });
       onDepartment(next);
     } catch (caught) {
@@ -687,6 +702,26 @@ function DepartmentForm({
             <Color label="线" value={trim} onChange={setTrim} />
             <Color label="木" value={wood} onChange={setWood} />
           </div>
+        </div>
+        <div className="field">
+          <span>宠物</span>
+          <div className="choices">
+            {PET_CHOICES.map((pet) => (
+              <button
+                key={pet.id}
+                type="button"
+                className={pets.includes(pet.id) ? "on" : ""}
+                onClick={() =>
+                  setPets((current) =>
+                    current.includes(pet.id) ? current.filter((id) => id !== pet.id) : [...current, pet.id],
+                  )
+                }
+              >
+                {pet.name}
+              </button>
+            ))}
+          </div>
+          <p className="hint">点一下放到这一层，再点一下拿掉。没选的楼层没有宠物。</p>
         </div>
         <label>
           规章制度

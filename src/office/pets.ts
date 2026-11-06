@@ -1,3 +1,25 @@
+export const PET_CHOICES = [
+  { id: "cat-ginger", name: "橘猫" },
+  { id: "dog-cream", name: "白狗" },
+  { id: "cat-gray", name: "灰猫" },
+] as const;
+
+export type PetId = (typeof PET_CHOICES)[number]["id"];
+
+export function petIds(value: unknown): PetId[] | null {
+  if (value == null || value === "") return [];
+  const raw = Array.isArray(value) ? value : typeof value === "string" ? value.split(",") : null;
+  if (!raw) return null;
+  const chosen = new Set<PetId>();
+  for (const item of raw) {
+    const id = String(item).trim();
+    if (!id) continue;
+    if (!PET_CHOICES.some((pet) => pet.id === id)) return null;
+    chosen.add(id as PetId);
+  }
+  return PET_CHOICES.map((pet) => pet.id).filter((id) => chosen.has(id));
+}
+
 export type PetKind = "cat" | "dog";
 
 export type PetActivity = "walk" | "rest" | "sleep" | "play";
@@ -141,6 +163,9 @@ function walk(route: PetRoute, frame: number, roomH: number): PetFrame {
   return { ...route, x: first.x, y: first.y, face: 1, walking: false, activity: "rest", frame };
 }
 
-export function petsAt(frame: number, roomH: number): PetFrame[] {
-  return routes(roomH).map((route) => walk(route, frame, roomH));
+export function petsAt(frame: number, roomH: number, chosen: readonly string[]): PetFrame[] {
+  const allowed = new Set(chosen);
+  return routes(roomH)
+    .filter((route) => allowed.has(route.id))
+    .map((route) => walk(route, frame, roomH));
 }

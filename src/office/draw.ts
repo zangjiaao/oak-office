@@ -1,4 +1,4 @@
-import { petsAt, type PetFrame } from "./pets";
+import { petsAt, type PetFrame, type PetId } from "./pets";
 import { DEFAULT_ROOM, type RoomLook } from "./room";
 import { DESKS, ROOM, SPOTS } from "./roster";
 import type { DeskSpot } from "./seats";
@@ -311,6 +311,7 @@ export function drawOffice(
   desks: DeskSpot[] = rehearsalDesks(),
   sign = "交付组",
   look: RoomLook = DEFAULT_ROOM,
+  pets: readonly PetId[] = [],
 ) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#1a1714";
@@ -337,7 +338,7 @@ export function drawOffice(
       );
     },
   }));
-  for (const pet of petsAt(frame, room.h)) layers.push({ y: pet.y, draw: () => drawPet(ctx, pet) });
+  for (const pet of petsAt(frame, room.h, pets)) layers.push({ y: pet.y, draw: () => drawPet(ctx, pet) });
   for (const actor of actors) layers.push({ y: actor.y, draw: () => drawPerson(ctx, actor, frame) });
   layers.sort((a, b) => a.y - b.y);
   for (const layer of layers) layer.draw();

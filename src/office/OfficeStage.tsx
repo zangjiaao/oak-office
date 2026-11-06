@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { actorAt, drawOffice, roomTransform } from "./draw";
+import { type PetId } from "./pets";
 import { DEFAULT_ROOM, type RoomLook } from "./room";
 import { ROOM } from "./roster";
 import type { DeskSpot } from "./seats";
@@ -12,6 +13,7 @@ export function OfficeStage({
   desks,
   sign = "交付组",
   look = DEFAULT_ROOM,
+  pets = [],
   onPick,
 }: {
   actors: ActorFrame[];
@@ -20,6 +22,7 @@ export function OfficeStage({
   desks?: DeskSpot[];
   sign?: string;
   look?: RoomLook;
+  pets?: readonly PetId[];
   onPick?: (id: string) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -70,8 +73,8 @@ export function OfficeStage({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, sign, look);
-  }, [size, actors, drawn, room, desks, sign, look]);
+    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, sign, look, pets);
+  }, [size, actors, drawn, room, desks, sign, look, pets]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
     const choose = onPickRef.current;

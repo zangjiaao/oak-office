@@ -1,7 +1,7 @@
 import { parseDepartment, type Department, type DepartmentDraft } from "../src/people/department";
 import type { D1Database } from "./env";
 
-const COLUMNS = "id, floor, name, rules, seats, style, wall, ground, trim, wood, created_at, updated_at";
+const COLUMNS = "id, floor, name, rules, seats, style, wall, ground, trim, wood, pets, created_at, updated_at";
 
 export function readDepartment(input: unknown) {
   return parseDepartment(input);
@@ -30,7 +30,7 @@ export async function createDepartment(
   const now = Date.now();
   const department: Department = { id: crypto.randomUUID(), ...draft, created_at: now, updated_at: now };
   await db
-    .prepare(`INSERT INTO department (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .prepare(`INSERT INTO department (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(
       department.id,
       department.floor,
@@ -42,6 +42,7 @@ export async function createDepartment(
       department.ground,
       department.trim,
       department.wood,
+      department.pets,
       department.created_at,
       department.updated_at,
     )
@@ -66,7 +67,7 @@ export async function updateDepartment(
   const department: Department = { ...existing, ...draft, updated_at: Date.now() };
   await db
     .prepare(
-      "UPDATE department SET floor = ?, name = ?, rules = ?, seats = ?, style = ?, wall = ?, ground = ?, trim = ?, wood = ?, updated_at = ? WHERE id = ?",
+      "UPDATE department SET floor = ?, name = ?, rules = ?, seats = ?, style = ?, wall = ?, ground = ?, trim = ?, wood = ?, pets = ?, updated_at = ? WHERE id = ?",
     )
     .bind(
       department.floor,
@@ -78,6 +79,7 @@ export async function updateDepartment(
       department.ground,
       department.trim,
       department.wood,
+      department.pets,
       department.updated_at,
       id,
     )

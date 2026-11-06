@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { rehearsalDesks } from "./office/draw";
+import { petIds, type PetId } from "./office/pets";
 import { DEFAULT_ROOM, type RoomLook } from "./office/room";
 import { OfficeStage } from "./office/OfficeStage";
 import { ROOM } from "./office/roster";
@@ -66,6 +67,7 @@ export function App() {
   const [pickRequest, setPickRequest] = useState<{ id: string; n: number } | null>(null);
   const [draft, setDraft] = useState<DraftPreview | null>(null);
   const [roomDraft, setRoomDraft] = useState<RoomLook | null>(null);
+  const [petDraft, setPetDraft] = useState<PetId[] | null>(null);
   const [floor, setFloor] = useState<Record<string, FloorMark>>({});
   const [holding, setHolding] = useState<DutyHold[]>([]);
   const pickN = useRef(0);
@@ -77,6 +79,7 @@ export function App() {
   const chatWidthRef = useRef(chatWidth);
   const onDraft = useCallback((next: DraftPreview | null) => setDraft(next), []);
   const onLook = useCallback((next: RoomLook | null) => setRoomDraft(next), []);
+  const onPets = useCallback((next: PetId[] | null) => setPetDraft(next), []);
   const onFloor = useCallback((marks: FloorMark[]) => {
     setFloor(Object.fromEntries(marks.map((mark) => [mark.person_id, mark])));
   }, []);
@@ -166,6 +169,7 @@ export function App() {
     setSelectedId(null);
     setDraft(null);
     setRoomDraft(null);
+    setPetDraft(null);
     setPeople(null);
     try {
       setPeople(await listPeople(id));
@@ -180,7 +184,14 @@ export function App() {
     let floorNo = 1;
     while (used.has(floorNo) && floorNo < 99) floorNo += 1;
     try {
-      const created = await createDepartment({ floor: floorNo, name: `${floorNo}层`, rules: "", seats: 4, ...DEFAULT_ROOM });
+      const created = await createDepartment({
+        floor: floorNo,
+        name: `${floorNo}层`,
+        rules: "",
+        seats: 4,
+        pets: "",
+        ...DEFAULT_ROOM,
+      });
       setDepartments((current) => [...(current ?? []).filter((item) => item.id !== created.id), created].sort((a, b) => a.floor - b.floor));
       await choose(created.id);
     } catch (error) {
@@ -311,6 +322,7 @@ export function App() {
                     }
                   : DEFAULT_ROOM))
           }
+          pets={mode === "rehearsal" ? [] : (petDraft ?? petIds(department?.pets) ?? [])}
           onPick={mode === "roster" ? pick : undefined}
         />
         {mode === "rehearsal" || mode === "work" ? (
@@ -365,6 +377,7 @@ export function App() {
           onDepartment={saveDepartment}
           onRemoveFloor={(id) => removeFloor(id)}
           onLook={onLook}
+          onPets={onPets}
         />
       ) : mode === "rehearsal" ? (
         <aside className="chat">
