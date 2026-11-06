@@ -2,6 +2,8 @@ import type { Pose } from "../office/types";
 
 export type FloorMark = { person_id: string; pose: Pose; label: string; updated_at?: number };
 
+export type DutyHold = { person_id: string; label: string };
+
 export type WorkLine = {
   id: string;
   role: "user" | "lead" | "staff" | "clock";
@@ -22,7 +24,7 @@ export type WorkOffice = {
   lead: { id: string; name: string } | null;
   lines: WorkLine[];
   floor: FloorMark[];
-  holding: string[];
+  holding: DutyHold[];
   play?: WorkBeat[];
   closing?: WorkLine;
 };

@@ -5,7 +5,7 @@ import { DONE_MS, IDLE_MS, stillWorking } from "../src/office/shift";
 import { armCrew, disarmCrew, keepCrew, liveCrew, releaseCrew, unarmedCrew } from "./crew";
 import { jobMemory, promptMemory, recentNotes, remember, NOTES_IN_PROMPT } from "./memory";
 import { listDuties, scheduleTool, unscheduleTool } from "./duty";
-import { everyLabel, type Duty } from "../src/work/duty";
+import { dutyHoldLabel, everyLabel, type Duty } from "../src/work/duty";
 import { deskTools, rememberTool } from "./tools";
 import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
@@ -58,7 +58,7 @@ export type WorkOffice = {
   lead: { id: string; name: string } | null;
   lines: WorkLine[];
   floor: { person_id: string; pose: Pose; label: string; updated_at?: number }[];
-  holding: string[];
+  holding: { person_id: string; label: string }[];
   play?: WorkBeat[];
   closing?: WorkLine;
 };
@@ -101,7 +101,13 @@ export async function getWork(db: Env["DB"]): Promise<WorkOffice> {
   const lines = await linesOf(db);
   const floor = await floorOf(db);
   const duties = await listDuties(db);
-  return office(people, lines, floor, [...new Set(duties.map((duty) => duty.person_id))]);
+  const seen = new Set<string>();
+  const holding = duties.flatMap((duty) => {
+    if (seen.has(duty.person_id)) return [];
+    seen.add(duty.person_id);
+    return [{ person_id: duty.person_id, label: dutyHoldLabel(duty) }];
+  });
+  return office(people, lines, floor, holding);
 }
 
 export async function speak(
@@ -548,7 +554,7 @@ function office(
   people: PersonRow[],
   lines: LineRow[],
   floor: { person_id: string; pose: Pose; label: string; updated_at?: number }[],
-  holding: string[],
+  holding: { person_id: string; label: string }[],
 ): WorkOffice {
   const lead = people.find((person) => person.is_lead === 1);
   return {

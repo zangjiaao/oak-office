@@ -12,7 +12,7 @@ import { listPeople } from "./people/api";
 import { RosterPanel } from "./people/RosterPanel";
 import type { PersonRow } from "./people/record";
 import { WorkPanel } from "./work/WorkPanel";
-import type { FloorMark } from "./work/api";
+import type { DutyHold, FloorMark } from "./work/api";
 
 const CHAT_WIDTH_KEY = "oak-office-chat-width";
 const CHAT_MIN = 280;
@@ -61,7 +61,7 @@ export function App() {
   const [pickRequest, setPickRequest] = useState<{ id: string; n: number } | null>(null);
   const [draft, setDraft] = useState<DraftPreview | null>(null);
   const [floor, setFloor] = useState<Record<string, FloorMark>>({});
-  const [holding, setHolding] = useState<string[]>([]);
+  const [holding, setHolding] = useState<DutyHold[]>([]);
   const pickN = useRef(0);
   const playingRef = useRef(true);
   const timeRef = useRef(0);
@@ -73,7 +73,7 @@ export function App() {
   const onFloor = useCallback((marks: FloorMark[]) => {
     setFloor(Object.fromEntries(marks.map((mark) => [mark.person_id, mark])));
   }, []);
-  const onHolding = useCallback((ids: string[]) => setHolding(ids), []);
+  const onHolding = useCallback((duties: DutyHold[]) => setHolding(duties), []);
 
   useEffect(() => {
     playingRef.current = playing;
@@ -117,7 +117,7 @@ export function App() {
   const now = useNow(mode !== "rehearsal");
   const shownFloor = Object.fromEntries(
     Object.entries(floor).map(([id, mark]) => {
-      const view = shift(mark, now, holding.includes(id));
+      const view = shift(mark, now, holding.find((duty) => duty.person_id === id)?.label ?? "");
       return [id, { ...mark, pose: view.pose, label: view.label }];
     }),
   );

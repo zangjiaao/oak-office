@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { PersonRow } from "../people/record";
-import { loadWork, sayWork, type FloorMark, type WorkLine } from "./api";
+import { loadWork, sayWork, type DutyHold, type FloorMark, type WorkLine } from "./api";
 
 export function WorkPanel({
   people,
@@ -12,7 +12,7 @@ export function WorkPanel({
   people: PersonRow[] | null;
   loadError: string | null;
   onFloor: (floor: FloorMark[]) => void;
-  onHolding: (ids: string[]) => void;
+  onHolding: (duties: DutyHold[]) => void;
   onRetry: () => void;
 }) {
   const [lead, setLead] = useState<{ id: string; name: string } | null>(null);

@@ -16,6 +16,14 @@ export function everyLabel(ms: number) {
   return `每${minutes}分钟`;
 }
 
+const DUTY_LABEL_MAX = 16;
+
+export function dutyHoldLabel(duty: { every_ms: number; task: string }) {
+  const text = `${everyLabel(duty.every_ms)}${duty.task}`.replace(/\s+/g, "");
+  const label = [...text].slice(0, DUTY_LABEL_MAX).join("");
+  return label || "等人";
+}
+
 export async function listDuties(): Promise<Duty[]> {
   const body = await send("/api/duties");
   return (body as { duties: Duty[] }).duties;
