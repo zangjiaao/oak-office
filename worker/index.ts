@@ -1,4 +1,5 @@
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
+import { crewUntil, releaseCrew } from "./crew";
 import { getWork, speak } from "./work";
 import type { Env } from "./env";
 import type { PersonDraft } from "../src/people/record";
@@ -13,7 +14,7 @@ function json(body: unknown, status = 200) {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: { waitUntil(promise: Promise<unknown>): void }): Promise<Response> {
     const url = new URL(request.url);
     try {
       if (request.method === "GET" && url.pathname === "/api/health") {
@@ -32,6 +33,7 @@ export default {
           if (typeof text !== "string") return json({ error: "看不懂这句话。" }, 400);
           const result = await speak(env, text, request.signal);
           if (!result.ok) return json({ error: result.error }, result.status);
+          holdCrew(ctx);
           return json(result.office);
         }
         return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
@@ -52,6 +54,7 @@ export default {
         const id = decodeURIComponent(match[1]);
         if (!UUID.test(id)) return json({ error: "没有这个人。" }, 404);
         if (request.method === "DELETE") {
+          releaseCrew(id);
           const result = await dismissPerson(env.DB, id);
           if (!result) return json({ error: "没有这个人。" }, 404);
           if (!result.ok) return json({ error: result.error }, result.status);
@@ -75,6 +78,13 @@ export default {
     }
   },
 };
+
+function holdCrew(ctx?: { waitUntil(promise: Promise<unknown>): void }) {
+  const until = crewUntil();
+  const wait = until - Date.now();
+  if (!ctx || wait <= 0) return;
+  ctx.waitUntil(new Promise((resolve) => setTimeout(resolve, wait + 40)));
+}
 
 async function write(request: Request, run: (draft: PersonDraft) => Promise<Response>) {
   let body: unknown;

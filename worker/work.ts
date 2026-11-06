@@ -1,7 +1,8 @@
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { obj, oneOf, str, type Static } from "@earendil-works/pi-schema";
 import { identityOf, type PersonRow } from "../src/people/record";
-import { stillWorking } from "../src/office/shift";
+import { DONE_MS, IDLE_MS, stillWorking } from "../src/office/shift";
+import { armCrew, keepCrew, liveCrew, releaseCrew, unarmedCrew } from "./crew";
 import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
 import { listPeople } from "./people";
@@ -155,7 +156,9 @@ export async function speak(
       if (step.label === "做完") restAt.set(step.person_id, cursor + 700);
     }
     for (const job of jobs) {
-      await setDesk(env.DB, job.personId, "done", "做完", undefined, undefined, restAt.get(job.personId) ?? cursor + 700);
+      const rest = restAt.get(job.personId) ?? cursor + 700;
+      await setDesk(env.DB, job.personId, "done", "做完", undefined, undefined, rest);
+      armCrew(job.personId, rest + DONE_MS + IDLE_MS);
     }
     await setDesk(env.DB, lead.id, "idle", "等你一句话");
     const now = Date.now();
@@ -192,6 +195,9 @@ export async function speak(
       return { ok: false, error: "本地库还没跟上。", status: 503 };
     }
     return { ok: false, error: "主管这回没接上。", status: 500 };
+  } finally {
+    const fallback = Date.now() + DONE_MS + IDLE_MS;
+    for (const id of unarmedCrew()) armCrew(id, fallback);
   }
 }
 
@@ -216,15 +222,22 @@ function askTool(
       if (!label || !task) return fail("派工要写清事情和状态。");
       const job = takeJob(turn, person.id, args.pose, label);
       await setDesk(env.DB, person.id, args.pose, label, task, null);
-      const staff = new Agent({
-        streamFn: runtime.streamFn(400),
-        getApiKey: runtime.getApiKey,
-        initialState: {
-          model: runtime.model,
-          systemPrompt: staffPrompt(person),
-        },
-      });
-      const stop = () => staff.abort();
+      const staying = liveCrew(person.id);
+      const staff =
+        staying ??
+        new Agent({
+          streamFn: runtime.streamFn(400),
+          getApiKey: runtime.getApiKey,
+          initialState: {
+            model: runtime.model,
+            systemPrompt: staffPrompt(person),
+          },
+        });
+      keepCrew(person.id, staff);
+      const stop = () => {
+        staff.abort();
+        releaseCrew(person.id);
+      };
       signal?.addEventListener("abort", stop, { once: true });
       parent?.addEventListener("abort", stop, { once: true });
       try {
