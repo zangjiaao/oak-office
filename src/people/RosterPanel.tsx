@@ -188,7 +188,7 @@ export function RosterPanel({
         ) : null}
         {people === null && !loadError ? <p className="empty">在读档案。</p> : null}
         {people && people.length === 0 && !form ? (
-          <p className="empty">还没有人。入职之后，会坐在桌边。</p>
+          <p className="empty">还没有人。入职只留下档案，主管派活时才会进办公室。</p>
         ) : null}
         {people && people.length > 0 ? (
           <ul className="people">

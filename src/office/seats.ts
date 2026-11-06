@@ -34,9 +34,12 @@ export function rosterView(
   draft: DraftPreview | null,
   selectedId: string | null,
   floor?: Record<string, { pose: Pose; label: string }>,
+  present = false,
 ) {
   return {
-    actors: layout(people, fittingDraft(people, draft), selectedId).map((person) => actor(person, floor?.[person.id])),
+    actors: layout(people, fittingDraft(people, draft), selectedId, present ? floor ?? {} : null).map((person) =>
+      actor(person, floor?.[person.id]),
+    ),
     desks: fixedDesks(),
     room: { w: ROOM.w, h: ROW_Y[1] + (ROOM.h - ROW_Y[0]) },
   };
@@ -63,7 +66,12 @@ function fittingDraft(people: PersonRow[], draft: DraftPreview | null): DraftPre
   return null;
 }
 
-function layout(people: PersonRow[], draft: DraftPreview | null, selectedId: string | null): Placed[] {
+function layout(
+  people: PersonRow[],
+  draft: DraftPreview | null,
+  selectedId: string | null,
+  room: Record<string, { pose: Pose; label: string }> | null,
+): Placed[] {
   const placed: Placed[] = [];
   const draftId = draft?.kind === "edit" ? draft.id : undefined;
 
@@ -71,6 +79,7 @@ function layout(people: PersonRow[], draft: DraftPreview | null, selectedId: str
     const editing = Boolean(draft?.kind === "edit" && draft.id === person.id);
     const name = editing && draft ? draft.name.trim() || person.name : person.name;
     const look = editing && draft ? draft.look : lookOf(person);
+    if (room && person.is_lead !== 1 && !room[person.id] && !(editing && draft?.isLead)) continue;
     if (editing && draft) {
       const point = draft.isLead ? SPOTS.lead : staffSpot(keptSeat(people, person, draft.isLead));
       if (!point) continue;
@@ -105,7 +114,7 @@ function layout(people: PersonRow[], draft: DraftPreview | null, selectedId: str
     });
   }
 
-  if (draft?.kind === "create") {
+  if (draft?.kind === "create" && !(room && !draft.isLead)) {
     const seat = draft.isLead ? null : openSeat(people);
     const point = draft.isLead ? SPOTS.lead : seat === null ? null : staffPoint(seat);
     if (point) {
