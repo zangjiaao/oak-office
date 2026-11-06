@@ -31,21 +31,21 @@ export type WorkOffice = {
   playId?: string;
 };
 
-export async function loadWork(): Promise<WorkOffice> {
-  return (await send("/api/work")) as WorkOffice;
+export async function loadWork(departmentId: string): Promise<WorkOffice> {
+  return (await send(`/api/work?department=${encodeURIComponent(departmentId)}`)) as WorkOffice;
 }
 
-export async function sayWork(text: string): Promise<WorkOffice> {
-  return (await send("/api/work", text)) as WorkOffice;
+export async function sayWork(departmentId: string, text: string): Promise<WorkOffice> {
+  return (await send("/api/work", { departmentId, text })) as WorkOffice;
 }
 
-async function send(path: string, text?: string) {
+async function send(path: string, body?: { departmentId: string; text: string }) {
   let response: Response;
   try {
     response = await fetch(path, {
-      method: text === undefined ? "GET" : "POST",
-      headers: text === undefined ? undefined : { "content-type": "application/json" },
-      body: text === undefined ? undefined : JSON.stringify({ text }),
+      method: body === undefined ? "GET" : "POST",
+      headers: body === undefined ? undefined : { "content-type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
     throw new Error("主管这回没接上。");

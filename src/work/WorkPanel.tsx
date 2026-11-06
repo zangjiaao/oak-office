@@ -1,15 +1,20 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { PersonRow } from "../people/record";
 import { loadWork, sayWork, type DutyHold, type FloorMark, type WorkLine, type WorkOffice } from "./api";
+import { Markdown } from "./MarkdownView";
 
 export function WorkPanel({
   people,
+  departmentId,
+  departmentName,
   loadError,
   onFloor,
   onHolding,
   onRetry,
 }: {
   people: PersonRow[] | null;
+  departmentId: string | null;
+  departmentName: string;
   loadError: string | null;
   onFloor: (floor: FloorMark[]) => void;
   onHolding: (duties: DutyHold[]) => void;
@@ -22,6 +27,7 @@ export function WorkPanel({
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
   const playingRef = useRef(false);
   const floorRef = useRef(floor);
@@ -31,7 +37,8 @@ export function WorkPanel({
 
   useEffect(() => {
     let gone = false;
-    void loadWork()
+    if (!departmentId) return;
+    void loadWork(departmentId)
       .then((office) => {
         if (gone) return;
         setError(null);
@@ -44,7 +51,7 @@ export function WorkPanel({
     return () => {
       gone = true;
     };
-  }, [leadId, onFloor, onHolding]);
+  }, [leadId, departmentId, onFloor, onHolding]);
 
   useEffect(() => {
     let ticks = 0;
@@ -52,7 +59,8 @@ export function WorkPanel({
       ticks += 1;
       if (playingRef.current) return;
       if (!sendingRef.current && ticks % 5 !== 0) return;
-      void loadWork()
+      if (!departmentId) return;
+      void loadWork(departmentId)
         .then((office) => {
           if (playingRef.current) return;
           void present(office);
@@ -60,7 +68,11 @@ export function WorkPanel({
         .catch(() => {});
     }, 1_000);
     return () => clearInterval(timer);
-  }, [onFloor, onHolding]);
+  }, [departmentId, onFloor, onHolding]);
+
+  useEffect(() => {
+    if (fieldRef.current) fitComposer(fieldRef.current);
+  }, [text]);
 
   const tailId = lines?.at(-1)?.id ?? "";
   useEffect(() => {
@@ -74,7 +86,7 @@ export function WorkPanel({
 
   async function say(event: FormEvent) {
     event.preventDefault();
-    if (sending || !lead) return;
+    if (sending || !lead || !departmentId) return;
     const said = text.trim();
     if (!said) return;
     const previousFloor = floor;
@@ -93,13 +105,14 @@ export function WorkPanel({
     showFloor(listening);
     const started = Date.now();
     try {
-      const office = await sayWork(said);
+      const office = await sayWork(departmentId, said);
       await playBeats(office, floorRef.current, Date.now() - started);
     } catch (caught) {
       setText(said);
       setError(caught instanceof Error ? caught.message : "主管这回没接上。");
       try {
-        const office = await loadWork();
+        const office = departmentId ? await loadWork(departmentId) : null;
+        if (!office) throw new Error("先选一层。");
         setLead(office.lead);
         setLines(office.lines);
         showFloor(office.floor);
@@ -187,7 +200,7 @@ export function WorkPanel({
     <aside className="chat">
       <header>
         <strong>{lead?.name ?? "主管"}</strong>
-        <span>交付组主管</span>
+        <span>{departmentName}主管</span>
       </header>
       <div className="log" ref={logRef}>
         {loadError ? (
@@ -204,20 +217,31 @@ export function WorkPanel({
         {lines?.map((line) => (
           <article key={line.id} className={line.role}>
             <span>{speaker(line, lead?.name, named)}</span>
-            <p>{line.text}</p>
+            <div className="bubble">
+              <Markdown text={line.text} />
+            </div>
           </article>
         ))}
         {sending ? <p className="empty">主管在听。</p> : null}
         {error ? <p className="file-error">{error}</p> : null}
       </div>
       <form onSubmit={(event) => void say(event)}>
-        <input
+        <textarea
+          ref={fieldRef}
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          rows={1}
+          onChange={(event) => {
+            setText(event.target.value);
+            fitComposer(event.currentTarget);
+          }}
+          onKeyDown={(event) => submitOnEnter(event)}
           disabled={!lead || sending}
           placeholder={lead ? "跟主管说一句" : "先指定一位主管"}
           maxLength={1000}
         />
+        <button type="submit" disabled={!lead || sending || text.trim() === ""}>
+          发送
+        </button>
       </form>
     </aside>
   );
@@ -233,6 +257,17 @@ function liveDuringSend(current: FloorMark[], incoming: FloorMark[]) {
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fitComposer(field: HTMLTextAreaElement) {
+  field.style.height = "0px";
+  field.style.height = `${Math.min(field.scrollHeight, 140)}px`;
+}
+
+function submitOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
+  if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+  event.preventDefault();
+  event.currentTarget.form?.requestSubmit();
 }
 
 function speaker(line: WorkLine, leadName: string | undefined, names: Map<string, string>) {

@@ -1,3 +1,5 @@
+import { petsAt, type PetFrame, type PetId } from "./pets";
+import { DEFAULT_ROOM, type RoomLook } from "./room";
 import { DESKS, ROOM, SPOTS } from "./roster";
 import type { DeskSpot } from "./seats";
 import type { ActorFrame, Pose } from "./types";
@@ -33,37 +35,53 @@ function rect(
   ctx.fillRect(Math.round(x), Math.round(y), w, h);
 }
 
-function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: number; h: number }) {
-  rect(ctx, 0, 0, room.w, 78, "#243f36");
-  rect(ctx, 0, 0, room.w, 8, "#1b312a");
-  rect(ctx, 0, 62, room.w, 8, "#c6a15b");
+function shade(hex: string, amount: number) {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const channel = (shift: number) => Math.max(0, Math.min(255, ((n >> shift) & 255) + amount));
+  return `#${channel(16).toString(16).padStart(2, "0")}${channel(8).toString(16).padStart(2, "0")}${channel(0).toString(16).padStart(2, "0")}`;
+}
+
+function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: number; h: number }, look: RoomLook) {
+  rect(ctx, 0, 0, room.w, 78, look.wall);
+  rect(ctx, 0, 0, room.w, 8, shade(look.wall, -20));
+  if (look.style === "brick") {
+    for (let y = 12; y < 60; y += 8) rect(ctx, 0, y, room.w, 1, shade(look.wall, 28));
+  }
+  rect(ctx, 0, 62, room.w, 8, look.trim);
   rect(ctx, 0, 70, room.w, 8, "#1a1714");
-  rect(ctx, 0, 78, room.w, room.h - 78, "#c4a574");
-  for (let y = 90; y < room.h; y += 14) {
-    rect(ctx, 0, y, room.w, 1, "#b08a58");
+  rect(ctx, 0, 78, room.w, room.h - 78, look.ground);
+  for (let y = 90; y < room.h; y += 14) rect(ctx, 0, y, room.w, 1, shade(look.ground, -24));
+
+  rect(ctx, 18, 18, 46, 40, look.wood);
+  rect(ctx, 22, 28, 16, 22, "#d7c4a2");
+  rect(ctx, 40, 34, 18, 6, shade(look.wood, 24));
+  rect(ctx, 40, 42, 14, 4, look.trim);
+
+  rect(ctx, 168, 16, 36, 52, look.wood);
+  rect(ctx, 172, 20, 28, 44, look.style === "glass" ? shade(look.trim, 40) : "#120e0c");
+  rect(ctx, 196, 36, 4, 8, look.trim);
+
+  if (look.style !== "glass") {
+    rect(ctx, 214, 22, 22, 22, "#efe6d4");
+    rect(ctx, 224, 33, 2, 6, "#1a1714");
+    rect(ctx, 221, 33, 5, 2, "#a8322a");
   }
 
-  rect(ctx, 18, 18, 46, 40, "#6b4428");
-  rect(ctx, 22, 28, 16, 22, "#d7c4a2");
-  rect(ctx, 40, 34, 18, 6, "#8c4a3a");
-  rect(ctx, 40, 42, 14, 4, "#3d6f8c");
-
-  rect(ctx, 168, 16, 36, 52, "#6b4428");
-  rect(ctx, 172, 20, 28, 44, "#120e0c");
-  rect(ctx, 196, 36, 4, 8, "#c6a15b");
-
-  rect(ctx, 214, 22, 22, 22, "#efe6d4");
-  rect(ctx, 224, 33, 2, 6, "#1a1714");
-  rect(ctx, 221, 33, 5, 2, "#a8322a");
-
-  rect(ctx, 300, 16, 52, 36, "#8ec8e6");
-  rect(ctx, 306, 22, 14, 8, "#f4f7fb");
-  rect(ctx, 324, 30, 18, 6, "#f4f7fb");
-  if (frame % 80 < 40) rect(ctx, 336, 18, 2, 2, "#f4f0c8");
+  if (look.style === "glass") {
+    rect(ctx, 214, 12, 150, 48, look.trim);
+    rect(ctx, 218, 16, 68, 40, "#d7e6ee");
+    rect(ctx, 290, 16, 70, 40, "#f4f7fb");
+    if (frame % 80 < 40) rect(ctx, 348, 18, 3, 3, "#f4f0c8");
+  } else {
+    rect(ctx, 300, 16, 52, 36, look.style === "brick" ? look.wood : look.trim);
+    rect(ctx, 306, 22, 14, 8, "#f4f7fb");
+    rect(ctx, 324, 30, 18, 6, "#f4f7fb");
+    if (frame % 80 < 40) rect(ctx, 336, 18, 2, 2, "#f4f0c8");
+  }
 
   rect(ctx, 364, 70, 16, 28, "#d9e4ea");
-  rect(ctx, 368, 74, 8, 10, "#8ec8e6");
-  rect(ctx, 360, 96, 24, 4, "#8c5a32");
+  rect(ctx, 368, 74, 8, 10, look.trim);
+  rect(ctx, 360, 96, 24, 4, look.wood);
 }
 
 function drawDesk(
@@ -73,11 +91,12 @@ function drawDesk(
   screen: Screen,
   frame: number,
   lead = false,
+  wood = DEFAULT_ROOM.wood,
 ) {
-  rect(ctx, x - 28, y - 6, 56, 6, "#5c4636");
+  rect(ctx, x - 28, y - 6, 56, 6, shade(wood, -16));
   rect(ctx, x - 30, y - 18, 60, 12, lead ? "#efe0bf" : "#e6d3a8");
-  rect(ctx, x - 26, y - 8, 4, 16, "#6b4428");
-  rect(ctx, x + 22, y - 8, 4, 16, "#6b4428");
+  rect(ctx, x - 26, y - 8, 4, 16, wood);
+  rect(ctx, x + 22, y - 8, 4, 16, wood);
   rect(ctx, x - 16, y - 40, 32, 22, "#1a1714");
   const glow =
     screen === "error"
@@ -166,6 +185,113 @@ export function actorAt(actors: ActorFrame[], roomX: number, roomY: number) {
   });
 }
 
+function drawPet(ctx: CanvasRenderingContext2D, pet: PetFrame) {
+  ctx.save();
+  ctx.translate(Math.round(pet.x), Math.round(pet.y));
+  if (pet.face < 0) ctx.scale(-1, 1);
+  const step = pet.walking && Math.floor(pet.frame / 4) % 2 === 0 ? 2 : 0;
+  const tail = Math.floor(pet.frame / 6) % 2 === 0 ? -2 : 0;
+  const blink = Math.floor(pet.frame / 8) % 7 === 0;
+  if (pet.activity === "sleep") drawAsleep(ctx, pet, tail);
+  else if (pet.activity === "play") drawPlaying(ctx, pet, tail);
+  else if (pet.kind === "cat" && pet.walking) drawCatWalk(ctx, pet, step, tail);
+  else if (pet.kind === "cat") drawCatRest(ctx, pet, tail, blink);
+  else if (pet.walking) drawDogWalk(ctx, pet, step, tail);
+  else drawDogRest(ctx, pet, tail, blink);
+  ctx.restore();
+}
+
+function drawAsleep(ctx: CanvasRenderingContext2D, pet: PetFrame, tail: number) {
+  if (pet.kind === "cat") {
+    rect(ctx, -12, -6, 16, 5, pet.coat);
+    rect(ctx, -8, -5, 6, 2, pet.accent);
+    rect(ctx, -14, -8 + tail, 4, 3, pet.coat);
+    rect(ctx, 2, -9, 6, 5, pet.coat);
+    rect(ctx, 3, -11, 2, 2, pet.coat);
+    rect(ctx, 4, -7, 2, 1, "#1a1714");
+  } else {
+    rect(ctx, -16, -6, 24, 5, pet.coat);
+    rect(ctx, -6, -5, 8, 2, pet.accent);
+    rect(ctx, 6, -10, 8, 6, pet.coat);
+    rect(ctx, 7, -12, 3, 3, pet.accent);
+    rect(ctx, 10, -8, 2, 1, "#1a1714");
+  }
+  const lift = Math.floor(pet.frame / 10) % 3;
+  rect(ctx, 12, -16 - lift * 3, 3, 2, "#fffaf2");
+  rect(ctx, 14, -18 - lift * 3, 2, 2, "#fffaf2");
+}
+
+function drawPlaying(ctx: CanvasRenderingContext2D, pet: PetFrame, tail: number) {
+  const bat = Math.floor(pet.frame / 6) % 2 === 0;
+  if (pet.kind === "cat") {
+    rect(ctx, -12, -8 + tail, 3, 3, pet.coat);
+    rect(ctx, -8, -8, 12, 5, pet.coat);
+    rect(ctx, -4, -6, 5, 2, pet.accent);
+    rect(ctx, 2, -13, 7, 6, pet.coat);
+    rect(ctx, 3, -15, 2, 2, pet.coat);
+    rect(ctx, 6, -15, 2, 2, pet.coat);
+    rect(ctx, 6, -11, 1, 1, "#1a1714");
+    rect(ctx, 8, bat ? -8 : -4, 4, 2, pet.coat);
+  } else {
+    rect(ctx, -14, -12, 8, 6, pet.coat);
+    rect(ctx, -12, -6 + tail, 3, 3, pet.coat);
+    rect(ctx, -6, -7, 12, 4, pet.coat);
+    rect(ctx, 4, -12, 8, 6, pet.coat);
+    rect(ctx, 5, -14, 3, 3, pet.accent);
+    rect(ctx, 9, -10, 1, 1, "#1a1714");
+    rect(ctx, -10, -6, 2, 6, pet.coat);
+    rect(ctx, 2, -3, 3, 3, pet.coat);
+  }
+  rect(ctx, 14, bat ? -3 : -6, 4, 4, "#a8322a");
+}
+
+function drawCatWalk(ctx: CanvasRenderingContext2D, pet: PetFrame, step: number, tail: number) {
+  rect(ctx, -14, -11 + tail, 4, 2, pet.coat);
+  rect(ctx, -11, -9, 12, 5, pet.coat);
+  rect(ctx, -8, -7, 6, 2, pet.accent);
+  rect(ctx, -1, -14, 7, 6, pet.coat);
+  rect(ctx, 0, -16, 2, 2, pet.coat);
+  rect(ctx, 4, -16, 2, 2, pet.coat);
+  rect(ctx, 3, -12, 1, 1, "#1a1714");
+  rect(ctx, -8, -4, 2, 4 + step, pet.coat);
+  rect(ctx, -2, -4, 2, 4 - step, pet.coat);
+}
+
+function drawCatRest(ctx: CanvasRenderingContext2D, pet: PetFrame, tail: number, blink: boolean) {
+  rect(ctx, -12, -8 + tail, 3, 3, pet.coat);
+  rect(ctx, -8, -10, 10, 8, pet.coat);
+  rect(ctx, -6, -6, 5, 3, pet.accent);
+  rect(ctx, 0, -15, 7, 6, pet.coat);
+  rect(ctx, 1, -17, 2, 2, pet.coat);
+  rect(ctx, 5, -17, 2, 2, pet.coat);
+  if (!blink) rect(ctx, 4, -13, 1, 1, "#1a1714");
+}
+
+function drawDogWalk(ctx: CanvasRenderingContext2D, pet: PetFrame, step: number, tail: number) {
+  rect(ctx, -16, -8 + tail, 4, 2, pet.coat);
+  rect(ctx, -12, -10, 16, 6, pet.coat);
+  rect(ctx, -8, -8, 7, 3, pet.accent);
+  rect(ctx, 2, -14, 8, 7, pet.coat);
+  rect(ctx, 3, -16, 3, 3, pet.accent);
+  rect(ctx, 8, -10, 4, 3, pet.accent);
+  rect(ctx, 11, -9, 1, 1, "#1a1714");
+  rect(ctx, 5, -12, 1, 1, "#1a1714");
+  rect(ctx, -9, -4, 2, 4 + step, pet.coat);
+  rect(ctx, -2, -4, 2, 4 - step, pet.coat);
+  rect(ctx, 4, -4, 2, 4 + step, pet.coat);
+}
+
+function drawDogRest(ctx: CanvasRenderingContext2D, pet: PetFrame, tail: number, blink: boolean) {
+  rect(ctx, -14, -6 + tail, 4, 2, pet.coat);
+  rect(ctx, -10, -8, 14, 6, pet.coat);
+  rect(ctx, -6, -6, 6, 3, pet.accent);
+  rect(ctx, 2, -13, 8, 7, pet.coat);
+  rect(ctx, 3, -15, 3, 3, pet.accent);
+  rect(ctx, 8, -9, 4, 3, pet.accent);
+  rect(ctx, 11, -8, 1, 1, "#1a1714");
+  if (!blink) rect(ctx, 5, -11, 1, 1, "#1a1714");
+}
+
 function occupant(actors: ActorFrame[], desk: DeskSpot) {
   const near = (actor: ActorFrame) => Math.hypot(actor.x - desk.x, actor.y - desk.y) < 8;
   if (desk.id) {
@@ -183,6 +309,9 @@ export function drawOffice(
   frame: number,
   room = ROOM,
   desks: DeskSpot[] = rehearsalDesks(),
+  sign = "交付组",
+  look: RoomLook = DEFAULT_ROOM,
+  pets: readonly PetId[] = [],
 ) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#1a1714";
@@ -192,30 +321,36 @@ export function drawOffice(
   ctx.translate(ox, oy);
   ctx.scale(scale, scale);
   ctx.imageSmoothingEnabled = false;
-  drawRoom(ctx, frame, room);
+  drawRoom(ctx, frame, room, look);
 
-  for (const desk of desks) {
-    const owner = occupant(actors, desk);
-    drawDesk(
-      ctx,
-      desk.x,
-      desk.y - 8,
-      screenFor(owner?.pose ?? "idle", Boolean(owner), owner?.label ?? ""),
-      frame,
-      desk.lead,
-    );
-  }
+  const layers: { y: number; draw: () => void }[] = desks.map((desk) => ({
+    y: desk.y,
+    draw: () => {
+      const owner = occupant(actors, desk);
+      drawDesk(
+        ctx,
+        desk.x,
+        desk.y - 8,
+        screenFor(owner?.pose ?? "idle", Boolean(owner), owner?.label ?? ""),
+        frame,
+        desk.lead,
+        look.wood,
+      );
+    },
+  }));
+  for (const pet of petsAt(frame, room.h, pets)) layers.push({ y: pet.y, draw: () => drawPet(ctx, pet) });
+  for (const actor of actors) layers.push({ y: actor.y, draw: () => drawPerson(ctx, actor, frame) });
+  layers.sort((a, b) => a.y - b.y);
+  for (const layer of layers) layer.draw();
 
-  const ordered = [...actors].sort((a, b) => a.y - b.y);
-  for (const actor of ordered) drawPerson(ctx, actor, frame);
-
+  const plaque = sign.trim().slice(0, 16) || "部门";
   ctx.fillStyle = "#fffaf2";
-  ctx.fillRect(8, 8, 78, 28);
+  ctx.fillRect(8, 8, Math.max(78, 16 + plaque.length * 8), 28);
   ctx.fillStyle = "#1a1714";
   ctx.font = "8px ui-monospace, monospace";
   ctx.textAlign = "left";
   ctx.fillText("OAK OFFICE", 12, 19);
-  ctx.fillText("交付组", 12, 30);
+  ctx.fillText(plaque, 12, 30);
   ctx.restore();
 
   ctx.textAlign = "center";

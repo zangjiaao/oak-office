@@ -35,19 +35,20 @@ export function rosterView(
   selectedId: string | null,
   floor?: Record<string, { pose: Pose; label: string; visit?: string }>,
   present = false,
+  seats = STAFF_LIMIT,
 ) {
   const room = present ? floor ?? {} : null;
-  const placed = layout(people, fittingDraft(people, draft), selectedId, room);
+  const placed = layout(people, fittingDraft(people, draft, seats), selectedId, room);
   const points = new Map(placed.map((person) => [person.id, person.point]));
   return {
     actors: placed.map((person) => actor(person, room ? floor?.[person.id] : undefined, points)),
-    desks: fixedDesks(),
+    desks: fixedDesks(seats),
     room: { w: ROOM.w, h: ROW_Y[1] + (ROOM.h - ROW_Y[0]) },
   };
 }
 
-export function rosterNote(people: PersonRow[]) {
-  return canHire(people) ? null : "工位已满。员工最多八个。";
+export function rosterNote(people: PersonRow[], seats = STAFF_LIMIT) {
+  return canHire(people, seats) ? null : `工位已满。这一层最多${seats}个员工。`;
 }
 
 export function rosterLabel(person: PersonRow) {
@@ -56,10 +57,10 @@ export function rosterLabel(person: PersonRow) {
   return `${role} · ${identity.generic ? "通用身份" : identity.brief}`;
 }
 
-function fittingDraft(people: PersonRow[], draft: DraftPreview | null): DraftPreview | null {
+function fittingDraft(people: PersonRow[], draft: DraftPreview | null, seats: number): DraftPreview | null {
   if (!draft) return null;
   const change: SeatChange = { kind: draft.kind, id: draft.id, isLead: draft.isLead };
-  if (staffFits(people, change)) return draft;
+  if (staffFits(people, change, seats)) return draft;
   if (draft.kind === "edit") {
     const current = people.find((person) => person.id === draft.id);
     return { ...draft, isLead: current?.is_lead === 1 };
@@ -142,9 +143,9 @@ function staffSpot(seat: number | null) {
   return seat === null ? null : staffPoint(seat);
 }
 
-function fixedDesks(): DeskSpot[] {
+function fixedDesks(seats: number): DeskSpot[] {
   const desks: DeskSpot[] = [];
-  for (let seat = 0; seat < STAFF_LIMIT; seat += 1) {
+  for (let seat = 0; seat < seats; seat += 1) {
     const point = staffPoint(seat);
     desks.push({ x: point.x, y: point.y, lead: false });
   }

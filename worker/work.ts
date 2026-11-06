@@ -9,6 +9,7 @@ import { dutyHoldLabel, everyLabel, type Duty } from "../src/work/duty";
 import { deskTools, rememberTool } from "./tools";
 import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
+import { departmentById } from "./department";
 import { listPeople } from "./people";
 import { openPi, replayMessage, visibleText } from "./pi";
 
@@ -21,11 +22,16 @@ function trace(event: string, detail?: Record<string, unknown>) {
   const extra = detail ? ` ${JSON.stringify(detail)}` : "";
   console.error(`[oak] ${event}${extra}`);
 }
-let running = false;
-let staged: { id: string; play: WorkBeat[]; closing: WorkLine; until: number } | null = null;
+const busy = new Set<string>();
+const staged = new Map<string, { id: string; play: WorkBeat[]; closing: WorkLine; until: number }>();
 
-export function officeBusy() {
-  return running;
+export function dropFloor(departmentId: string) {
+  staged.delete(departmentId);
+}
+
+export function officeBusy(departmentId?: string) {
+  if (departmentId) return busy.has(departmentId);
+  return busy.size > 0;
 }
 
 const AskArgs = obj({
@@ -109,11 +115,11 @@ type Turn = {
   leadSteps: { pose: Pose; label: string }[];
 };
 
-export async function getWork(db: Env["DB"]): Promise<WorkOffice> {
-  const people = await listPeople(db);
-  const lines = await linesOf(db);
-  const floor = await floorOf(db);
-  const duties = await listDuties(db);
+export async function getWork(db: Env["DB"], departmentId: string): Promise<WorkOffice> {
+  const people = await listPeople(db, departmentId);
+  const lines = await linesOf(db, departmentId);
+  const floor = await floorOf(db, departmentId);
+  const duties = await listDuties(db, departmentId);
   const seen = new Set<string>();
   const holding = duties.flatMap((duty) => {
     if (seen.has(duty.person_id)) return [];
@@ -121,8 +127,12 @@ export async function getWork(db: Env["DB"]): Promise<WorkOffice> {
     return [{ person_id: duty.person_id, label: dutyHoldLabel(duty) }];
   });
   const view = office(people, lines, floor, holding);
-  if (!staged || staged.until <= Date.now()) return view;
-  return { ...view, playId: staged.id, play: staged.play, closing: staged.closing };
+  const pending = staged.get(departmentId);
+  if (!pending || pending.until <= Date.now()) {
+    if (pending) staged.delete(departmentId);
+    return view;
+  }
+  return { ...view, playId: pending.id, play: pending.play, closing: pending.closing };
 }
 
 export async function speak(
@@ -130,32 +140,38 @@ export async function speak(
   text: string,
   signal?: AbortSignal,
   from: "user" | "clock" = "user",
+  departmentId = "",
 ): Promise<{ ok: true; office: WorkOffice } | { ok: false; error: string; status: number }> {
   const said = text.trim();
   if (!said) return { ok: false, error: "先写一句。", status: 400 };
   if ([...said].length > TEXT_MAX) return { ok: false, error: "这句话太长。", status: 400 };
-  if (running) return { ok: false, error: "主管还在忙。", status: 409 };
-  running = true;
+  if (busy.has(departmentId)) return { ok: false, error: "主管还在忙。", status: 409 };
+  busy.add(departmentId);
   let touched = false;
   let placed = false;
   let desks: DeskRow[] = [];
+  let floorId = "";
   try {
     const runtime = openPi(env);
     if (!runtime.ok) return runtime;
-    const people = await listPeople(env.DB);
+    const department = await departmentById(env.DB, departmentId);
+    if (!department) return { ok: false, error: "没有这一层。", status: 404 };
+    floorId = department.id;
+    const people = await listPeople(env.DB, department.id);
     const lead = people.find((person) => person.is_lead === 1);
     if (!lead) return { ok: false, error: "先指定一位主管。", status: 400 };
     const staff = people.filter((person) => person.is_lead === 0);
-    desks = await desksOf(env.DB);
-    const duties = await listDuties(env.DB);
-    const prior = await linesOf(env.DB);
+    const rules = houseRules(department.name, department.rules);
+    desks = await desksOf(env.DB, department.id);
+    const duties = await listDuties(env.DB, department.id);
+    const prior = await linesOf(env.DB, department.id);
     const model = runtime.modelFor(lead.model);
     if (!model) return { ok: false, error: `${lead.name}的模型不在目录里。`, status: 400 };
     const userLine: WorkLine = { id: crypto.randomUUID(), role: from, person_id: null, text: said };
     await env.DB.prepare(
-      "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, ?, NULL, ?, NULL, ?)",
+      "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, ?, NULL, ?, NULL, ?, ?)",
     )
-      .bind(userLine.id, userLine.role, userLine.text, Date.now())
+      .bind(userLine.id, userLine.role, userLine.text, Date.now(), department.id)
       .run();
     const turn: Turn = { jobs: new Map(), leadSteps: [] };
     let calls = 0;
@@ -181,15 +197,15 @@ export async function speak(
       },
       initialState: {
         model,
-        systemPrompt: leadPrompt(lead, staff, desks, duties),
+        systemPrompt: leadPrompt(lead, staff, desks, duties, department.name, rules),
         thinkingLevel: thinkingFor(lead.model, lead.thinking),
         messages: prior.flatMap((line, index) => replay(line, prior[index - 1])),
         tools: [
-          askTool(env, runtime, signal, turn),
+          askTool(env, runtime, signal, turn, department.id, rules),
           markTool(env, turn),
           rememberTool(env, lead.id),
-          scheduleTool(env),
-          unscheduleTool(env),
+          scheduleTool(env, department.id),
+          unscheduleTool(env, department.id),
           ...deskTools(env, turn.leadSteps, (pose, label) => setDesk(env.DB, lead.id, pose, label)),
         ],
       },
@@ -212,7 +228,7 @@ export async function speak(
         error: clip(agent.state.errorMessage ?? "", 300),
         calls,
       });
-      await restoreDesks(env.DB, desks);
+      await restoreDesks(env.DB, desks, department.id);
       return { ok: false, error: "主管这回没接上。", status: 502 };
     }
     const produced = agent.state.messages.slice(before).filter((message) => message.role === "assistant");
@@ -248,7 +264,7 @@ export async function speak(
     if (!reply && calls > 0) reply = "人已经安排好了。";
     if (!reply || !closingMessage) {
       trace("主管没有说完", { calls, jobs: jobs.length, spoken: spoken.length });
-      await restoreDesks(env.DB, desks);
+      await restoreDesks(env.DB, desks, department.id);
       return { ok: false, error: "主管没有说完。", status: 502 };
     }
     const dutyIds = new Set(duties.map((duty) => duty.person_id));
@@ -294,21 +310,21 @@ export async function speak(
       at += 1;
       writes.push(
         env.DB.prepare(
-          "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, ?, ?, ?, NULL, ?)",
-        ).bind(line.id, line.role, line.person_id, line.text, at),
+          "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, ?, ?, ?, NULL, ?, ?)",
+        ).bind(line.id, line.role, line.person_id, line.text, at, department.id),
       );
     }
     at += 1;
     writes.push(
       env.DB.prepare(
-        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'lead', NULL, ?, ?, ?)",
-      ).bind(closing.id, closing.text, JSON.stringify(replayMessage(closingMessage)), at),
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, 'lead', NULL, ?, ?, ?, ?)",
+      ).bind(closing.id, closing.text, JSON.stringify(replayMessage(closingMessage)), at, department.id),
     );
     await env.DB.batch(writes);
-    const office = await getWork(env.DB);
+    const office = await getWork(env.DB, department.id);
     return { ok: true, office: { ...office, play, closing, playId: undefined } };
   } catch (error) {
-    if (touched && !placed) await restoreDesks(env.DB, desks).catch(() => {});
+    if (touched && !placed && floorId) await restoreDesks(env.DB, desks, floorId).catch(() => {});
     trace("主管没接上", {
       thrown: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack?.split("\n").slice(0, 6).join(" | ") : undefined,
@@ -319,13 +335,18 @@ export async function speak(
     }
     return { ok: false, error: "主管这回没接上。", status: 500 };
   } finally {
-    const heldNow = new Set((await listDuties(env.DB).catch(() => [])).map((duty) => duty.person_id));
-    const fallback = Date.now() + DONE_MS + IDLE_MS;
-    for (const id of unarmedCrew()) {
-      if (heldNow.has(id)) disarmCrew(id);
-      else armCrew(id, fallback);
+    if (floorId) {
+      const roster = await listPeople(env.DB, floorId).catch(() => []);
+      const here = new Set(roster.map((person) => person.id));
+      const heldNow = new Set((await listDuties(env.DB, floorId).catch(() => [])).map((duty) => duty.person_id));
+      const fallback = Date.now() + DONE_MS + IDLE_MS;
+      for (const id of unarmedCrew()) {
+        if (!here.has(id)) continue;
+        if (heldNow.has(id)) disarmCrew(id);
+        else armCrew(id, fallback);
+      }
     }
-    running = false;
+    busy.delete(departmentId);
   }
 }
 
@@ -352,13 +373,18 @@ export async function runStaffDuty(
   personId: string,
   task: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (running) return { ok: false, error: "主管还在忙。" };
-  running = true;
+  const person = await hired(env.DB, personId);
+  if (!person || person.is_lead === 1) return { ok: false, error: "没有这个员工。" };
+  if (busy.has(person.department_id)) return { ok: false, error: "主管还在忙。" };
+  busy.add(person.department_id);
   try {
     const runtime = openPi(env);
     if (!runtime.ok) return { ok: false, error: runtime.error };
-    const person = await hired(env.DB, personId);
-    if (!person || person.is_lead === 1) return { ok: false, error: "没有这个员工。" };
+    const department = await departmentById(env.DB, person.department_id);
+    if (!department) return { ok: false, error: "没有这一层。" };
+    const rules = houseRules(department.name, department.rules);
+    const floorPeople = await listPeople(env.DB, department.id);
+    const lead = floorPeople.find((row) => row.is_lead === 1) ?? null;
     const model = runtime.modelFor(person.model);
     if (!model) return { ok: false, error: `${person.name}的模型不在目录里。` };
     const jobText = clip(task, 500);
@@ -369,7 +395,6 @@ export async function runStaffDuty(
       .bind(person.id)
       .first<DeskRow>();
     const inside = stillWorking(prior ?? undefined, Date.now(), true);
-    const lead = (await listPeople(env.DB)).find((row) => row.is_lead === 1);
     if (!lead) return { ok: false, error: "先指定一位主管。" };
     const leadModel = runtime.modelFor(lead.model);
     if (!leadModel) return { ok: false, error: `${lead.name}的模型不在目录里。` };
@@ -387,7 +412,7 @@ export async function runStaffDuty(
       },
       initialState: {
         model,
-        systemPrompt: staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT), []),
+        systemPrompt: staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT), [], department.name, rules),
         thinkingLevel: thinkingFor(person.model, person.thinking),
       },
     });
@@ -418,7 +443,7 @@ export async function runStaffDuty(
       return { ok: false, error: note || "员工这回没接上。" };
     }
     keepCrew(person.id, staff);
-    const duties = await listDuties(env.DB);
+    const duties = await listDuties(env.DB, department.id);
     const rest = Date.now();
     await setDesk(env.DB, person.id, "done", "做完", undefined, undefined, rest);
     await env.DB.prepare("UPDATE work_desk SET note = ? WHERE person_id = ?").bind(note, person.id).run();
@@ -426,7 +451,7 @@ export async function runStaffDuty(
     else armCrew(person.id, rest + DONE_MS + IDLE_MS);
     await remember(env.DB, person.id, jobMemory(jobText, note));
     const clock = `到点了。${person.name}做了：${jobText}`;
-    const history = await linesOf(env.DB);
+    const history = await linesOf(env.DB, department.id);
     const identity = identityOf(lead);
     const leader = new Agent({
       streamFn: runtime.streamFn(1200),
@@ -434,7 +459,8 @@ export async function runStaffDuty(
       initialState: {
         model: leadModel,
         systemPrompt: [
-          `你是交付组主管${lead.name}。${identity.brief}${identity.dossier}`,
+          `你是${department.name}主管${lead.name}。${identity.brief}${identity.dossier}`,
+          rules,
           promptMemory(lead.memories),
           "员工的定时任务已经做完。用你自己的话向用户说结果。不要派工，不要加「某某回报：」前缀，也不要原样贴出员工交来的全文。",
         ]
@@ -462,16 +488,16 @@ export async function runStaffDuty(
     const report = leadAnswer ? clip(visibleText(leadAnswer), TEXT_MAX) : "";
     if (!leadAnswer || !report || leader.state.errorMessage) {
       await env.DB.prepare(
-        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'clock', NULL, ?, NULL, ?)",
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, 'clock', NULL, ?, NULL, ?, ?)",
       )
-        .bind(crypto.randomUUID(), clock, Date.now())
+        .bind(crypto.randomUUID(), clock, Date.now(), department.id)
         .run();
       return { ok: true };
     }
     let at = Date.now();
     const clockLine: WorkLine = { id: crypto.randomUUID(), role: "clock", person_id: null, text: clock };
     const closing: WorkLine = { id: crypto.randomUUID(), role: "lead", person_id: null, text: report };
-    staged = {
+    staged.set(department.id, {
       id: clockLine.id,
       play: dutyScene({
         personId: person.id,
@@ -483,14 +509,14 @@ export async function runStaffDuty(
       }),
       closing,
       until: at + 120_000,
-    };
+    });
     await env.DB.batch([
       env.DB.prepare(
-        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'clock', NULL, ?, NULL, ?)",
-      ).bind(clockLine.id, clock, at),
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, 'clock', NULL, ?, NULL, ?, ?)",
+      ).bind(clockLine.id, clock, at, department.id),
       env.DB.prepare(
-        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'lead', NULL, ?, ?, ?)",
-      ).bind(closing.id, report, JSON.stringify(replayMessage(leadAnswer)), (at += 1)),
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, 'lead', NULL, ?, ?, ?, ?)",
+      ).bind(closing.id, report, JSON.stringify(replayMessage(leadAnswer)), (at += 1), department.id),
     ]);
     return { ok: true };
   } catch (error) {
@@ -500,7 +526,7 @@ export async function runStaffDuty(
     });
     return { ok: false, error: "员工这回没接上。" };
   } finally {
-    running = false;
+    busy.delete(person.department_id);
   }
 }
 
@@ -509,6 +535,8 @@ function askTool(
   runtime: Extract<ReturnType<typeof openPi>, { ok: true }>,
   parent: AbortSignal | undefined,
   turn: Turn,
+  departmentId: string,
+  rules: string,
 ) {
   return {
     name: "ask",
@@ -540,8 +568,9 @@ function askTool(
       const model = runtime.modelFor(person.model);
       if (!model) return fail(`${person.name}的模型不在目录里。`);
       const staying = liveCrew(person.id);
-      const peers = (await listPeople(env.DB)).filter((peer) => peer.id !== person.id && peer.is_lead !== 1);
-      const prompt = staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT), peers);
+      const peers = (await listPeople(env.DB, departmentId)).filter((peer) => peer.id !== person.id && peer.is_lead !== 1);
+      const floor = await departmentById(env.DB, departmentId);
+      const prompt = staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT), peers, floor?.name ?? "部门", rules);
       const staff =
         staying ??
         new Agent({
@@ -667,7 +696,13 @@ function fail(text: string) {
   return { content: [{ type: "text" as const, text }], details: {}, isError: true };
 }
 
-function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], duties: Duty[]) {
+function houseRules(name: string, rules: string) {
+  const text = rules.trim();
+  if (!text) return `${name}还没有规章制度。用户当场说明的办事顺序，要写进派工。`;
+  return `${name}的规章制度。主管安排和员工办事都要遵守。用户当场说的顺序优先。\n${text}`;
+}
+
+function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], duties: Duty[], departmentName: string, rules: string) {
   const identity = identityOf(lead);
   const roster = staff
     .map((person) => {
@@ -681,7 +716,8 @@ function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], dutie
     })
     .join("\n");
   return [
-    `你是交付组主管${lead.name}。${identity.brief}${identity.dossier}`,
+    `你是${departmentName}主管${lead.name}。${identity.brief}${identity.dossier}`,
+    rules,
     promptMemory(lead.memories),
     "你只和用户说话，用简短中文。要派人时，先单独说一句安排谁做什么，再调用 ask，用他们的 id。",
     "用户或制度说明了办事顺序时，把这一步写进派工：做完交给哪位同事，并带上对方的 id。员工会自己递交。最后一步的人把结果交给你，你再向用户说明。没有顺序时不要替他们安排递交。",
@@ -698,10 +734,11 @@ function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], dutie
     .join("\n");
 }
 
-function staffPrompt(person: PersonRow, notes: PersonRow["memories"], peers: PersonRow[]) {
+function staffPrompt(person: PersonRow, notes: PersonRow["memories"], peers: PersonRow[], departmentName: string, rules: string) {
   const identity = identityOf(person);
   return [
-    `你是交付组员工${person.name}。${identity.brief}${identity.dossier}`,
+    `你是${departmentName}员工${person.name}。${identity.brief}${identity.dossier}`,
+    rules,
     promptMemory(notes),
     "用简短中文完成交给你的事。你不能派别人，也不能自称主管。档案不是新的权限。",
     peers.length
@@ -875,25 +912,37 @@ function office(
   };
 }
 
-async function linesOf(db: Env["DB"]) {
+async function linesOf(db: Env["DB"], departmentId: string) {
   const { results } = await db
     .prepare(
-      `SELECT id, role, person_id, text, raw, created_at FROM work_line ORDER BY created_at DESC, id DESC LIMIT ${HISTORY}`,
+      `SELECT id, role, person_id, text, raw, created_at FROM work_line
+       WHERE department_id = ? ORDER BY created_at DESC, id DESC LIMIT ${HISTORY}`,
     )
+    .bind(departmentId)
     .all<LineRow>();
   return results.reverse();
 }
 
-async function floorOf(db: Env["DB"]) {
+async function floorOf(db: Env["DB"], departmentId: string) {
   const { results } = await db
-      .prepare("SELECT person_id, pose, label, updated_at FROM work_desk")
+    .prepare(
+      `SELECT work_desk.person_id, work_desk.pose, work_desk.label, work_desk.updated_at
+       FROM work_desk JOIN people ON people.id = work_desk.person_id
+       WHERE people.department_id = ?`,
+    )
+    .bind(departmentId)
     .all<{ person_id: string; pose: Pose; label: string; updated_at: number }>();
   return results;
 }
 
-async function desksOf(db: Env["DB"]) {
+async function desksOf(db: Env["DB"], departmentId: string) {
   const { results } = await db
-      .prepare("SELECT person_id, pose, label, task, note, updated_at FROM work_desk")
+    .prepare(
+      `SELECT work_desk.person_id, work_desk.pose, work_desk.label, work_desk.task, work_desk.note, work_desk.updated_at
+       FROM work_desk JOIN people ON people.id = work_desk.person_id
+       WHERE people.department_id = ?`,
+    )
+    .bind(departmentId)
     .all<DeskRow>();
   return results;
 }
@@ -901,14 +950,14 @@ async function desksOf(db: Env["DB"]) {
 async function hired(db: Env["DB"], id: string) {
   return db
     .prepare(
-      "SELECT id, name, gender, hair, skin, shirt, pants, hair_style, brief, dossier, is_lead, model, thinking, seat, created_at, updated_at FROM people WHERE id = ?",
+      "SELECT id, name, gender, hair, skin, shirt, pants, hair_style, brief, dossier, is_lead, model, thinking, seat, created_at, updated_at, department_id FROM people WHERE id = ?",
     )
     .bind(id)
     .first<PersonRow>();
 }
 
-async function restoreDesks(db: Env["DB"], before: DeskRow[]) {
-  const current = await desksOf(db);
+async function restoreDesks(db: Env["DB"], before: DeskRow[], departmentId: string) {
+  const current = await desksOf(db, departmentId);
   const known = new Set(before.map((desk) => desk.person_id));
   const writes = current
     .filter((desk) => !known.has(desk.person_id))

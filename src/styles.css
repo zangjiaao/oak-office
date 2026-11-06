@@ -13,7 +13,7 @@ html, body, #root {
   height: 100%;
 }
 
-button, input {
+button, input, textarea {
   font: inherit;
 }
 
@@ -81,9 +81,17 @@ button, input {
 
 .transport button, .modes button { cursor: pointer; }
 
-.modes { display: flex; gap: 6px; }
+.modes, .floors { display: flex; gap: 6px; flex-wrap: wrap; }
 
-.modes button.on {
+.floors button {
+  border: 1px solid #6b5340;
+  background: transparent;
+  color: #f3ead7;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.modes button.on, .floors button.on {
   background: #c6a15b;
   border-color: #c6a15b;
   color: #1a1714;
@@ -160,43 +168,105 @@ button, input {
 .log .lead, .log .staff { align-self: flex-start; max-width: 96%; }
 .log .clock { align-self: flex-start; max-width: 96%; }
 
-.log .user p, .log .lead p, .log .staff p {
+.log .user .bubble, .log .lead .bubble, .log .staff .bubble {
   padding: 8px 10px;
 }
 
-.log .user p {
+.log .user .bubble {
   background: #1f3a32;
   color: #f3ead7;
 }
 
-.log .lead p {
+.log .lead .bubble {
   background: #fffaf2;
   border: 1px solid #e0d2b8;
 }
 
-.log .staff p {
+.log .staff .bubble {
   background: #efe2c4;
   border: 1px solid #c6a15b;
 }
 
-.log .clock p {
+.log .clock .bubble {
   background: transparent;
   color: #7a6a56;
   padding: 0;
   text-align: left;
 }
 
+.log .md > * + * { margin-top: 0.55em; }
+
+.log .md h1, .log .md h2, .log .md h3 {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.log .md ul, .log .md ol { margin: 0; padding-left: 1.2em; }
+
+.log .md blockquote {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid currentColor;
+}
+
+.log .md pre {
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  background: rgba(26, 23, 20, 0.06);
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.log .user .md pre { background: rgba(243, 234, 215, 0.12); }
+
+.log .md code {
+  font-family: ui-monospace, monospace;
+  font-size: 0.92em;
+  padding: 0 3px;
+  background: rgba(26, 23, 20, 0.08);
+}
+
+.log .md pre code { padding: 0; background: transparent; }
+
+.log .user .md code { background: rgba(243, 234, 215, 0.16); }
+
+.log .md a { color: inherit; }
+
 .chat form { border-top: 1px solid #e0d2b8; }
 
-.chat > form input {
+.chat > form:has(button) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.chat > form textarea {
   width: 100%;
+  min-height: 42px;
+  max-height: 140px;
+  resize: none;
   border: 1px solid #d9c7a4;
   background: #fffaf2;
   color: #241c16;
   padding: 10px 12px;
+  line-height: 1.45;
 }
 
-.chat > form input:disabled { opacity: 0.7; }
+.chat > form textarea:disabled { opacity: 0.7; }
+
+.chat > form button {
+  border: 0;
+  background: #1f3a32;
+  color: #f3ead7;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.chat > form button:disabled { opacity: 0.55; cursor: default; }
 
 .roster {
   list-style: none;
@@ -287,6 +357,24 @@ button, input {
 }
 
 .file textarea { min-height: 88px; resize: vertical; }
+.floor-file { margin-bottom: 16px; }
+.floor-fields { display: grid; grid-template-columns: 72px minmax(0, 1fr) 72px; gap: 8px; }
+.floor-actions { display: flex; gap: 8px; margin-top: 8px; }
+.floor-file button[type="submit"] {
+  border: 1px solid #1f3a32;
+  background: #1f3a32;
+  color: #f3ead7;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.floor-file button.leave {
+  border: 1px solid #a8322a;
+  background: transparent;
+  color: #a8322a;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.floor-file button:disabled { opacity: 0.55; cursor: default; }
 
 .choices, .presets, .colors { display: flex; flex-wrap: wrap; gap: 6px; }
 
