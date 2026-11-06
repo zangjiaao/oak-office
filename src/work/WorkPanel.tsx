@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { PersonRow } from "../people/record";
 import { loadWork, sayWork, type DutyHold, type FloorMark, type WorkLine, type WorkOffice } from "./api";
+import { Markdown } from "./MarkdownView";
 
 export function WorkPanel({
   people,
@@ -26,6 +27,7 @@ export function WorkPanel({
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
   const playingRef = useRef(false);
   const floorRef = useRef(floor);
@@ -67,6 +69,10 @@ export function WorkPanel({
     }, 1_000);
     return () => clearInterval(timer);
   }, [departmentId, onFloor, onHolding]);
+
+  useEffect(() => {
+    if (fieldRef.current) fitComposer(fieldRef.current);
+  }, [text]);
 
   const tailId = lines?.at(-1)?.id ?? "";
   useEffect(() => {
@@ -211,20 +217,31 @@ export function WorkPanel({
         {lines?.map((line) => (
           <article key={line.id} className={line.role}>
             <span>{speaker(line, lead?.name, named)}</span>
-            <p>{line.text}</p>
+            <div className="bubble">
+              <Markdown text={line.text} />
+            </div>
           </article>
         ))}
         {sending ? <p className="empty">主管在听。</p> : null}
         {error ? <p className="file-error">{error}</p> : null}
       </div>
       <form onSubmit={(event) => void say(event)}>
-        <input
+        <textarea
+          ref={fieldRef}
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          rows={1}
+          onChange={(event) => {
+            setText(event.target.value);
+            fitComposer(event.currentTarget);
+          }}
+          onKeyDown={(event) => submitOnEnter(event)}
           disabled={!lead || sending}
           placeholder={lead ? "跟主管说一句" : "先指定一位主管"}
           maxLength={1000}
         />
+        <button type="submit" disabled={!lead || sending || text.trim() === ""}>
+          发送
+        </button>
       </form>
     </aside>
   );
@@ -240,6 +257,17 @@ function liveDuringSend(current: FloorMark[], incoming: FloorMark[]) {
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fitComposer(field: HTMLTextAreaElement) {
+  field.style.height = "0px";
+  field.style.height = `${Math.min(field.scrollHeight, 140)}px`;
+}
+
+function submitOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
+  if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+  event.preventDefault();
+  event.currentTarget.form?.requestSubmit();
 }
 
 function speaker(line: WorkLine, leadName: string | undefined, names: Map<string, string>) {

@@ -3,6 +3,7 @@ import { rehearsalDesks } from "./office/draw";
 import { petIds, type PetId } from "./office/pets";
 import { DEFAULT_ROOM, type RoomLook } from "./office/room";
 import { OfficeStage } from "./office/OfficeStage";
+import { Markdown } from "./work/MarkdownView";
 import { ROOM } from "./office/roster";
 import { DURATION } from "./office/script";
 import { activePoses, actorsAt, linesAt } from "./office/scene";
@@ -392,7 +393,9 @@ export function App() {
             {lines.map((line) => (
               <article key={line.at} className={line.who}>
                 <span>{line.who === "lead" ? "周衡" : "你"}</span>
-                <p>{line.text}</p>
+                <div className="bubble">
+                  <Markdown text={line.text} />
+                </div>
               </article>
             ))}
           </div>
@@ -401,7 +404,7 @@ export function App() {
               event.preventDefault();
             }}
           >
-            <input disabled value="" placeholder="剧本播放中，还不能插话" readOnly />
+            <textarea disabled value="" placeholder="剧本播放中，还不能插话" readOnly rows={1} />
           </form>
           <ul className="roster">
             {rehearsalActors.map((actor) => (
