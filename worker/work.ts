@@ -1,7 +1,7 @@
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { obj, oneOf, str, type Static } from "@earendil-works/pi-schema";
 import { identityOf, thinkingFor, type PersonRow } from "../src/people/record";
-import { DONE_MS, IDLE_MS, stillWorking } from "../src/office/shift";
+import { DONE_MS, IDLE_MS, onSite, stillWorking } from "../src/office/shift";
 import { armCrew, disarmCrew, keepCrew, liveCrew, releaseCrew, unarmedCrew } from "./crew";
 import { jobMemory, promptMemory, recentNotes, remember, NOTES_IN_PROMPT } from "./memory";
 import { listDuties, scheduleTool, unscheduleTool } from "./duty";
@@ -201,7 +201,7 @@ export async function speak(
         thinkingLevel: thinkingFor(lead.model, lead.thinking),
         messages: prior.flatMap((line, index) => replay(line, prior[index - 1])),
         tools: [
-          askTool(env, runtime, signal, turn, department.id, rules),
+          askTool(env, runtime, signal, turn, department.id, rules, lead.id),
           markTool(env, turn),
           rememberTool(env, lead.id),
           scheduleTool(env, department.id),
@@ -267,10 +267,8 @@ export async function speak(
       await restoreDesks(env.DB, desks, department.id);
       return { ok: false, error: "主管没有说完。", status: 502 };
     }
-    const dutyIds = new Set(duties.map((duty) => duty.person_id));
-    const inside = new Set(
-      desks.filter((desk) => stillWorking(desk, Date.now(), dutyIds.has(desk.person_id))).map((desk) => desk.person_id),
-    );
+    const nowInside = await desksOf(env.DB, department.id);
+    const inside = new Set(nowInside.filter((desk) => onSite(desk, Date.now())).map((desk) => desk.person_id));
     const plan =
       spoken.length > 1
         ? { id: crypto.randomUUID(), role: "lead" as const, person_id: null, text: spoken[0] }
@@ -537,6 +535,7 @@ function askTool(
   turn: Turn,
   departmentId: string,
   rules: string,
+  leadId: string,
 ) {
   return {
     name: "ask",
@@ -564,6 +563,7 @@ function askTool(
       job.steps = [];
       job.visit = undefined;
       await setDesk(env.DB, person.id, pose, label, task, null);
+      await setDesk(env.DB, leadId, "wait", "等他们");
       toolUses.set(person.id, 0);
       const model = runtime.modelFor(person.model);
       if (!model) return fail(`${person.name}的模型不在目录里。`);
