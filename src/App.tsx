@@ -270,9 +270,11 @@ export function App() {
                   {item.floor} {item.name}
                 </button>
               ))}
-              <button type="button" onClick={() => void addFloor()}>
-                加一层
-              </button>
+              {mode === "roster" ? (
+                <button type="button" onClick={() => void addFloor()}>
+                  加一层
+                </button>
+              ) : null}
             </nav>
           )}
           <div className="modes">
