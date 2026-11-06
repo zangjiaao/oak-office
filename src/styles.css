@@ -158,7 +158,7 @@ button, input {
 
 .log .user { align-self: flex-end; max-width: 92%; }
 .log .lead, .log .staff { align-self: flex-start; max-width: 96%; }
-.log .clock { align-self: center; max-width: 100%; }
+.log .clock { align-self: flex-start; max-width: 96%; }
 
 .log .user p, .log .lead p, .log .staff p {
   padding: 8px 10px;
@@ -183,7 +183,7 @@ button, input {
   background: transparent;
   color: #7a6a56;
   padding: 0;
-  text-align: center;
+  text-align: left;
 }
 
 .chat form { border-top: 1px solid #e0d2b8; }
