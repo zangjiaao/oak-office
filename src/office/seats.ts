@@ -167,7 +167,7 @@ function actor(person: Placed, mark?: { pose: Pose; label: string }): ActorFrame
   const point = leaving
     ? { x: SPOTS.door.x, y: SPOTS.door.y }
     : reporting
-      ? { x: person.point.x < SPOTS.lead.x ? 168 : 232, y: 168 }
+      ? { x: person.point.x < SPOTS.lead.x ? 184 : 216, y: 140 }
       : person.point;
   return {
     id: person.id,

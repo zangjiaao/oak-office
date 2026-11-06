@@ -651,7 +651,7 @@ function sceneOf(
   if (reporting.length > 0) {
     beats.push({ person_id: leadId, pose: "think", label: "在听汇报", hold: 700 });
     for (const job of reporting) {
-      beats.push({ person_id: job.personId, pose: "report", label: "来回报", hold: 1600, line: job.note });
+      beats.push({ person_id: job.personId, pose: "report", label: "来回报", hold: 2600, line: job.note });
       beats.push({ person_id: job.personId, pose: "done", label: "做完", hold: 900 });
     }
   }
@@ -674,7 +674,7 @@ export function dutyScene(input: {
     beats.push({ person_id: input.personId, pose: step.pose, label: step.label, hold: holdFor(step.pose, step.label) });
   }
   if (input.leadId) beats.push({ person_id: input.leadId, pose: "think", label: "在听汇报", hold: 700 });
-  beats.push({ person_id: input.personId, pose: "report", label: "来回报", hold: 1600 });
+  beats.push({ person_id: input.personId, pose: "report", label: "来回报", hold: 2600 });
   beats.push({ person_id: input.personId, pose: "done", label: "做完", hold: 900 });
   const first = beats[0];
   if (first) beats[0] = { ...first, line: input.clock, lineAt: "start" };
@@ -683,7 +683,7 @@ export function dutyScene(input: {
 
 function holdFor(pose: Pose, label: string) {
   if (label === "在听") return 1100;
-  if (pose === "report") return 1600;
+  if (pose === "report") return 2600;
   if (pose === "read" || pose === "type" || pose === "run" || pose === "wait" || pose === "handoff" || pose === "think") {
     return 1500;
   }
