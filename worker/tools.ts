@@ -33,7 +33,7 @@ export function rememberTool(env: Env, personId: string) {
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Static<typeof RememberArgs>) => {
       const note = await remember(env.DB, personId, args.text);
-      if (!note) return miss("要记住的内容是空的。");
+      if (!note) return miss("要记住的内容是空的。", "remember");
       return text("记住了。");
     },
   };
@@ -48,26 +48,36 @@ function searchTool(env: Env, steps: Step[], mark: Mark) {
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Static<typeof SearchArgs>) => {
       const query = args.query.trim();
-      if (!query) return miss("搜索词是空的。");
+      if (!query) return miss("搜索词是空的。", "search");
       const key = env.TAVILY_API_KEY?.trim();
-      if (!key) return miss("搜索还没配置。在 .dev.vars 里写 TAVILY_API_KEY。");
+      if (!key) return miss("搜索还没配置。在 .dev.vars 里写 TAVILY_API_KEY。", "search");
       await note(steps, mark, "read", "在搜索");
-      const response = await fetch("https://api.tavily.com/search", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ api_key: key, query, max_results: 5, search_depth: "basic", include_answer: true }),
-      });
-      if (!response.ok) return miss("搜索这回没接上。");
-      const body = (await response.json()) as {
-        answer?: string;
-        results?: { title?: string; url?: string; content?: string }[];
-      };
-      const lines = (body.results ?? []).slice(0, 5).map((item, index) => {
-        const content = (item.content ?? "").replace(/\s+/g, " ").slice(0, 400);
-        return `${index + 1}. ${item.title ?? "无题"}\n${item.url ?? ""}\n${content}`;
-      });
-      const answer = body.answer?.trim() ? `${body.answer.trim()}\n\n` : "";
-      return text(`${answer}${lines.join("\n\n") || "没有搜到结果。"}`);
+      try {
+        const response = await fetch("https://api.tavily.com/search", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ api_key: key, query, max_results: 5, search_depth: "basic", include_answer: true }),
+        });
+        if (!response.ok) {
+          const detail = clip(await response.text().catch(() => ""), 240);
+          trace("工具失败", { tool: "search", status: response.status, query: clip(query, 120), error: detail || "搜索这回没接上。" });
+          return miss("搜索这回没接上。");
+        }
+        const body = (await response.json()) as {
+          answer?: string;
+          results?: { title?: string; url?: string; content?: string }[];
+        };
+        const lines = (body.results ?? []).slice(0, 5).map((item, index) => {
+          const content = (item.content ?? "").replace(/\s+/g, " ").slice(0, 400);
+          return `${index + 1}. ${item.title ?? "无题"}\n${item.url ?? ""}\n${content}`;
+        });
+        const answer = body.answer?.trim() ? `${body.answer.trim()}\n\n` : "";
+        return text(`${answer}${lines.join("\n\n") || "没有搜到结果。"}`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "搜索这回没接上。";
+        trace("工具失败", { tool: "search", query: clip(query, 120), error: clip(message, 240) });
+        return miss("搜索这回没接上。");
+      }
     },
   };
 }
@@ -107,7 +117,8 @@ function fileTool(
     execute: async (_id: string, args: Record<string, string>) => {
       await note(steps, mark, pose, label);
       const result = await officeHost(env, action, args);
-      return result.ok ? text(result.text || "完成。") : miss(result.error || "工作目录没接上。");
+      if (!result.ok) return miss(result.error || "工作目录没接上。", action.slice(1));
+      return text(result.text || "完成。");
     },
   };
 }
@@ -131,8 +142,9 @@ async function officeHost(env: Env, action: string, body: Record<string, string>
     if (!response.ok || payload.ok === false) return { ok: false as const, error: payload.error || "工作目录没接上。" };
     const exit = payload.exitCode === undefined ? "" : `\n退出码 ${payload.exitCode}`;
     return { ok: true as const, text: `${payload.text ?? ""}${exit}`.trim() };
-  } catch {
-    return { ok: false as const, error: "脚本工作区没连上。" };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    return { ok: false as const, error: message ? `脚本工作区没连上。${message}` : "脚本工作区没连上。" };
   }
 }
 
@@ -140,6 +152,17 @@ function text(value: string) {
   return { content: [{ type: "text" as const, text: value }], details: {} };
 }
 
-function miss(value: string) {
+function miss(value: string, tool?: string) {
+  if (tool) trace("工具失败", { tool, error: clip(value, 240) });
   return { content: [{ type: "text" as const, text: value }], details: {}, isError: true };
+}
+
+function trace(event: string, detail?: Record<string, unknown>) {
+  console.error("[oak]", event, detail ?? "");
+}
+
+function clip(value: string, max: number) {
+  const clean = value.replace(/Bearer\s+\S+/gi, "Bearer …").replace(/tvly-[A-Za-z0-9_-]+/g, "tvly-…");
+  const chars = [...clean];
+  return chars.length > max ? chars.slice(0, max).join("") : clean;
 }

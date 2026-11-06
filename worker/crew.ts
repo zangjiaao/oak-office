@@ -17,7 +17,6 @@ export function liveCrew(id: string) {
     releaseCrew(id);
     return undefined;
   }
-  if (held.run.state.errorMessage) return undefined;
   return held.run;
 }
 

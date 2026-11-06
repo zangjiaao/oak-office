@@ -151,6 +151,7 @@ export async function speak(
   let placed = false;
   let desks: DeskRow[] = [];
   let floorId = "";
+  let turn: Turn = { jobs: new Map(), leadSteps: [] };
   try {
     const runtime = openPi(env);
     if (!runtime.ok) return runtime;
@@ -173,7 +174,7 @@ export async function speak(
     )
       .bind(userLine.id, userLine.role, userLine.text, Date.now(), department.id)
       .run();
-    const turn: Turn = { jobs: new Map(), leadSteps: [] };
+    turn = { jobs: new Map(), leadSteps: [] };
     let calls = 0;
     const agent = new Agent({
       streamFn: runtime.streamFn(1200),
@@ -228,7 +229,7 @@ export async function speak(
         error: clip(agent.state.errorMessage ?? "", 300),
         calls,
       });
-      await restoreDesks(env.DB, desks, department.id);
+      await unwindTurn(env.DB, desks, department.id, turn.jobs);
       return { ok: false, error: "主管这回没接上。", status: 502 };
     }
     const produced = agent.state.messages.slice(before).filter((message) => message.role === "assistant");
@@ -264,7 +265,7 @@ export async function speak(
     if (!reply && calls > 0) reply = "人已经安排好了。";
     if (!reply || !closingMessage) {
       trace("主管没有说完", { calls, jobs: jobs.length, spoken: spoken.length });
-      await restoreDesks(env.DB, desks, department.id);
+      await unwindTurn(env.DB, desks, department.id, turn.jobs);
       return { ok: false, error: "主管没有说完。", status: 502 };
     }
     const nowInside = await desksOf(env.DB, department.id);
@@ -322,7 +323,7 @@ export async function speak(
     const office = await getWork(env.DB, department.id);
     return { ok: true, office: { ...office, play, closing, playId: undefined } };
   } catch (error) {
-    if (touched && !placed && floorId) await restoreDesks(env.DB, desks, floorId).catch(() => {});
+    if (touched && !placed && floorId) await unwindTurn(env.DB, desks, floorId, turn.jobs).catch(() => {});
     trace("主管没接上", {
       thrown: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack?.split("\n").slice(0, 6).join(" | ") : undefined,
@@ -584,7 +585,13 @@ function askTool(
               trace("准备递交", { from: person.name, person: field(args, "person_id"), used });
             }
             if (used > 8) {
-              trace("员工工具到顶", { name: person.name, tool: toolCall.name, used });
+              trace("员工工具到顶", {
+                name: person.name,
+                tool: toolCall.name,
+                used,
+                reason: "工具用得够多了。",
+                query: toolCall.name === "search" ? clip(field(args, "query"), 120) : undefined,
+              });
               return { block: true, reason: "工具用得够多了。" };
             }
             return undefined;
@@ -629,7 +636,6 @@ function askTool(
       keepCrew(person.id, staff);
       const stop = () => {
         staff.abort();
-        releaseCrew(person.id);
       };
       signal?.addEventListener("abort", stop, { once: true });
       parent?.addEventListener("abort", stop, { once: true });
@@ -956,13 +962,21 @@ async function hired(db: Env["DB"], id: string) {
     .first<PersonRow>();
 }
 
-async function restoreDesks(db: Env["DB"], before: DeskRow[], departmentId: string) {
+async function unwindTurn(db: Env["DB"], before: DeskRow[], departmentId: string, jobs: Turn["jobs"]) {
+  for (const job of jobs.values()) {
+    await setDesk(db, job.personId, "error", "卡住");
+  }
+  await restoreDesks(db, before, departmentId, new Set(jobs.keys()));
+}
+
+async function restoreDesks(db: Env["DB"], before: DeskRow[], departmentId: string, stay: ReadonlySet<string> = new Set()) {
   const current = await desksOf(db, departmentId);
   const known = new Set(before.map((desk) => desk.person_id));
   const writes = current
-    .filter((desk) => !known.has(desk.person_id))
+    .filter((desk) => !known.has(desk.person_id) && !stay.has(desk.person_id))
     .map((desk) => db.prepare("DELETE FROM work_desk WHERE person_id = ?").bind(desk.person_id));
   for (const desk of before) {
+    if (stay.has(desk.person_id)) continue;
     writes.push(
       db
         .prepare(
