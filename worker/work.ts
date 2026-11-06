@@ -222,7 +222,7 @@ export async function speak(
     const before = agent.state.messages.length;
     try {
       touched = true;
-      await setDesk(env.DB, lead.id, "think", "在听");
+      await setDesk(env.DB, lead.id, "think", "在想");
       await agent.prompt(said);
     } finally {
       clearTimeout(timer);
@@ -477,7 +477,7 @@ export async function runStaffDuty(
         tools: [],
       },
     });
-    await setDesk(env.DB, lead.id, "think", "在听");
+    await setDesk(env.DB, lead.id, "think", "在想");
     const leadTimer = setTimeout(() => leader.abort(), 40_000);
     try {
       await leader.prompt(
@@ -823,7 +823,7 @@ function sceneOf(
   leadSteps: { pose: Pose; label: string }[],
   names: Map<string, string>,
 ): WorkBeat[] {
-  const beats: WorkBeat[] = [{ person_id: leadId, pose: "think", label: "在听", hold: 1100 }];
+  const beats: WorkBeat[] = [{ person_id: leadId, pose: "think", label: "在想", hold: 1100 }];
   for (const step of leadSteps) {
     beats.push({ person_id: leadId, pose: step.pose, label: step.label, hold: holdFor(step.pose, step.label) });
   }
