@@ -9,12 +9,14 @@ export function OfficeStage({
   clock,
   room = ROOM,
   desks,
+  sign = "交付组",
   onPick,
 }: {
   actors: ActorFrame[];
   clock: number | null;
   room?: { w: number; h: number };
   desks?: DeskSpot[];
+  sign?: string;
   onPick?: (id: string) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -65,8 +67,8 @@ export function OfficeStage({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks);
-  }, [size, actors, drawn, room, desks]);
+    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, sign);
+  }, [size, actors, drawn, room, desks, sign]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
     const choose = onPickRef.current;

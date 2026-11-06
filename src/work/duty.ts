@@ -35,8 +35,8 @@ export function dutyHoldLabel(duty: { every_ms: number; task: string }) {
   return label || "等人";
 }
 
-export async function listDuties(): Promise<Duty[]> {
-  const body = await send("/api/duties");
+export async function listDuties(departmentId: string): Promise<Duty[]> {
+  const body = await send(`/api/duties?department=${encodeURIComponent(departmentId)}`);
   return (body as { duties: Duty[] }).duties;
 }
 

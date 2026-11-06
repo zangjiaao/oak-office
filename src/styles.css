@@ -81,9 +81,17 @@ button, input {
 
 .transport button, .modes button { cursor: pointer; }
 
-.modes { display: flex; gap: 6px; }
+.modes, .floors { display: flex; gap: 6px; flex-wrap: wrap; }
 
-.modes button.on {
+.floors button {
+  border: 1px solid #6b5340;
+  background: transparent;
+  color: #f3ead7;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.modes button.on, .floors button.on {
   background: #c6a15b;
   border-color: #c6a15b;
   color: #1a1714;
@@ -287,6 +295,17 @@ button, input {
 }
 
 .file textarea { min-height: 88px; resize: vertical; }
+.floor-file { margin-bottom: 16px; }
+.floor-fields { display: grid; grid-template-columns: 72px minmax(0, 1fr) 72px; gap: 8px; }
+.floor-file button[type="submit"] {
+  margin-top: 8px;
+  border: 1px solid #1f3a32;
+  background: #1f3a32;
+  color: #f3ead7;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.floor-file button:disabled { opacity: 0.55; cursor: default; }
 
 .choices, .presets, .colors { display: flex; flex-wrap: wrap; gap: 6px; }
 

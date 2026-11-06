@@ -183,6 +183,7 @@ export function drawOffice(
   frame: number,
   room = ROOM,
   desks: DeskSpot[] = rehearsalDesks(),
+  sign = "交付组",
 ) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#1a1714";
@@ -209,13 +210,14 @@ export function drawOffice(
   const ordered = [...actors].sort((a, b) => a.y - b.y);
   for (const actor of ordered) drawPerson(ctx, actor, frame);
 
+  const plaque = sign.trim().slice(0, 16) || "部门";
   ctx.fillStyle = "#fffaf2";
-  ctx.fillRect(8, 8, 78, 28);
+  ctx.fillRect(8, 8, Math.max(78, 16 + plaque.length * 8), 28);
   ctx.fillStyle = "#1a1714";
   ctx.font = "8px ui-monospace, monospace";
   ctx.textAlign = "left";
   ctx.fillText("OAK OFFICE", 12, 19);
-  ctx.fillText("交付组", 12, 30);
+  ctx.fillText(plaque, 12, 30);
   ctx.restore();
 
   ctx.textAlign = "center";

@@ -1,5 +1,5 @@
+import { staffFull } from "../src/people/department";
 import {
-  STAFF_FULL,
   openSeat,
   parseDraft,
   staffFits,
@@ -10,7 +10,7 @@ import type { D1Database } from "./env";
 import { listNotes } from "./memory";
 
 const COLUMNS =
-  "id, name, gender, hair, skin, shirt, pants, hair_style, brief, dossier, is_lead, model, thinking, seat, created_at, updated_at";
+  "id, name, gender, hair, skin, shirt, pants, hair_style, brief, dossier, is_lead, model, thinking, seat, created_at, updated_at, department_id";
 
 export class RosterDbError extends Error {
   status: number;
@@ -21,10 +21,11 @@ export class RosterDbError extends Error {
   }
 }
 
-export async function listPeople(db: D1Database): Promise<PersonRow[]> {
+export async function listPeople(db: D1Database, departmentId: string): Promise<PersonRow[]> {
   try {
     const { results } = await db
-      .prepare(`SELECT ${COLUMNS} FROM people ORDER BY created_at ASC, id ASC`)
+      .prepare(`SELECT ${COLUMNS} FROM people WHERE department_id = ? ORDER BY created_at ASC, id ASC`)
+      .bind(departmentId)
       .all<PersonRow>();
     const notes = await listNotes(db);
     return results.map((person) => ({
@@ -42,23 +43,40 @@ export type PersonWrite =
   | { ok: true; person: PersonRow }
   | { ok: false; error: string; status: number };
 
-export async function hirePerson(db: D1Database, draft: PersonDraft): Promise<PersonWrite> {
+export async function hirePerson(
+  db: D1Database,
+  draft: PersonDraft,
+  departmentId: string,
+): Promise<PersonWrite> {
   const now = Date.now();
   try {
-    const people = await listPeople(db);
-    if (!staffFits(people, { kind: "create", isLead: draft.is_lead === 1 })) {
-      return { ok: false, error: STAFF_FULL, status: 400 };
+    const floor = await db
+      .prepare("SELECT seats FROM department WHERE id = ?")
+      .bind(departmentId)
+      .first<{ seats: number }>();
+    if (!floor) return { ok: false, error: "没有这一层。", status: 404 };
+    const people = await listPeople(db, departmentId);
+    const full = staffFull(floor.seats);
+    if (!staffFits(people, { kind: "create", isLead: draft.is_lead === 1 }, floor.seats)) {
+      return { ok: false, error: full, status: 400 };
     }
-    const seat = draft.is_lead === 1 ? null : openSeat(people);
-    if (draft.is_lead === 0 && seat === null) return { ok: false, error: STAFF_FULL, status: 400 };
-    const row: PersonRow = { id: crypto.randomUUID(), ...draft, seat, created_at: now, updated_at: now };
-    const moved = movePreviousLead(db, people, row);
-    if (!moved) return { ok: false, error: STAFF_FULL, status: 400 };
+    const seat = draft.is_lead === 1 ? null : openSeat(people, [], floor.seats);
+    if (draft.is_lead === 0 && seat === null) return { ok: false, error: full, status: 400 };
+    const row: PersonRow = {
+      id: crypto.randomUUID(),
+      ...draft,
+      seat,
+      created_at: now,
+      updated_at: now,
+      department_id: departmentId,
+    };
+    const moved = movePreviousLead(db, people, row, floor.seats);
+    if (!moved) return { ok: false, error: full, status: 400 };
     await db.batch([
       ...moved,
       db
         .prepare(
-          `INSERT INTO people (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO people (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           row.id,
@@ -77,6 +95,7 @@ export async function hirePerson(db: D1Database, draft: PersonDraft): Promise<Pe
           row.seat,
           row.created_at,
           row.updated_at,
+          row.department_id,
         ),
     ]);
     return { ok: true, person: row };
@@ -94,25 +113,38 @@ export async function updatePerson(
 ): Promise<PersonWrite | null> {
   try {
     const existing = await db
-      .prepare("SELECT created_at, is_lead, seat FROM people WHERE id = ?")
+      .prepare("SELECT created_at, is_lead, seat, department_id FROM people WHERE id = ?")
       .bind(id)
-      .first<{ created_at: number; is_lead: 0 | 1; seat: number | null }>();
+      .first<{ created_at: number; is_lead: 0 | 1; seat: number | null; department_id: string }>();
     if (!existing) return null;
-    const people = await listPeople(db);
-    if (!staffFits(people, { kind: "edit", id, isLead: draft.is_lead === 1 })) {
-      return { ok: false, error: STAFF_FULL, status: 400 };
+    const floor = await db
+      .prepare("SELECT seats FROM department WHERE id = ?")
+      .bind(existing.department_id)
+      .first<{ seats: number }>();
+    if (!floor) return { ok: false, error: "没有这一层。", status: 404 };
+    const people = await listPeople(db, existing.department_id);
+    const full = staffFull(floor.seats);
+    if (!staffFits(people, { kind: "edit", id, isLead: draft.is_lead === 1 }, floor.seats)) {
+      return { ok: false, error: full, status: 400 };
     }
     const seat =
       draft.is_lead === 1
         ? null
         : existing.is_lead === 0 && existing.seat !== null
           ? existing.seat
-          : openSeat(people, [id]);
-    if (draft.is_lead === 0 && seat === null) return { ok: false, error: STAFF_FULL, status: 400 };
+          : openSeat(people, [id], floor.seats);
+    if (draft.is_lead === 0 && seat === null) return { ok: false, error: full, status: 400 };
     const updated_at = Date.now();
-    const row: PersonRow = { id, ...draft, seat, created_at: existing.created_at, updated_at };
-    const moved = movePreviousLead(db, people, row);
-    if (!moved) return { ok: false, error: STAFF_FULL, status: 400 };
+    const row: PersonRow = {
+      id,
+      ...draft,
+      seat,
+      created_at: existing.created_at,
+      updated_at,
+      department_id: existing.department_id,
+    };
+    const moved = movePreviousLead(db, people, row, floor.seats);
+    if (!moved) return { ok: false, error: full, status: 400 };
     const writes = [];
     if (draft.is_lead === 1 && existing.is_lead === 0) {
       writes.push(db.prepare("UPDATE people SET seat = NULL, updated_at = ? WHERE id = ?").bind(updated_at, id));
@@ -178,11 +210,11 @@ export function readDraft(input: unknown) {
   return parseDraft(input);
 }
 
-function movePreviousLead(db: D1Database, people: PersonRow[], row: PersonRow) {
+function movePreviousLead(db: D1Database, people: PersonRow[], row: PersonRow, seats: number) {
   if (row.is_lead !== 1) return [];
   const previous = people.find((person) => person.is_lead === 1 && person.id !== row.id);
   if (!previous) return [];
-  const seat = openSeat(people, [row.id, previous.id]);
+  const seat = openSeat(people, [row.id, previous.id], seats);
   if (seat === null) return null;
   return [
     db

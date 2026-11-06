@@ -8,13 +8,15 @@ import { rosterView, type DraftPreview } from "./office/seats";
 import { nameLabel, shift, useNow } from "./office/shift";
 import { useWalk } from "./office/walk";
 import { POSE_NAME, type Pose } from "./office/types";
-import { listPeople } from "./people/api";
+import { createDepartment, listDepartments, listPeople } from "./people/api";
+import type { Department } from "./people/department";
 import { RosterPanel } from "./people/RosterPanel";
 import type { PersonRow } from "./people/record";
 import { WorkPanel } from "./work/WorkPanel";
 import type { DutyHold, FloorMark } from "./work/api";
 
 const CHAT_WIDTH_KEY = "oak-office-chat-width";
+const DEPARTMENT_KEY = "oak-office-department";
 const CHAT_MIN = 280;
 const CHAT_MAX = 720;
 
@@ -56,6 +58,8 @@ export function App() {
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [people, setPeople] = useState<PersonRow[] | null>(null);
+  const [departments, setDepartments] = useState<Department[] | null>(null);
+  const [departmentId, setDepartmentId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickRequest, setPickRequest] = useState<{ id: string; n: number } | null>(null);
@@ -101,7 +105,13 @@ export function App() {
 
   const load = useCallback(async () => {
     try {
-      setPeople(await listPeople());
+      const floors = await listDepartments();
+      setDepartments(floors);
+      const saved = localStorage.getItem(DEPARTMENT_KEY);
+      const id = floors.some((item) => item.id === saved) ? saved : (floors[0]?.id ?? null);
+      setDepartmentId(id);
+      if (id) localStorage.setItem(DEPARTMENT_KEY, id);
+      setPeople(id ? await listPeople(id) : []);
       setLoadError(null);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "档案库没连上。");
@@ -122,12 +132,14 @@ export function App() {
       return [id, { ...mark, pose: view.pose, label: nameLabel(mark.label, view.label, dutyLabel, view.pose) }];
     }),
   );
+  const department = departments?.find((item) => item.id === departmentId) ?? null;
   const roster = rosterView(
     people ?? [],
     mode === "roster" ? draft : null,
     mode === "roster" ? selectedId : null,
     shownFloor,
     mode === "work",
+    department?.seats ?? 8,
   );
   const stood = useWalk(roster.actors, mode === "work");
   const actors = mode === "rehearsal" ? rehearsalActors : stood;
@@ -141,6 +153,41 @@ export function App() {
     timeRef.current = 0;
     setTime(0);
     setPlaying(true);
+  }
+
+  async function choose(id: string) {
+    localStorage.setItem(DEPARTMENT_KEY, id);
+    setDepartmentId(id);
+    setFloor({});
+    setHolding([]);
+    setSelectedId(null);
+    setDraft(null);
+    setPeople(null);
+    try {
+      setPeople(await listPeople(id));
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "档案库没连上。");
+    }
+  }
+
+  async function addFloor() {
+    const used = new Set((departments ?? []).map((item) => item.floor));
+    let floorNo = 1;
+    while (used.has(floorNo) && floorNo < 99) floorNo += 1;
+    try {
+      const created = await createDepartment({ floor: floorNo, name: `${floorNo}层`, rules: "", seats: 4 });
+      setDepartments((current) => [...(current ?? []).filter((item) => item.id !== created.id), created].sort((a, b) => a.floor - b.floor));
+      await choose(created.id);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "这一层没有加上。");
+    }
+  }
+
+  function saveDepartment(next: Department) {
+    setDepartments((current) =>
+      (current ?? []).map((item) => (item.id === next.id ? next : item)).sort((a, b) => a.floor - b.floor),
+    );
   }
 
   function pick(id: string) {
@@ -183,9 +230,28 @@ export function App() {
           <div>
             <strong>Oak Office</strong>
             <span>
-              {mode === "roster" ? "交付组 · 编制" : mode === "rehearsal" ? "交付组 · 排练" : "交付组 · 办公"}
+              {mode === "rehearsal"
+                ? "排练"
+                : `${department ? `${department.floor}层 ${department.name}` : "部门"} · ${mode === "roster" ? "编制" : "办公"}`}
             </span>
           </div>
+          {mode === "rehearsal" ? null : (
+            <nav className="floors">
+              {(departments ?? []).map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={item.id === departmentId ? "on" : ""}
+                  onClick={() => void choose(item.id)}
+                >
+                  {item.floor} {item.name}
+                </button>
+              ))}
+              <button type="button" onClick={() => void addFloor()}>
+                加一层
+              </button>
+            </nav>
+          )}
           <div className="modes">
             <button type="button" className={mode === "work" ? "on" : ""} onClick={() => setMode("work")}>
               办公
@@ -218,6 +284,7 @@ export function App() {
           clock={mode === "rehearsal" ? time : null}
           room={mode === "rehearsal" ? ROOM : roster.room}
           desks={mode === "rehearsal" ? rehearsalDesks() : roster.desks}
+          sign={mode === "rehearsal" ? "排练" : (department?.name ?? "部门")}
           onPick={mode === "roster" ? pick : undefined}
         />
         {mode === "rehearsal" || mode === "work" ? (
@@ -248,7 +315,10 @@ export function App() {
       />
       <div className={mode === "work" ? "pane-on" : "pane-off"}>
         <WorkPanel
+          key={departmentId ?? "none"}
           people={people}
+          departmentId={departmentId}
+          departmentName={department?.name ?? "部门"}
           loadError={loadError}
           onFloor={onFloor}
           onHolding={onHolding}
@@ -265,6 +335,8 @@ export function App() {
           onPeople={setPeople}
           onRetry={() => void load()}
           onDraft={onDraft}
+          department={department}
+          onDepartment={saveDepartment}
         />
       ) : mode === "rehearsal" ? (
         <aside className="chat">

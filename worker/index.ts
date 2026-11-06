@@ -1,3 +1,4 @@
+import { createDepartment, listDepartments, readDepartment, updateDepartment } from "./department";
 import { cancelDuty, listDuties, runDue } from "./duty";
 import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
@@ -22,8 +23,24 @@ export default {
       if (request.method === "GET" && url.pathname === "/api/health") {
         return json({ ok: true, name: "oak-office" });
       }
+      if (url.pathname === "/api/departments") {
+        if (request.method === "GET") return json({ departments: await listDepartments(env.DB) });
+        if (request.method === "POST") return writeDepartment(request, (draft) => createDepartment(env.DB, draft));
+        return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
+      }
+      const departmentMatch = /^\/api\/departments\/([^/]+)$/.exec(url.pathname);
+      if (departmentMatch) {
+        const id = decodeURIComponent(departmentMatch[1]);
+        if (!UUID.test(id)) return json({ error: "没有这一层。" }, 404);
+        if (request.method !== "PATCH") return new Response(null, { status: 405, headers: { allow: "PATCH" } });
+        return writeDepartment(request, (draft) => updateDepartment(env.DB, id, draft));
+      }
       if (url.pathname === "/api/work") {
-        if (request.method === "GET") return json(await getWork(env.DB));
+        const departmentId = url.searchParams.get("department") ?? "";
+        if (request.method === "GET") {
+          if (!UUID.test(departmentId)) return json({ error: "先选一层。" }, 400);
+          return json(await getWork(env.DB, departmentId));
+        }
         if (request.method === "POST") {
           let body: unknown;
           try {
@@ -31,9 +48,12 @@ export default {
           } catch {
             return json({ error: "看不懂这句话。" }, 400);
           }
-          const text = body && typeof body === "object" && "text" in body ? (body as { text: unknown }).text : undefined;
-          if (typeof text !== "string") return json({ error: "看不懂这句话。" }, 400);
-          const result = await speak(env, text, request.signal);
+          const record = body && typeof body === "object" ? (body as { text?: unknown; departmentId?: unknown }) : {};
+          if (typeof record.text !== "string") return json({ error: "看不懂这句话。" }, 400);
+          if (typeof record.departmentId !== "string" || !UUID.test(record.departmentId)) {
+            return json({ error: "先选一层。" }, 400);
+          }
+          const result = await speak(env, record.text, request.signal, "user", record.departmentId);
           if (!result.ok) return json({ error: result.error }, result.status);
           holdCrew(ctx);
           return json(result.office);
@@ -41,7 +61,11 @@ export default {
         return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
       }
       if (url.pathname === "/api/duties") {
-        if (request.method === "GET") return json({ duties: await listDuties(env.DB) });
+        if (request.method === "GET") {
+          const departmentId = url.searchParams.get("department") ?? "";
+          if (!UUID.test(departmentId)) return json({ error: "先选一层。" }, 400);
+          return json({ duties: await listDuties(env.DB, departmentId) });
+        }
         return new Response(null, { status: 405, headers: { allow: "GET" } });
       }
       if (url.pathname === "/api/duties/tick") {
@@ -65,10 +89,15 @@ export default {
         return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
       }
       if (url.pathname === "/api/people") {
-        if (request.method === "GET") return json({ people: await listPeople(env.DB) });
+        const departmentId = url.searchParams.get("department") ?? "";
+        if (request.method === "GET") {
+          if (!UUID.test(departmentId)) return json({ error: "先选一层。" }, 400);
+          return json({ people: await listPeople(env.DB, departmentId) });
+        }
         if (request.method === "POST") {
+          if (!UUID.test(departmentId)) return json({ error: "先选一层。" }, 400);
           return write(request, async (draft) => {
-            const result = await hirePerson(env.DB, draft);
+            const result = await hirePerson(env.DB, draft, departmentId);
             if (!result.ok) return json({ error: result.error }, result.status);
             return json({ person: result.person }, 201);
           });
@@ -127,6 +156,26 @@ function holdCrew(ctx?: { waitUntil(promise: Promise<unknown>): void }) {
   const wait = until - Date.now();
   if (!ctx || wait <= 0) return;
   ctx.waitUntil(new Promise((resolve) => setTimeout(resolve, wait + 40)));
+}
+
+async function writeDepartment(
+  request: Request,
+  run: (draft: import("../src/people/department").DepartmentDraft) => Promise<
+    { ok: true; department: import("../src/people/department").Department } | { ok: false; error: string; status: number } | null
+  >,
+) {
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "看不懂这一层。" }, 400);
+  }
+  const parsed = readDepartment(body);
+  if (!parsed.ok) return json({ error: parsed.error }, 400);
+  const result = await run(parsed.value);
+  if (!result) return json({ error: "没有这一层。" }, 404);
+  if (!result.ok) return json({ error: result.error }, result.status);
+  return json({ department: result.department }, request.method === "POST" ? 201 : 200);
 }
 
 async function write(request: Request, run: (draft: PersonDraft) => Promise<Response>) {

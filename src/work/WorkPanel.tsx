@@ -4,12 +4,16 @@ import { loadWork, sayWork, type DutyHold, type FloorMark, type WorkLine, type W
 
 export function WorkPanel({
   people,
+  departmentId,
+  departmentName,
   loadError,
   onFloor,
   onHolding,
   onRetry,
 }: {
   people: PersonRow[] | null;
+  departmentId: string | null;
+  departmentName: string;
   loadError: string | null;
   onFloor: (floor: FloorMark[]) => void;
   onHolding: (duties: DutyHold[]) => void;
@@ -31,7 +35,8 @@ export function WorkPanel({
 
   useEffect(() => {
     let gone = false;
-    void loadWork()
+    if (!departmentId) return;
+    void loadWork(departmentId)
       .then((office) => {
         if (gone) return;
         setError(null);
@@ -44,7 +49,7 @@ export function WorkPanel({
     return () => {
       gone = true;
     };
-  }, [leadId, onFloor, onHolding]);
+  }, [leadId, departmentId, onFloor, onHolding]);
 
   useEffect(() => {
     let ticks = 0;
@@ -52,7 +57,8 @@ export function WorkPanel({
       ticks += 1;
       if (playingRef.current) return;
       if (!sendingRef.current && ticks % 5 !== 0) return;
-      void loadWork()
+      if (!departmentId) return;
+      void loadWork(departmentId)
         .then((office) => {
           if (playingRef.current) return;
           void present(office);
@@ -60,7 +66,7 @@ export function WorkPanel({
         .catch(() => {});
     }, 1_000);
     return () => clearInterval(timer);
-  }, [onFloor, onHolding]);
+  }, [departmentId, onFloor, onHolding]);
 
   const tailId = lines?.at(-1)?.id ?? "";
   useEffect(() => {
@@ -74,7 +80,7 @@ export function WorkPanel({
 
   async function say(event: FormEvent) {
     event.preventDefault();
-    if (sending || !lead) return;
+    if (sending || !lead || !departmentId) return;
     const said = text.trim();
     if (!said) return;
     const previousFloor = floor;
@@ -93,13 +99,14 @@ export function WorkPanel({
     showFloor(listening);
     const started = Date.now();
     try {
-      const office = await sayWork(said);
+      const office = await sayWork(departmentId, said);
       await playBeats(office, floorRef.current, Date.now() - started);
     } catch (caught) {
       setText(said);
       setError(caught instanceof Error ? caught.message : "主管这回没接上。");
       try {
-        const office = await loadWork();
+        const office = departmentId ? await loadWork(departmentId) : null;
+        if (!office) throw new Error("先选一层。");
         setLead(office.lead);
         setLines(office.lines);
         showFloor(office.floor);
@@ -187,7 +194,7 @@ export function WorkPanel({
     <aside className="chat">
       <header>
         <strong>{lead?.name ?? "主管"}</strong>
-        <span>交付组主管</span>
+        <span>{departmentName}主管</span>
       </header>
       <div className="log" ref={logRef}>
         {loadError ? (

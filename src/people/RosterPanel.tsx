@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { rosterLabel, rosterNote, type DraftPreview } from "../office/seats";
 import type { HairStyle, Look } from "../office/types";
-import { dismissPerson, forgetMemory, hirePerson, updatePerson } from "./api";
+import { dismissPerson, forgetMemory, hirePerson, updateDepartment, updatePerson } from "./api";
+import { staffFull, type Department } from "./department";
 import { cancelDuty, everyLabel, listDuties, type Duty } from "../work/duty";
 import {
   GENDER_LABEL,
@@ -10,7 +11,6 @@ import {
   LOOK_PRESETS,
   MODEL_LABEL,
   MODELS,
-  STAFF_FULL,
   THINKING_FOR,
   THINKING_LABEL,
   applyPerson,
@@ -48,6 +48,8 @@ export function RosterPanel({
   onPeople,
   onRetry,
   onDraft,
+  department,
+  onDepartment,
 }: {
   people: PersonRow[] | null;
   loadError: string | null;
@@ -57,6 +59,8 @@ export function RosterPanel({
   onPeople: (people: PersonRow[]) => void;
   onRetry: () => void;
   onDraft: (draft: DraftPreview | null) => void;
+  department: Department | null;
+  onDepartment: (department: Department) => void;
 }) {
   const [form, setForm] = useState<FormState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +82,8 @@ export function RosterPanel({
 
   useEffect(() => {
     let gone = false;
-    void listDuties()
+    if (!department) return;
+    void listDuties(department.id)
       .then((rows) => {
         if (!gone) setDuties(rows);
       })
@@ -86,7 +91,7 @@ export function RosterPanel({
     return () => {
       gone = true;
     };
-  }, [people]);
+  }, [people, department]);
 
   useEffect(() => {
     if (!form) return;
@@ -144,15 +149,16 @@ export function RosterPanel({
       setError(parsed.error);
       return;
     }
-    if (!staffFits(people ?? [], { kind: form.kind, id: form.id, isLead: form.isLead })) {
-      setError(STAFF_FULL);
+    const seats = department?.seats ?? 0;
+    if (!department || !staffFits(people ?? [], { kind: form.kind, id: form.id, isLead: form.isLead }, seats)) {
+      setError(staffFull(seats || 1));
       return;
     }
     setSaving(true);
     setError(null);
     try {
       if (form.kind === "create") {
-        const person = await hirePerson(parsed.value);
+        const person = await hirePerson(department.id, parsed.value);
         onPeople(applyPerson(people ?? [], person));
         onSelect(person.id);
         setForm(null);
@@ -191,8 +197,9 @@ export function RosterPanel({
     }
   }
 
-  const note = people ? rosterNote(people) : null;
-  const roomForHire = people ? canHire(people) : false;
+  const seats = department?.seats ?? 8;
+  const note = people ? rosterNote(people, seats) : null;
+  const roomForHire = people ? canHire(people, seats) : false;
   const identity = form ? identityOf({ brief: form.brief, dossier: form.dossier }) : null;
   const memories =
     form?.kind === "edit" && form.id ? (people?.find((person) => person.id === form.id)?.memories ?? []) : [];
@@ -236,9 +243,10 @@ export function RosterPanel({
     <aside className="chat staff">
       <header>
         <strong>编制</strong>
-        <span>交付组</span>
+        <span>{department ? `${department.floor}层 · ${department.name}` : "部门"}</span>
       </header>
       <div className="log">
+        {department ? <DepartmentForm department={department} onDepartment={onDepartment} /> : null}
         {loadError ? (
           <p className="file-error">
             {loadError}{" "}
@@ -293,8 +301,8 @@ export function RosterPanel({
                 {form.isLead ? "是主管" : "不是主管"}
               </button>
               {form.isLead ? <p className="hint">这个部门只有一位主管。保存后，原来的主管回到员工桌。</p> : null}
-              {people && !staffFits(people, { kind: form.kind, id: form.id, isLead: form.isLead }) ? (
-                <p className="file-error">{STAFF_FULL}</p>
+              {people && !staffFits(people, { kind: form.kind, id: form.id, isLead: form.isLead }, seats) ? (
+                <p className="file-error">{staffFull(seats)}</p>
               ) : null}
             </div>
             <div className="field">
@@ -530,6 +538,82 @@ function editForm(person: PersonRow): FormState {
     model: person.model,
     thinking: person.thinking,
   };
+}
+
+function DepartmentForm({
+  department,
+  onDepartment,
+}: {
+  department: Department;
+  onDepartment: (department: Department) => void;
+}) {
+  const [floor, setFloor] = useState(String(department.floor));
+  const [name, setName] = useState(department.name);
+  const [seats, setSeats] = useState(String(department.seats));
+  const [rules, setRules] = useState(department.rules);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setFloor(String(department.floor));
+    setName(department.name);
+    setSeats(String(department.seats));
+    setRules(department.rules);
+    setError(null);
+  }, [department]);
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const next = await updateDepartment(department.id, {
+        floor: Number(floor),
+        name,
+        seats: Number(seats),
+        rules,
+      });
+      onDepartment(next);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "这一层没有写成。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form className="file floor-file" onSubmit={(event) => void save(event)}>
+      <div className="floor-fields">
+        <label>
+          楼层
+          <input value={floor} onChange={(event) => setFloor(event.target.value)} inputMode="numeric" />
+        </label>
+        <label>
+          名称
+          <input value={name} onChange={(event) => setName(event.target.value)} maxLength={16} />
+        </label>
+        <label>
+          工位
+          <input value={seats} onChange={(event) => setSeats(event.target.value)} inputMode="numeric" />
+        </label>
+      </div>
+      <label>
+        规章制度
+        <textarea
+          value={rules}
+          onChange={(event) => setRules(event.target.value)}
+          placeholder="比如：合同先由撰写人写完，交给盖章人，盖章人再交给主管。"
+          maxLength={8000}
+        />
+      </label>
+      <p className="hint">主管和这一层的员工都会读到。工位是这一层最多能有几位员工，主管不占工位。</p>
+      {error ? <p className="file-error">{error}</p> : null}
+      <button type="submit" disabled={saving}>
+        {saving ? "在写" : "保存这一层"}
+      </button>
+    </form>
+  );
 }
 
 function sameLook(a: Look, b: Look) {

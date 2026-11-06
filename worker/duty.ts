@@ -18,14 +18,24 @@ const CancelArgs = obj({
 
 type StoredDuty = Duty & { created_at: number };
 
-export async function listDuties(db: Env["DB"]) {
-  const { results } = await db
-    .prepare("SELECT id, person_id, task, every_ms, next_at, created_at FROM duty ORDER BY next_at ASC, id ASC")
-    .all<StoredDuty>();
-  return results;
+export async function listDuties(db: Env["DB"], departmentId?: string) {
+  const scoped = departmentId
+    ? await db
+        .prepare(
+          `SELECT duty.id, duty.person_id, duty.task, duty.every_ms, duty.next_at, duty.created_at
+           FROM duty JOIN people ON people.id = duty.person_id
+           WHERE people.department_id = ?
+           ORDER BY duty.next_at ASC, duty.id ASC`,
+        )
+        .bind(departmentId)
+        .all<StoredDuty>()
+    : await db
+        .prepare("SELECT id, person_id, task, every_ms, next_at, created_at FROM duty ORDER BY next_at ASC, id ASC")
+        .all<StoredDuty>();
+  return scoped.results;
 }
 
-export function scheduleTool(env: Env) {
+export function scheduleTool(env: Env, departmentId: string) {
   return {
     name: "schedule",
     label: "定时",
@@ -41,11 +51,11 @@ export function scheduleTool(env: Env) {
       const task = args.task.trim().replace(/\s+/g, " ");
       if (!task) return miss("定时要写清做什么。");
       if ([...task].length > TASK_MAX) return miss("这件事太长。");
-      const person = await env.DB.prepare("SELECT id, name FROM people WHERE id = ?")
+      const person = await env.DB.prepare("SELECT id, name, department_id FROM people WHERE id = ?")
         .bind(args.person_id)
-        .first<{ id: string; name: string }>();
-      if (!person) return miss("没有这个员工。");
-      const existing = await listDuties(env.DB);
+        .first<{ id: string; name: string; department_id: string }>();
+      if (!person || person.department_id !== departmentId) return miss("没有这个员工。");
+      const existing = await listDuties(env.DB, departmentId);
       const now = Date.now();
       const taskText = [...task].slice(0, TASK_MAX).join("");
       const prior = reviseTarget(
@@ -80,7 +90,7 @@ export function scheduleTool(env: Env) {
   };
 }
 
-export function unscheduleTool(env: Env) {
+export function unscheduleTool(env: Env, departmentId: string) {
   return {
     name: "unschedule",
     label: "取消定时",
@@ -88,6 +98,13 @@ export function unscheduleTool(env: Env) {
     parameters: CancelArgs,
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Static<typeof CancelArgs>) => {
+      const owned = await env.DB.prepare(
+        `SELECT duty.person_id FROM duty JOIN people ON people.id = duty.person_id
+         WHERE duty.id = ? AND people.department_id = ?`,
+      )
+        .bind(args.duty_id, departmentId)
+        .first<{ person_id: string }>();
+      if (!owned) return miss("没有这个定时。");
       const personId = await cancelDuty(env.DB, args.duty_id);
       if (!personId) return miss("没有这个定时。");
       const { settleShift } = await import("./work");
@@ -117,15 +134,13 @@ export async function runDue(env: Env): Promise<{ ran: number }> {
       .bind(now)
       .first<StoredDuty>();
     if (!due) return { ran: 0 };
-    const person = await env.DB.prepare("SELECT id, name, is_lead FROM people WHERE id = ?")
+    const person = await env.DB.prepare("SELECT id, name, is_lead, department_id FROM people WHERE id = ?")
       .bind(due.person_id)
-      .first<{ id: string; name: string; is_lead: 0 | 1 }>();
+      .first<{ id: string; name: string; is_lead: 0 | 1; department_id: string }>();
     if (!person) {
       await cancelDuty(env.DB, due.id);
       return { ran: 0 };
     }
-    const lead = await env.DB.prepare("SELECT id, name FROM people WHERE is_lead = 1").first<{ id: string; name: string }>();
-    if (!lead) return { ran: 0 };
     const result =
       person.is_lead === 1
         ? await speak(
@@ -133,12 +148,13 @@ export async function runDue(env: Env): Promise<{ ran: number }> {
             `到点了。请你现在自己完成这件事，做完用一句话告诉用户结果。不要派给员工，也不要新建或取消定时：${due.task}`,
             undefined,
             "clock",
+            person.department_id,
           )
         : await runStaffDuty(env, person.id, due.task);
     const next = nextDueAt(Date.now(), due.every_ms, result.ok);
     await env.DB.prepare("UPDATE duty SET next_at = ? WHERE id = ?").bind(next, due.id).run();
     if (result.ok) failedDuty.delete(due.id);
-    else await reportFailure(env, due.id, person.name, result.error);
+    else await reportFailure(env, due.id, person.name, person.department_id, result.error);
     return { ran: result.ok ? 1 : 0 };
   } finally {
     ticking = false;
@@ -147,13 +163,13 @@ export async function runDue(env: Env): Promise<{ ran: number }> {
 
 const failedDuty = new Map<string, string>();
 
-async function reportFailure(env: Env, id: string, name: string, error: string) {
+async function reportFailure(env: Env, id: string, name: string, departmentId: string, error: string) {
   if (failedDuty.get(id) === error) return;
   failedDuty.set(id, error);
   await env.DB.prepare(
-    "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'clock', NULL, ?, NULL, ?)",
+    "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, 'clock', NULL, ?, NULL, ?, ?)",
   )
-    .bind(crypto.randomUUID(), `到点了。${name}没做成：${error}`, Date.now())
+    .bind(crypto.randomUUID(), `到点了。${name}没做成：${error}`, Date.now(), departmentId)
     .run();
 }
 

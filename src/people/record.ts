@@ -80,7 +80,6 @@ export function thinkingFor(model: string, thinking: string): Thinking {
 }
 
 export const STAFF_LIMIT = 8;
-export const STAFF_FULL = "工位已满。员工最多八个。";
 
 export type SeatChange = { kind: "create" | "edit"; id?: string; isLead: boolean };
 
@@ -98,14 +97,14 @@ export function staffCount(people: { id: string; is_lead: 0 | 1 }[], change?: Se
   return rows.length - (leads > 0 ? 1 : 0);
 }
 
-export function staffFits(people: { id: string; is_lead: 0 | 1 }[], change?: SeatChange) {
-  return staffCount(people, change) <= STAFF_LIMIT;
+export function staffFits(people: { id: string; is_lead: 0 | 1 }[], change?: SeatChange, limit = STAFF_LIMIT) {
+  return staffCount(people, change) <= limit;
 }
 
-export function canHire(people: { id: string; is_lead: 0 | 1 }[]) {
+export function canHire(people: { id: string; is_lead: 0 | 1 }[], limit = STAFF_LIMIT) {
   return (
-    staffFits(people, { kind: "create", isLead: false }) ||
-    staffFits(people, { kind: "create", isLead: true })
+    staffFits(people, { kind: "create", isLead: false }, limit) ||
+    staffFits(people, { kind: "create", isLead: true }, limit)
   );
 }
 
@@ -113,13 +112,14 @@ export function canHire(people: { id: string; is_lead: 0 | 1 }[]) {
 export function openSeat(
   people: { id: string; is_lead: 0 | 1; seat: number | null }[],
   ignore: string[] = [],
+  limit = STAFF_LIMIT,
 ): number | null {
   const taken = new Set<number>();
   for (const person of people) {
     if (ignore.includes(person.id) || person.is_lead === 1 || person.seat === null) continue;
     taken.add(person.seat);
   }
-  for (let seat = 0; seat < STAFF_LIMIT; seat += 1) {
+  for (let seat = 0; seat < limit; seat += 1) {
     if (!taken.has(seat)) return seat;
   }
   return null;
@@ -150,8 +150,9 @@ export type PersonRow = {
   is_lead: 0 | 1;
   model: OfficeModel;
   thinking: Thinking;
-  /** Employee desk 0–7. Null while this person is the lead. */
+  /** Employee desk on this floor. Null while this person is the lead. */
   seat: number | null;
+  department_id: string;
   created_at: number;
   updated_at: number;
   /** Present on roster reads. Writes leave it unset so a save does not wipe notes. */
