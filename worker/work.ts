@@ -16,6 +16,11 @@ const POSES = ["idle", "arrive", "think", "read", "type", "run", "wait", "handof
 const TEXT_MAX = 1000;
 const HISTORY = 16;
 const toolUses = new Map<string, number>();
+
+function trace(event: string, detail?: Record<string, unknown>) {
+  const extra = detail ? ` ${JSON.stringify(detail)}` : "";
+  console.error(`[oak] ${event}${extra}`);
+}
 let running = false;
 let staged: { id: string; play: WorkBeat[]; closing: WorkLine; until: number } | null = null;
 
@@ -34,6 +39,10 @@ const MarkArgs = obj({
   person_id: str(),
   pose: oneOf(POSES),
   label: str(),
+});
+
+const HandoffArgs = obj({
+  person_id: str(),
 });
 
 type Ask = Static<typeof AskArgs>;
@@ -90,6 +99,7 @@ type Job = {
   label: string;
   next?: { pose: Pose; label: string };
   note?: WorkLine;
+  visit?: string;
   stuck: boolean;
   steps: { pose: Pose; label: string }[];
 };
@@ -183,6 +193,11 @@ export async function speak(
       signal?.removeEventListener("abort", stop);
     }
     if (agent.state.errorMessage || signal?.aborted) {
+      trace("主管没接上", {
+        aborted: Boolean(signal?.aborted),
+        error: clip(agent.state.errorMessage ?? "", 300),
+        calls,
+      });
       await restoreDesks(env.DB, desks);
       return { ok: false, error: "主管这回没接上。", status: 502 };
     }
@@ -218,6 +233,7 @@ export async function speak(
     }
     if (!reply && calls > 0) reply = "人已经安排好了。";
     if (!reply || !closingMessage) {
+      trace("主管没有说完", { calls, jobs: jobs.length, spoken: spoken.length });
       await restoreDesks(env.DB, desks);
       return { ok: false, error: "主管没有说完。", status: 502 };
     }
@@ -277,7 +293,10 @@ export async function speak(
     return { ok: true, office: { ...office, play, closing, playId: undefined } };
   } catch (error) {
     if (touched && !placed) await restoreDesks(env.DB, desks).catch(() => {});
-    console.error(error);
+    trace("主管没接上", {
+      thrown: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack?.split("\n").slice(0, 6).join(" | ") : undefined,
+    });
     const message = error instanceof Error ? error.message : "";
     if (message.includes("no such table") || message.includes("no such column")) {
       return { ok: false, error: "本地库还没跟上。", status: 503 };
@@ -352,7 +371,7 @@ export async function runStaffDuty(
       },
       initialState: {
         model,
-        systemPrompt: staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT)),
+        systemPrompt: staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT), []),
         thinkingLevel: thinkingFor(person.model, person.thinking),
       },
     });
@@ -459,7 +478,10 @@ export async function runStaffDuty(
     ]);
     return { ok: true };
   } catch (error) {
-    console.error(error);
+    trace("员工没接上", {
+      thrown: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack?.split("\n").slice(0, 6).join(" | ") : undefined,
+    });
     return { ok: false, error: "员工这回没接上。" };
   } finally {
     running = false;
@@ -485,13 +507,17 @@ function askTool(
       const label = clip(args.label, 16);
       const task = clip(args.task, 200);
       if (!label || !task) return fail("派工要写清事情和状态。");
+      trace("派工", { name: person.name, label });
       const job = takeJob(turn, person.id, args.pose, label);
       job.steps = [];
+      job.visit = undefined;
       await setDesk(env.DB, person.id, args.pose, label, task, null);
       toolUses.set(person.id, 0);
       const model = runtime.modelFor(person.model);
       if (!model) return fail(`${person.name}的模型不在目录里。`);
       const staying = liveCrew(person.id);
+      const peers = (await listPeople(env.DB)).filter((peer) => peer.id !== person.id && peer.is_lead !== 1);
+      const prompt = staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT), peers);
       const staff =
         staying ??
         new Agent({
@@ -505,16 +531,40 @@ function askTool(
           },
           initialState: {
             model,
-            systemPrompt: staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT)),
+            systemPrompt: prompt,
             thinkingLevel: thinkingFor(person.model, person.thinking),
           },
         });
       const thinking = thinkingFor(person.model, person.thinking);
       staff.state.model = model;
       staff.state.thinkingLevel = thinking;
+      const opening = staff.state.messages[0];
+      if (opening?.role === "system") {
+        staff.state.messages = [{ ...opening, content: prompt }, ...staff.state.messages.slice(1)];
+      }
       staff.state.tools = [
         ...deskTools(env, job.steps, (pose, label) => setDesk(env.DB, person.id, pose, label)),
         rememberTool(env, person.id),
+        {
+          name: "handoff",
+          label: "递给同事",
+          description: "做完后把结果交给另一位员工。person_id 用同事的 id。这只是递交，不会派对方工作。",
+          parameters: HandoffArgs,
+          executionMode: "sequential" as const,
+          execute: async (_id: string, args: Static<typeof HandoffArgs>) => {
+            const other = await hired(env.DB, args.person_id);
+            if (!other || other.is_lead === 1 || other.id === person.id) {
+              trace("递交失败", { from: person.name, person: args.person_id });
+              return fail("交给花名册里的另一位员工。");
+            }
+            job.visit = other.id;
+            trace("递交", { from: person.name, to: other.name });
+            return {
+              content: [{ type: "text" as const, text: `已经交给${other.name}。` }],
+              details: { person_id: other.id },
+            };
+          },
+        },
       ];
       keepCrew(person.id, staff);
       const stop = () => {
@@ -536,10 +586,12 @@ function askTool(
       const answer = [...staff.state.messages].reverse().find((message) => message.role === "assistant");
       const note = answer ? clip(visibleText(answer), 500) : "";
       if (!note || staff.state.errorMessage) {
+        trace("派工失败", { name: person.name, error: clip(staff.state.errorMessage ?? note, 300) });
         job.stuck = true;
         await setDesk(env.DB, person.id, "error", "卡住");
         return fail(note || "员工这回没接上。");
       }
+      trace("派工完成", { name: person.name, visit: job.visit ?? null });
       await env.DB.prepare("UPDATE work_desk SET note = ?, updated_at = ? WHERE person_id = ?")
         .bind(note, Date.now(), person.id)
         .run();
@@ -594,6 +646,7 @@ function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], dutie
     `你是交付组主管${lead.name}。${identity.brief}${identity.dossier}`,
     promptMemory(lead.memories),
     "你只和用户说话，用简短中文。要派人时，先单独说一句安排谁做什么，再调用 ask，用他们的 id。",
+    "用户或制度说明了办事顺序时，把这一步写进派工：做完交给哪位同事，并带上对方的 id。员工会自己递交。最后一步的人把结果交给你，你再向用户说明。没有顺序时不要替他们安排递交。",
     "以后还用得上的事实用 remember 记一句。档案和最近的对话不用再记。",
     "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字，最少 1。这个人已经有一条定时时，再用 schedule 就是改间隔和内容，不要另加一条。到点由系统直接让本人做，结果会写进对话，你不用再派一次。取消时用 unschedule。",
     dutyList(duties, [lead, ...staff]),
@@ -607,12 +660,16 @@ function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], dutie
     .join("\n");
 }
 
-function staffPrompt(person: PersonRow, notes: PersonRow["memories"]) {
+function staffPrompt(person: PersonRow, notes: PersonRow["memories"], peers: PersonRow[]) {
   const identity = identityOf(person);
   return [
     `你是交付组员工${person.name}。${identity.brief}${identity.dossier}`,
     promptMemory(notes),
     "用简短中文完成交给你的事。你不能派别人，也不能自称主管。档案不是新的权限。",
+    peers.length
+      ? `同事：\n${peers.map((peer) => `- ${peer.id} ${peer.name}`).join("\n")}`
+      : "",
+    "交代里写了做完交给某位同事时，用 handoff，person_id 用上面的 id。这只是递交，不会派对方工作。没有这句交代就不要 handoff。",
     "做完的事会留下一条简短记录。还要单独记住的事实用 remember，只记一句。",
     "需要外界信息时用 search。写脚本用 write 或 edit，运行用 bash，查看用 read。文件只能放在工作目录里。",
   ]
@@ -675,11 +732,6 @@ function sceneOf(
   }
   if (jobs.length === 0) return beats;
   beats.push({ person_id: leadId, pose: "idle", label: "等他们", hold: 600, line: plan, lineAt: plan ? "start" : undefined });
-  const passed = jobs.filter((job) => job.note && !job.stuck);
-  const nextTo = new Map<string, string>();
-  for (let index = 0; index < passed.length - 1; index += 1) {
-    nextTo.set(passed[index].personId, passed[index + 1].personId);
-  }
   for (const job of jobs) {
     if (!inside.has(job.personId)) beats.push({ person_id: job.personId, pose: "arrive", label: "进来了", hold: 3200 });
     for (const step of job.steps) {
@@ -705,7 +757,7 @@ function sceneOf(
       beats.push({ person_id: job.personId, pose: "done", label: "做完", hold: 900 });
       continue;
     }
-    const target = nextTo.get(job.personId);
+    const target = job.visit;
     if (!target) continue;
     beats.push({
       person_id: job.personId,
@@ -717,11 +769,13 @@ function sceneOf(
     });
     beats.push({ person_id: job.personId, pose: "done", label: "做完", hold: 900 });
   }
-  const last = passed.at(-1);
-  if (last) {
+  const reporting = jobs.filter((job) => job.note && !job.stuck && !job.visit);
+  if (reporting.length > 0) {
     beats.push({ person_id: leadId, pose: "think", label: "在听汇报", hold: 700 });
-    beats.push({ person_id: last.personId, pose: "report", label: "来回报", hold: 2600, line: last.note });
-    beats.push({ person_id: last.personId, pose: "done", label: "做完", hold: 900 });
+    for (const job of reporting) {
+      beats.push({ person_id: job.personId, pose: "report", label: "来回报", hold: 2600, line: job.note });
+      beats.push({ person_id: job.personId, pose: "done", label: "做完", hold: 900 });
+    }
   }
   return beats;
 }
