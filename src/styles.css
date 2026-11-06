@@ -11,6 +11,7 @@
 html, body, #root {
   margin: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 button, input, textarea {
@@ -147,7 +148,7 @@ button, input, textarea {
   scrollbar-width: none;
 }
 
-.log::-webkit-scrollbar { width: 0; height: 0; }
+.log::-webkit-scrollbar { display: none; }
 
 .empty { margin: 0; color: #7a6a56; }
 
@@ -214,6 +215,7 @@ button, input, textarea {
   margin: 0;
   padding: 8px;
   overflow: auto;
+  scrollbar-width: none;
   background: rgba(26, 23, 20, 0.06);
   font-family: ui-monospace, monospace;
   font-size: 12px;
@@ -249,6 +251,7 @@ button, input, textarea {
   min-height: 42px;
   max-height: 140px;
   resize: none;
+  scrollbar-width: none;
   border: 1px solid #d9c7a4;
   background: #fffaf2;
   color: #241c16;
@@ -257,6 +260,9 @@ button, input, textarea {
 }
 
 .chat > form textarea:disabled { opacity: 0.7; }
+
+.chat > form textarea::-webkit-scrollbar,
+.log .md pre::-webkit-scrollbar { display: none; }
 
 .chat > form button {
   border: 0;
