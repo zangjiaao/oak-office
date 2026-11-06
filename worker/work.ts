@@ -163,8 +163,22 @@ export async function speak(
       streamFn: runtime.streamFn(1200),
       getApiKey: runtime.getApiKey,
       toolExecution: "sequential",
-      beforeToolCall: async () =>
-        ++calls > 12 ? { block: true, terminate: true, reason: "这一轮派得够多了。" } : undefined,
+      beforeToolCall: async ({ toolCall, args }) => {
+        if (toolCall.name === "ask") {
+          const task = field(args, "task");
+          trace("主管派工", {
+            person: field(args, "person_id"),
+            label: clip(field(args, "label"), 16),
+            task: clip(task, 500),
+            taskChars: [...clip(task, 100000)].length,
+          });
+        }
+        if (++calls > 12) {
+          trace("主管工具到顶", { tool: toolCall.name });
+          return { block: true, terminate: true, reason: "这一轮派得够多了。" };
+        }
+        return undefined;
+      },
       initialState: {
         model,
         systemPrompt: leadPrompt(lead, staff, desks, duties),
@@ -245,14 +259,16 @@ export async function speak(
       spoken.length > 1
         ? { id: crypto.randomUUID(), role: "lead" as const, person_id: null, text: spoken[0] }
         : undefined;
-    const play = sceneOf(
-      lead.id,
-      jobs,
-      plan,
-      inside,
-      turn.leadSteps,
-      new Map(people.map((person) => [person.id, person.name])),
-    );
+    const names = new Map(people.map((person) => [person.id, person.name]));
+    const play = sceneOf(lead.id, jobs, plan, inside, turn.leadSteps, names);
+    trace("动画", {
+      handoff: jobs
+        .filter((job) => job.visit)
+        .map((job) => `${names.get(job.personId) ?? job.personId}→${names.get(job.visit ?? "") ?? job.visit}`),
+      report: jobs
+        .filter((job) => job.note && !job.stuck && !job.visit)
+        .map((job) => names.get(job.personId) ?? job.personId),
+    });
     const started = Date.now();
     let cursor = started;
     const restAt = new Map<string, number>();
@@ -507,7 +523,14 @@ function askTool(
       const label = clip(args.label, 16);
       const task = clip(args.task, 200);
       if (!label || !task) return fail("派工要写清事情和状态。");
-      trace("派工", { name: person.name, label });
+      const received = clip(args.task, 200);
+      trace("派工", {
+        name: person.name,
+        label,
+        task: received,
+        taskChars: [...clip(args.task, 100000)].length,
+        taskCut: [...clip(args.task, 100000)].length > [...received].length,
+      });
       const job = takeJob(turn, person.id, args.pose, label);
       job.steps = [];
       job.visit = undefined;
@@ -524,10 +547,17 @@ function askTool(
           streamFn: runtime.streamFn(1500),
           getApiKey: runtime.getApiKey,
           toolExecution: "sequential",
-          beforeToolCall: async () => {
+          beforeToolCall: async ({ toolCall, args }) => {
             const used = (toolUses.get(person.id) ?? 0) + 1;
             toolUses.set(person.id, used);
-            return used > 8 ? { block: true, reason: "工具用得够多了。" } : undefined;
+            if (toolCall.name === "handoff") {
+              trace("准备递交", { from: person.name, person: field(args, "person_id"), used });
+            }
+            if (used > 8) {
+              trace("员工工具到顶", { name: person.name, tool: toolCall.name, used });
+              return { block: true, reason: "工具用得够多了。" };
+            }
+            return undefined;
           },
           initialState: {
             model,
@@ -591,7 +621,14 @@ function askTool(
         await setDesk(env.DB, person.id, "error", "卡住");
         return fail(note || "员工这回没接上。");
       }
-      trace("派工完成", { name: person.name, visit: job.visit ?? null });
+      trace("派工完成", {
+        name: person.name,
+        label,
+        task: received,
+        visit: job.visit ?? null,
+        toldToHand: toldToHand(received, peers),
+        handed: Boolean(job.visit),
+      });
       await env.DB.prepare("UPDATE work_desk SET note = ?, updated_at = ? WHERE person_id = ?")
         .bind(note, Date.now(), person.id)
         .run();
@@ -923,6 +960,16 @@ async function setDesk(
     )
     .bind(id, pose, label, task, note, now)
     .run();
+}
+
+function field(args: unknown, key: string) {
+  if (!args || typeof args !== "object" || !(key in args)) return "";
+  const value = (args as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
+}
+
+function toldToHand(task: string, peers: { id: string; name: string }[]) {
+  return peers.some((peer) => task.includes(peer.id) || task.includes(peer.name));
 }
 
 function clip(value: string, max: number) {
