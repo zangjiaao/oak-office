@@ -1,3 +1,4 @@
+import { DEFAULT_ROOM, type RoomLook } from "./room";
 import { DESKS, ROOM, SPOTS } from "./roster";
 import type { DeskSpot } from "./seats";
 import type { ActorFrame, Pose } from "./types";
@@ -33,37 +34,53 @@ function rect(
   ctx.fillRect(Math.round(x), Math.round(y), w, h);
 }
 
-function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: number; h: number }) {
-  rect(ctx, 0, 0, room.w, 78, "#243f36");
-  rect(ctx, 0, 0, room.w, 8, "#1b312a");
-  rect(ctx, 0, 62, room.w, 8, "#c6a15b");
+function shade(hex: string, amount: number) {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const channel = (shift: number) => Math.max(0, Math.min(255, ((n >> shift) & 255) + amount));
+  return `#${channel(16).toString(16).padStart(2, "0")}${channel(8).toString(16).padStart(2, "0")}${channel(0).toString(16).padStart(2, "0")}`;
+}
+
+function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: number; h: number }, look: RoomLook) {
+  rect(ctx, 0, 0, room.w, 78, look.wall);
+  rect(ctx, 0, 0, room.w, 8, shade(look.wall, -20));
+  if (look.style === "brick") {
+    for (let y = 12; y < 60; y += 8) rect(ctx, 0, y, room.w, 1, shade(look.wall, 28));
+  }
+  rect(ctx, 0, 62, room.w, 8, look.trim);
   rect(ctx, 0, 70, room.w, 8, "#1a1714");
-  rect(ctx, 0, 78, room.w, room.h - 78, "#c4a574");
-  for (let y = 90; y < room.h; y += 14) {
-    rect(ctx, 0, y, room.w, 1, "#b08a58");
+  rect(ctx, 0, 78, room.w, room.h - 78, look.ground);
+  for (let y = 90; y < room.h; y += 14) rect(ctx, 0, y, room.w, 1, shade(look.ground, -24));
+
+  rect(ctx, 18, 18, 46, 40, look.wood);
+  rect(ctx, 22, 28, 16, 22, "#d7c4a2");
+  rect(ctx, 40, 34, 18, 6, shade(look.wood, 24));
+  rect(ctx, 40, 42, 14, 4, look.trim);
+
+  rect(ctx, 168, 16, 36, 52, look.wood);
+  rect(ctx, 172, 20, 28, 44, look.style === "glass" ? shade(look.trim, 40) : "#120e0c");
+  rect(ctx, 196, 36, 4, 8, look.trim);
+
+  if (look.style !== "glass") {
+    rect(ctx, 214, 22, 22, 22, "#efe6d4");
+    rect(ctx, 224, 33, 2, 6, "#1a1714");
+    rect(ctx, 221, 33, 5, 2, "#a8322a");
   }
 
-  rect(ctx, 18, 18, 46, 40, "#6b4428");
-  rect(ctx, 22, 28, 16, 22, "#d7c4a2");
-  rect(ctx, 40, 34, 18, 6, "#8c4a3a");
-  rect(ctx, 40, 42, 14, 4, "#3d6f8c");
-
-  rect(ctx, 168, 16, 36, 52, "#6b4428");
-  rect(ctx, 172, 20, 28, 44, "#120e0c");
-  rect(ctx, 196, 36, 4, 8, "#c6a15b");
-
-  rect(ctx, 214, 22, 22, 22, "#efe6d4");
-  rect(ctx, 224, 33, 2, 6, "#1a1714");
-  rect(ctx, 221, 33, 5, 2, "#a8322a");
-
-  rect(ctx, 300, 16, 52, 36, "#8ec8e6");
-  rect(ctx, 306, 22, 14, 8, "#f4f7fb");
-  rect(ctx, 324, 30, 18, 6, "#f4f7fb");
-  if (frame % 80 < 40) rect(ctx, 336, 18, 2, 2, "#f4f0c8");
+  if (look.style === "glass") {
+    rect(ctx, 214, 12, 150, 48, look.trim);
+    rect(ctx, 218, 16, 68, 40, "#d7e6ee");
+    rect(ctx, 290, 16, 70, 40, "#f4f7fb");
+    if (frame % 80 < 40) rect(ctx, 348, 18, 3, 3, "#f4f0c8");
+  } else {
+    rect(ctx, 300, 16, 52, 36, look.style === "brick" ? look.wood : look.trim);
+    rect(ctx, 306, 22, 14, 8, "#f4f7fb");
+    rect(ctx, 324, 30, 18, 6, "#f4f7fb");
+    if (frame % 80 < 40) rect(ctx, 336, 18, 2, 2, "#f4f0c8");
+  }
 
   rect(ctx, 364, 70, 16, 28, "#d9e4ea");
-  rect(ctx, 368, 74, 8, 10, "#8ec8e6");
-  rect(ctx, 360, 96, 24, 4, "#8c5a32");
+  rect(ctx, 368, 74, 8, 10, look.trim);
+  rect(ctx, 360, 96, 24, 4, look.wood);
 }
 
 function drawDesk(
@@ -73,11 +90,12 @@ function drawDesk(
   screen: Screen,
   frame: number,
   lead = false,
+  wood = DEFAULT_ROOM.wood,
 ) {
-  rect(ctx, x - 28, y - 6, 56, 6, "#5c4636");
+  rect(ctx, x - 28, y - 6, 56, 6, shade(wood, -16));
   rect(ctx, x - 30, y - 18, 60, 12, lead ? "#efe0bf" : "#e6d3a8");
-  rect(ctx, x - 26, y - 8, 4, 16, "#6b4428");
-  rect(ctx, x + 22, y - 8, 4, 16, "#6b4428");
+  rect(ctx, x - 26, y - 8, 4, 16, wood);
+  rect(ctx, x + 22, y - 8, 4, 16, wood);
   rect(ctx, x - 16, y - 40, 32, 22, "#1a1714");
   const glow =
     screen === "error"
@@ -184,6 +202,7 @@ export function drawOffice(
   room = ROOM,
   desks: DeskSpot[] = rehearsalDesks(),
   sign = "交付组",
+  look: RoomLook = DEFAULT_ROOM,
 ) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#1a1714";
@@ -193,7 +212,7 @@ export function drawOffice(
   ctx.translate(ox, oy);
   ctx.scale(scale, scale);
   ctx.imageSmoothingEnabled = false;
-  drawRoom(ctx, frame, room);
+  drawRoom(ctx, frame, room, look);
 
   for (const desk of desks) {
     const owner = occupant(actors, desk);
@@ -204,6 +223,7 @@ export function drawOffice(
       screenFor(owner?.pose ?? "idle", Boolean(owner), owner?.label ?? ""),
       frame,
       desk.lead,
+      look.wood,
     );
   }
 

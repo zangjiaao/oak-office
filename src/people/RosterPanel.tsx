@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { DEFAULT_ROOM, ROOM_PRESETS, ROOM_STYLE_LABEL, ROOM_STYLES, sameRoom, type RoomLook, type RoomStyle } from "../office/room";
 import { rosterLabel, rosterNote, type DraftPreview } from "../office/seats";
 import type { HairStyle, Look } from "../office/types";
 import { dismissPerson, forgetMemory, hirePerson, updateDepartment, updatePerson } from "./api";
@@ -51,6 +52,7 @@ export function RosterPanel({
   department,
   onDepartment,
   onRemoveFloor,
+  onLook,
 }: {
   people: PersonRow[] | null;
   loadError: string | null;
@@ -63,6 +65,7 @@ export function RosterPanel({
   department: Department | null;
   onDepartment: (department: Department) => void;
   onRemoveFloor: (id: string) => Promise<void>;
+  onLook: (look: RoomLook | null) => void;
 }) {
   const [form, setForm] = useState<FormState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -249,7 +252,12 @@ export function RosterPanel({
       </header>
       <div className="log">
         {department ? (
-          <DepartmentForm department={department} onDepartment={onDepartment} onRemoveFloor={onRemoveFloor} />
+          <DepartmentForm
+            department={department}
+            onDepartment={onDepartment}
+            onRemoveFloor={onRemoveFloor}
+            onLook={onLook}
+          />
         ) : null}
         {loadError ? (
           <p className="file-error">
@@ -548,15 +556,22 @@ function DepartmentForm({
   department,
   onDepartment,
   onRemoveFloor,
+  onLook,
 }: {
   department: Department;
   onDepartment: (department: Department) => void;
   onRemoveFloor: (id: string) => Promise<void>;
+  onLook: (look: RoomLook | null) => void;
 }) {
   const [floor, setFloor] = useState(String(department.floor));
   const [name, setName] = useState(department.name);
   const [seats, setSeats] = useState(String(department.seats));
   const [rules, setRules] = useState(department.rules);
+  const [style, setStyle] = useState<RoomStyle>(department.style ?? DEFAULT_ROOM.style);
+  const [wall, setWall] = useState(department.wall ?? DEFAULT_ROOM.wall);
+  const [ground, setGround] = useState(department.ground ?? DEFAULT_ROOM.ground);
+  const [trim, setTrim] = useState(department.trim ?? DEFAULT_ROOM.trim);
+  const [wood, setWood] = useState(department.wood ?? DEFAULT_ROOM.wood);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -566,9 +581,20 @@ function DepartmentForm({
     setName(department.name);
     setSeats(String(department.seats));
     setRules(department.rules);
+    setStyle(department.style ?? DEFAULT_ROOM.style);
+    setWall(department.wall ?? DEFAULT_ROOM.wall);
+    setGround(department.ground ?? DEFAULT_ROOM.ground);
+    setTrim(department.trim ?? DEFAULT_ROOM.trim);
+    setWood(department.wood ?? DEFAULT_ROOM.wood);
     setError(null);
     setRemoving(false);
   }, [department]);
+
+  useEffect(() => {
+    onLook({ style, wall, ground, trim, wood });
+  }, [onLook, style, wall, ground, trim, wood]);
+
+  useEffect(() => () => onLook(null), [onLook]);
 
   async function remove() {
     if (saving) return;
@@ -598,6 +624,11 @@ function DepartmentForm({
         name,
         seats: Number(seats),
         rules,
+        style,
+        wall,
+        ground,
+        trim,
+        wood,
       });
       onDepartment(next);
     } catch (caught) {
@@ -623,8 +654,42 @@ function DepartmentForm({
           <input value={seats} onChange={(event) => setSeats(event.target.value)} inputMode="numeric" />
         </label>
       </div>
-      <label>
-        规章制度
+        <div className="field">
+          <span>楼</span>
+          <div className="presets">
+            {ROOM_PRESETS.map((preset) => (
+              <button
+                key={preset.name}
+                type="button"
+                className={sameRoom(preset.look, { style, wall, ground, trim, wood }) ? "on" : ""}
+                style={{ background: preset.look.wall }}
+                aria-label={preset.name}
+                onClick={() => {
+                  setStyle(preset.look.style);
+                  setWall(preset.look.wall);
+                  setGround(preset.look.ground);
+                  setTrim(preset.look.trim);
+                  setWood(preset.look.wood);
+                }}
+              />
+            ))}
+          </div>
+          <div className="choices">
+            {ROOM_STYLES.map((item) => (
+              <button key={item} type="button" className={style === item ? "on" : ""} onClick={() => setStyle(item)}>
+                {ROOM_STYLE_LABEL[item]}
+              </button>
+            ))}
+          </div>
+          <div className="colors">
+            <Color label="墙" value={wall} onChange={setWall} />
+            <Color label="地" value={ground} onChange={setGround} />
+            <Color label="线" value={trim} onChange={setTrim} />
+            <Color label="木" value={wood} onChange={setWood} />
+          </div>
+        </div>
+        <label>
+          规章制度
         <textarea
           value={rules}
           onChange={(event) => setRules(event.target.value)}

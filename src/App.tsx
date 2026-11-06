@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { rehearsalDesks } from "./office/draw";
+import { DEFAULT_ROOM, type RoomLook } from "./office/room";
 import { OfficeStage } from "./office/OfficeStage";
 import { ROOM } from "./office/roster";
 import { DURATION } from "./office/script";
@@ -64,6 +65,7 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickRequest, setPickRequest] = useState<{ id: string; n: number } | null>(null);
   const [draft, setDraft] = useState<DraftPreview | null>(null);
+  const [roomDraft, setRoomDraft] = useState<RoomLook | null>(null);
   const [floor, setFloor] = useState<Record<string, FloorMark>>({});
   const [holding, setHolding] = useState<DutyHold[]>([]);
   const pickN = useRef(0);
@@ -74,6 +76,7 @@ export function App() {
   const [chatWidth, setChatWidth] = useState(readChatWidth);
   const chatWidthRef = useRef(chatWidth);
   const onDraft = useCallback((next: DraftPreview | null) => setDraft(next), []);
+  const onLook = useCallback((next: RoomLook | null) => setRoomDraft(next), []);
   const onFloor = useCallback((marks: FloorMark[]) => {
     setFloor(Object.fromEntries(marks.map((mark) => [mark.person_id, mark])));
   }, []);
@@ -162,6 +165,7 @@ export function App() {
     setHolding([]);
     setSelectedId(null);
     setDraft(null);
+    setRoomDraft(null);
     setPeople(null);
     try {
       setPeople(await listPeople(id));
@@ -176,7 +180,7 @@ export function App() {
     let floorNo = 1;
     while (used.has(floorNo) && floorNo < 99) floorNo += 1;
     try {
-      const created = await createDepartment({ floor: floorNo, name: `${floorNo}层`, rules: "", seats: 4 });
+      const created = await createDepartment({ floor: floorNo, name: `${floorNo}层`, rules: "", seats: 4, ...DEFAULT_ROOM });
       setDepartments((current) => [...(current ?? []).filter((item) => item.id !== created.id), created].sort((a, b) => a.floor - b.floor));
       await choose(created.id);
     } catch (error) {
@@ -293,6 +297,20 @@ export function App() {
           room={mode === "rehearsal" ? ROOM : roster.room}
           desks={mode === "rehearsal" ? rehearsalDesks() : roster.desks}
           sign={mode === "rehearsal" ? "排练" : (department?.name ?? "部门")}
+          look={
+            mode === "rehearsal"
+              ? DEFAULT_ROOM
+              : (roomDraft ??
+                (department
+                  ? {
+                      style: department.style ?? DEFAULT_ROOM.style,
+                      wall: department.wall ?? DEFAULT_ROOM.wall,
+                      ground: department.ground ?? DEFAULT_ROOM.ground,
+                      trim: department.trim ?? DEFAULT_ROOM.trim,
+                      wood: department.wood ?? DEFAULT_ROOM.wood,
+                    }
+                  : DEFAULT_ROOM))
+          }
           onPick={mode === "roster" ? pick : undefined}
         />
         {mode === "rehearsal" || mode === "work" ? (
@@ -346,6 +364,7 @@ export function App() {
           department={department}
           onDepartment={saveDepartment}
           onRemoveFloor={(id) => removeFloor(id)}
+          onLook={onLook}
         />
       ) : mode === "rehearsal" ? (
         <aside className="chat">

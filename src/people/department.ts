@@ -1,9 +1,11 @@
+import { readRoomLook, type RoomLook } from "../office/room";
+
 export const SEAT_CAP = 8;
 export const FLOOR_MAX = 99;
 export const NAME_MAX = 16;
 export const RULES_MAX = 8000;
 
-export type Department = {
+export type Department = RoomLook & {
   id: string;
   floor: number;
   name: string;
@@ -13,7 +15,7 @@ export type Department = {
   updated_at: number;
 };
 
-export type DepartmentDraft = {
+export type DepartmentDraft = RoomLook & {
   floor: number;
   name: string;
   rules: string;
@@ -31,7 +33,9 @@ export function parseDepartment(input: unknown): { ok: true; value: DepartmentDr
   if ([...name].length < 1 || [...name].length > NAME_MAX) return { ok: false, error: `部门名称用 1 到 ${NAME_MAX} 个字。` };
   if ([...rules].length > RULES_MAX) return { ok: false, error: "规章制度太长。" };
   if (seats === null || seats < 1 || seats > SEAT_CAP) return { ok: false, error: `工位用 1 到 ${SEAT_CAP} 的数字。` };
-  return { ok: true, value: { floor, name, rules, seats } };
+  const look = readRoomLook(body);
+  if (!look) return { ok: false, error: "楼的颜色不对。" };
+  return { ok: true, value: { floor, name, rules, seats, ...look } };
 }
 
 function whole(value: unknown) {
