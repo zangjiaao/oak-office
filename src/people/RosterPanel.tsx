@@ -50,6 +50,7 @@ export function RosterPanel({
   onDraft,
   department,
   onDepartment,
+  onRemoveFloor,
 }: {
   people: PersonRow[] | null;
   loadError: string | null;
@@ -61,6 +62,7 @@ export function RosterPanel({
   onDraft: (draft: DraftPreview | null) => void;
   department: Department | null;
   onDepartment: (department: Department) => void;
+  onRemoveFloor: (id: string) => Promise<void>;
 }) {
   const [form, setForm] = useState<FormState | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -246,7 +248,9 @@ export function RosterPanel({
         <span>{department ? `${department.floor}层 · ${department.name}` : "部门"}</span>
       </header>
       <div className="log">
-        {department ? <DepartmentForm department={department} onDepartment={onDepartment} /> : null}
+        {department ? (
+          <DepartmentForm department={department} onDepartment={onDepartment} onRemoveFloor={onRemoveFloor} />
+        ) : null}
         {loadError ? (
           <p className="file-error">
             {loadError}{" "}
@@ -543,9 +547,11 @@ function editForm(person: PersonRow): FormState {
 function DepartmentForm({
   department,
   onDepartment,
+  onRemoveFloor,
 }: {
   department: Department;
   onDepartment: (department: Department) => void;
+  onRemoveFloor: (id: string) => Promise<void>;
 }) {
   const [floor, setFloor] = useState(String(department.floor));
   const [name, setName] = useState(department.name);
@@ -553,6 +559,7 @@ function DepartmentForm({
   const [rules, setRules] = useState(department.rules);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
     setFloor(String(department.floor));
@@ -560,7 +567,25 @@ function DepartmentForm({
     setSeats(String(department.seats));
     setRules(department.rules);
     setError(null);
+    setRemoving(false);
   }, [department]);
+
+  async function remove() {
+    if (saving) return;
+    if (!removing) {
+      setRemoving(true);
+      setError(null);
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await onRemoveFloor(department.id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "这一层没有拆掉。");
+      setSaving(false);
+    }
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -608,10 +633,16 @@ function DepartmentForm({
         />
       </label>
       <p className="hint">主管和这一层的员工都会读到。工位是这一层最多能有几位员工，主管不占工位。</p>
+      {removing ? <p className="hint">确认后，这一层的人、对话和规章制度都会去掉。</p> : null}
       {error ? <p className="file-error">{error}</p> : null}
-      <button type="submit" disabled={saving}>
-        {saving ? "在写" : "保存这一层"}
-      </button>
+      <div className="floor-actions">
+        <button type="submit" disabled={saving}>
+          {saving ? "在写" : "保存这一层"}
+        </button>
+        <button type="button" className="leave" onClick={() => void remove()} disabled={saving}>
+          {removing ? "确认拆掉" : "拆掉这一层"}
+        </button>
+      </div>
     </form>
   );
 }

@@ -297,11 +297,18 @@ button, input {
 .file textarea { min-height: 88px; resize: vertical; }
 .floor-file { margin-bottom: 16px; }
 .floor-fields { display: grid; grid-template-columns: 72px minmax(0, 1fr) 72px; gap: 8px; }
+.floor-actions { display: flex; gap: 8px; margin-top: 8px; }
 .floor-file button[type="submit"] {
-  margin-top: 8px;
   border: 1px solid #1f3a32;
   background: #1f3a32;
   color: #f3ead7;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.floor-file button.leave {
+  border: 1px solid #a8322a;
+  background: transparent;
+  color: #a8322a;
   padding: 6px 12px;
   cursor: pointer;
 }

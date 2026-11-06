@@ -25,6 +25,10 @@ function trace(event: string, detail?: Record<string, unknown>) {
 const busy = new Set<string>();
 const staged = new Map<string, { id: string; play: WorkBeat[]; closing: WorkLine; until: number }>();
 
+export function dropFloor(departmentId: string) {
+  staged.delete(departmentId);
+}
+
 export function officeBusy(departmentId?: string) {
   if (departmentId) return busy.has(departmentId);
   return busy.size > 0;

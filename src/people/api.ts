@@ -11,6 +11,16 @@ export async function createDepartment(draft: DepartmentDraft): Promise<Departme
   return (body as { department: Department }).department;
 }
 
+export async function deleteDepartment(id: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/departments/${id}`, { method: "DELETE" });
+  } catch {
+    throw new Error("档案库没连上。");
+  }
+  if (!response.ok) throw new Error(await errorMessage(response));
+}
+
 export async function updateDepartment(id: string, draft: DepartmentDraft): Promise<Department> {
   const body = await send(`/api/departments/${id}`, { method: "PATCH", draft });
   return (body as { department: Department }).department;

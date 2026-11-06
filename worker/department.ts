@@ -66,6 +66,25 @@ export async function updateDepartment(
   return { ok: true, department };
 }
 
+export async function removeDepartment(
+  db: D1Database,
+  id: string,
+): Promise<{ ok: true } | { ok: false; error: string; status: number } | null> {
+  const existing = await departmentById(db, id);
+  if (!existing) return null;
+  const row = await db.prepare("SELECT COUNT(*) AS n FROM department").first<{ n: number }>();
+  if (Number(row?.n ?? 0) <= 1) return { ok: false, error: "至少留一层。", status: 400 };
+  await db.batch([
+    db.prepare("DELETE FROM duty WHERE person_id IN (SELECT id FROM people WHERE department_id = ?)").bind(id),
+    db.prepare("DELETE FROM person_memory WHERE person_id IN (SELECT id FROM people WHERE department_id = ?)").bind(id),
+    db.prepare("DELETE FROM work_desk WHERE person_id IN (SELECT id FROM people WHERE department_id = ?)").bind(id),
+    db.prepare("DELETE FROM work_line WHERE department_id = ?").bind(id),
+    db.prepare("DELETE FROM people WHERE department_id = ?").bind(id),
+    db.prepare("DELETE FROM department WHERE id = ?").bind(id),
+  ]);
+  return { ok: true };
+}
+
 async function seatsFit(db: D1Database, departmentId: string, seats: number) {
   const row = await db
     .prepare(

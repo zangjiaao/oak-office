@@ -1,9 +1,9 @@
-import { createDepartment, listDepartments, readDepartment, updateDepartment } from "./department";
+import { createDepartment, listDepartments, readDepartment, removeDepartment, updateDepartment } from "./department";
 import { cancelDuty, listDuties, runDue } from "./duty";
 import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
-import { getWork, settleShift, speak } from "./work";
+import { dropFloor, getWork, officeBusy, settleShift, speak } from "./work";
 import type { Env } from "./env";
 import type { PersonDraft } from "../src/people/record";
 
@@ -32,7 +32,17 @@ export default {
       if (departmentMatch) {
         const id = decodeURIComponent(departmentMatch[1]);
         if (!UUID.test(id)) return json({ error: "没有这一层。" }, 404);
-        if (request.method !== "PATCH") return new Response(null, { status: 405, headers: { allow: "PATCH" } });
+        if (request.method === "DELETE") {
+          if (officeBusy(id)) return json({ error: "这一层还在说话。等这轮说完再拆。" }, 409);
+          const people = await listPeople(env.DB, id).catch(() => []);
+          const result = await removeDepartment(env.DB, id);
+          if (!result) return json({ error: "没有这一层。" }, 404);
+          if (!result.ok) return json({ error: result.error }, result.status);
+          for (const person of people) releaseCrew(person.id);
+          dropFloor(id);
+          return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+        }
+        if (request.method !== "PATCH") return new Response(null, { status: 405, headers: { allow: "PATCH, DELETE" } });
         return writeDepartment(request, (draft) => updateDepartment(env.DB, id, draft));
       }
       if (url.pathname === "/api/work") {

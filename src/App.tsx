@@ -8,7 +8,7 @@ import { rosterView, type DraftPreview } from "./office/seats";
 import { nameLabel, shift, useNow } from "./office/shift";
 import { useWalk } from "./office/walk";
 import { POSE_NAME, type Pose } from "./office/types";
-import { createDepartment, listDepartments, listPeople } from "./people/api";
+import { createDepartment, deleteDepartment, listDepartments, listPeople } from "./people/api";
 import type { Department } from "./people/department";
 import { RosterPanel } from "./people/RosterPanel";
 import type { PersonRow } from "./people/record";
@@ -184,6 +184,14 @@ export function App() {
     }
   }
 
+  async function removeFloor(id: string) {
+    await deleteDepartment(id);
+    const rest = (departments ?? []).filter((item) => item.id !== id).sort((a, b) => a.floor - b.floor);
+    setDepartments(rest);
+    const next = rest[0];
+    if (next) await choose(next.id);
+  }
+
   function saveDepartment(next: Department) {
     setDepartments((current) =>
       (current ?? []).map((item) => (item.id === next.id ? next : item)).sort((a, b) => a.floor - b.floor),
@@ -337,6 +345,7 @@ export function App() {
           onDraft={onDraft}
           department={department}
           onDepartment={saveDepartment}
+          onRemoveFloor={(id) => removeFloor(id)}
         />
       ) : mode === "rehearsal" ? (
         <aside className="chat">
