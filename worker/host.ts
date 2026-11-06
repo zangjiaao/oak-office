@@ -7,6 +7,7 @@ import path from "node:path";
 const PORT = Number(process.env.OFFICE_HOST_PORT || 8788);
 const ROOT = path.resolve("workspace");
 const TOKEN = await tokenFromDevVars();
+const APP = await devVar("OFFICE_APP");
 
 const server = createServer((request, response) => {
   void handle(request, response).catch((error) => {
@@ -15,16 +16,43 @@ const server = createServer((request, response) => {
 });
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`office workspace on http://127.0.0.1:${PORT}`);
-  if (!TOKEN) return;
-  const app = (process.env.OFFICE_APP || "http://127.0.0.1:5173").replace(/\/$/, "");
-  const tick = () => {
-    void fetch(`${app}/api/duties/tick`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${TOKEN}` },
-    }).catch(() => {});
+  if (!TOKEN) {
+    console.error("定时不会跑：.dev.vars 里没有 OFFICE_HOST_TOKEN。");
+    return;
+  }
+  const targets = tickTargets(APP);
+  let preferred = targets[0];
+  let complained = "";
+  const tick = async () => {
+    const order = [preferred, ...targets.filter((target) => target !== preferred)];
+    for (const target of order) {
+      try {
+        const response = await fetch(`${target}/api/duties/tick`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${TOKEN}` },
+        });
+        if (response.ok) {
+          preferred = target;
+          complained = "";
+          return;
+        }
+        const note = `${target} 返回 ${response.status}`;
+        if (complained !== note) {
+          complained = note;
+          console.error(`定时没跑起来：${note}`);
+        }
+        if (response.status === 401) return;
+      } catch (error) {
+        const note = `${target} ${error instanceof Error ? error.message : "连不上"}`;
+        if (complained !== note) {
+          complained = note;
+          console.error(`定时没跑起来：${note}`);
+        }
+      }
+    }
   };
-  setTimeout(tick, 8_000);
-  setInterval(tick, 30_000);
+  setTimeout(() => void tick(), 8_000);
+  setInterval(() => void tick(), 30_000);
 });
 
 async function handle(request: IncomingMessage, response: import("node:http").ServerResponse) {
@@ -169,15 +197,38 @@ async function readJson(request: IncomingMessage) {
   return JSON.parse(text) as unknown;
 }
 
+function tickTargets(configured: string) {
+  const targets = [configured, "http://localhost:5173", "http://127.0.0.1:5173"]
+    .map((target) => target.trim().replace(/\/$/, ""))
+    .filter((target) => target.startsWith("http://") || target.startsWith("https://"));
+  return [...new Set(targets)];
+}
+
 async function tokenFromDevVars() {
-  if (process.env.OFFICE_HOST_TOKEN?.trim()) return process.env.OFFICE_HOST_TOKEN.trim();
+  return devVar("OFFICE_HOST_TOKEN");
+}
+
+async function devVar(name: string) {
+  const fromEnv = process.env[name]?.trim();
+  if (fromEnv) return unquote(fromEnv);
   const text = await readFile(".dev.vars", "utf8").catch(() => "");
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
     const eq = trimmed.indexOf("=");
     if (eq < 1) continue;
-    if (trimmed.slice(0, eq).trim() === "OFFICE_HOST_TOKEN") return trimmed.slice(eq + 1).trim();
+    if (trimmed.slice(0, eq).trim() === name) return unquote(trimmed.slice(eq + 1));
   }
   return "";
+}
+
+function unquote(value: string) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2)
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
 }
