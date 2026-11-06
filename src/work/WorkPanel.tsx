@@ -20,6 +20,7 @@ export function WorkPanel({
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
+  const sendingRef = useRef(false);
   const leadId = people?.find((person) => person.is_lead === 1)?.id ?? null;
 
   useEffect(() => {
@@ -43,6 +44,28 @@ export function WorkPanel({
   }, [leadId, onFloor]);
 
   useEffect(() => {
+    const timer = setInterval(() => {
+      if (sendingRef.current) return;
+      void loadWork()
+        .then((office) => {
+          if (sendingRef.current) return;
+          setLead(office.lead);
+          setLines((current) => {
+            const next = office.lines;
+            if (current && current.length === next.length && current.every((line, index) => line.id === next[index]?.id)) {
+              return current;
+            }
+            return next;
+          });
+          setFloor(office.floor);
+          onFloor(office.floor);
+        })
+        .catch(() => {});
+    }, 5_000);
+    return () => clearInterval(timer);
+  }, [onFloor]);
+
+  useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
   }, [lines?.length, sending]);
 
@@ -53,6 +76,7 @@ export function WorkPanel({
     if (!said) return;
     const previousFloor = floor;
     const previousLines = lines;
+    sendingRef.current = true;
     setSending(true);
     setError(null);
     setText("");
@@ -95,6 +119,7 @@ export function WorkPanel({
       setText(said);
       setError(caught instanceof Error ? caught.message : "主管这回没接上。");
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
   }
@@ -152,6 +177,7 @@ function wait(ms: number) {
 
 function speaker(line: WorkLine, leadName: string | undefined, names: Map<string, string>) {
   if (line.role === "user") return "你";
+  if (line.role === "clock") return "定时";
   if (line.role === "staff") return `${names.get(line.person_id ?? "") ?? "员工"} · 办理`;
   return `${leadName ?? "主管"} · 主管`;
 }

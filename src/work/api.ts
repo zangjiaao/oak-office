@@ -4,7 +4,7 @@ export type FloorMark = { person_id: string; pose: Pose; label: string; updated_
 
 export type WorkLine = {
   id: string;
-  role: "user" | "lead" | "staff";
+  role: "user" | "lead" | "staff" | "clock";
   person_id: string | null;
   text: string;
 };

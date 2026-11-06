@@ -1,3 +1,4 @@
+import { cancelDuty, listDuties, runDue } from "./duty";
 import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
@@ -38,6 +39,29 @@ export default {
           return json(result.office);
         }
         return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
+      }
+      if (url.pathname === "/api/duties") {
+        if (request.method === "GET") return json({ duties: await listDuties(env.DB) });
+        return new Response(null, { status: 405, headers: { allow: "GET" } });
+      }
+      if (url.pathname === "/api/duties/tick") {
+        if (request.method !== "POST") return new Response(null, { status: 405, headers: { allow: "POST" } });
+        const token = env.OFFICE_HOST_TOKEN?.trim();
+        if (!token || request.headers.get("authorization") !== `Bearer ${token}`) {
+          return json({ error: "口令不对。" }, 401);
+        }
+        const result = await runDue(env);
+        holdCrew(ctx);
+        return json(result);
+      }
+      const dutyMatch = /^\/api\/duties\/([^/]+)$/.exec(url.pathname);
+      if (dutyMatch) {
+        const id = decodeURIComponent(dutyMatch[1]);
+        if (!UUID.test(id)) return json({ error: "没有这个定时。" }, 404);
+        if (request.method !== "DELETE") return new Response(null, { status: 405, headers: { allow: "DELETE" } });
+        const removed = await cancelDuty(env.DB, id);
+        if (!removed) return json({ error: "没有这个定时。" }, 404);
+        return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
       }
       if (url.pathname === "/api/people") {
         if (request.method === "GET") return json({ people: await listPeople(env.DB) });

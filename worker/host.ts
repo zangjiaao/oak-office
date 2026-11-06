@@ -15,6 +15,16 @@ const server = createServer((request, response) => {
 });
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`office workspace on http://127.0.0.1:${PORT}`);
+  if (!TOKEN) return;
+  const app = (process.env.OFFICE_APP || "http://127.0.0.1:5173").replace(/\/$/, "");
+  const tick = () => {
+    void fetch(`${app}/api/duties/tick`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${TOKEN}` },
+    }).catch(() => {});
+  };
+  setTimeout(tick, 8_000);
+  setInterval(tick, 30_000);
 });
 
 async function handle(request: IncomingMessage, response: import("node:http").ServerResponse) {

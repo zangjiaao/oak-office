@@ -4,6 +4,8 @@ import { identityOf, thinkingFor, type PersonRow } from "../src/people/record";
 import { DONE_MS, IDLE_MS, stillWorking } from "../src/office/shift";
 import { armCrew, keepCrew, liveCrew, releaseCrew, unarmedCrew } from "./crew";
 import { jobMemory, promptMemory, recentNotes, remember, NOTES_IN_PROMPT } from "./memory";
+import { listDuties, scheduleTool, unscheduleTool } from "./duty";
+import { everyLabel, type Duty } from "../src/work/duty";
 import { deskTools, rememberTool } from "./tools";
 import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
@@ -14,6 +16,11 @@ const POSES = ["idle", "arrive", "think", "read", "type", "run", "wait", "handof
 const TEXT_MAX = 1000;
 const HISTORY = 16;
 const toolUses = new Map<string, number>();
+let running = false;
+
+export function officeBusy() {
+  return running;
+}
 
 const AskArgs = obj({
   person_id: str(),
@@ -33,7 +40,7 @@ type Mark = Static<typeof MarkArgs>;
 
 export type WorkLine = {
   id: string;
-  role: "user" | "lead" | "staff";
+  role: "user" | "lead" | "staff" | "clock";
   person_id: string | null;
   text: string;
 };
@@ -66,7 +73,7 @@ type DeskRow = {
 
 type LineRow = {
   id: string;
-  role: "user" | "lead" | "staff";
+  role: "user" | "lead" | "staff" | "clock";
   person_id: string | null;
   text: string;
   raw: string | null;
@@ -99,18 +106,22 @@ export async function speak(
   env: Env,
   text: string,
   signal?: AbortSignal,
+  from: "user" | "clock" = "user",
 ): Promise<{ ok: true; office: WorkOffice } | { ok: false; error: string; status: number }> {
   const said = text.trim();
   if (!said) return { ok: false, error: "先写一句。", status: 400 };
   if ([...said].length > TEXT_MAX) return { ok: false, error: "这句话太长。", status: 400 };
-  const runtime = openPi(env);
-  if (!runtime.ok) return runtime;
+  if (running) return { ok: false, error: "主管还在忙。", status: 409 };
+  running = true;
   try {
+    const runtime = openPi(env);
+    if (!runtime.ok) return runtime;
     const people = await listPeople(env.DB);
     const lead = people.find((person) => person.is_lead === 1);
     if (!lead) return { ok: false, error: "先指定一位主管。", status: 400 };
     const staff = people.filter((person) => person.is_lead === 0);
     const desks = await desksOf(env.DB);
+    const duties = await listDuties(env.DB);
     const prior = await linesOf(env.DB);
     const model = runtime.modelFor(lead.model);
     if (!model) return { ok: false, error: `${lead.name}的模型不在目录里。`, status: 400 };
@@ -124,13 +135,15 @@ export async function speak(
         ++calls > 12 ? { block: true, terminate: true, reason: "这一轮派得够多了。" } : undefined,
       initialState: {
         model,
-        systemPrompt: leadPrompt(lead, staff, desks),
+        systemPrompt: leadPrompt(lead, staff, desks, duties),
         thinkingLevel: thinkingFor(lead.model, lead.thinking),
         messages: prior.flatMap((line) => replay(line)),
         tools: [
           askTool(env, runtime, signal, turn),
           markTool(env, turn),
           rememberTool(env, lead.id),
+          scheduleTool(env),
+          unscheduleTool(env),
           ...deskTools(env, turn.leadSteps, (pose, label) => setDesk(env.DB, lead.id, pose, label)),
         ],
       },
@@ -178,14 +191,14 @@ export async function speak(
     }
     await setDesk(env.DB, lead.id, "idle", "等你一句话");
     const now = Date.now();
-    const userLine: WorkLine = { id: crypto.randomUUID(), role: "user", person_id: null, text: said };
+    const userLine: WorkLine = { id: crypto.randomUUID(), role: from, person_id: null, text: said };
     const closing: WorkLine = { id: crypto.randomUUID(), role: "lead", person_id: null, text: reply };
     const spokenDuring = play.flatMap((step) => (step.line ? [step.line] : []));
     let at = now;
     const writes = [
       env.DB.prepare(
-        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'user', NULL, ?, NULL, ?)",
-      ).bind(userLine.id, userLine.text, at),
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, ?, NULL, ?, NULL, ?)",
+      ).bind(userLine.id, userLine.role, userLine.text, at),
     ];
     for (const line of spokenDuring) {
       at += 1;
@@ -214,6 +227,7 @@ export async function speak(
   } finally {
     const fallback = Date.now() + DONE_MS + IDLE_MS;
     for (const id of unarmedCrew()) armCrew(id, fallback);
+    running = false;
   }
 }
 
@@ -328,7 +342,7 @@ function fail(text: string) {
   return { content: [{ type: "text" as const, text }], details: {}, isError: true };
 }
 
-function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[]) {
+function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], duties: Duty[]) {
   const identity = identityOf(lead);
   const roster = staff
     .map((person) => {
@@ -346,6 +360,8 @@ function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[]) {
     promptMemory(lead.memories),
     "你只和用户说话，用简短中文。要派人时，先单独说一句安排谁做什么，再调用 ask，用他们的 id。",
     "以后还用得上的事实用 remember 记一句。档案和最近的对话不用再记。",
+    "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字。到点会再叫你，那时候做完即可，不要再 schedule 或 unschedule。取消时用 unschedule。",
+    dutyList(duties, [lead, ...staff]),
     "不能发明员工，不能派给自己。问完之后用 mark 标成回报或卡住。全部做完后，再单独说一句总结，不要和安排写在同一句里。",
     "需要外界信息时用 search。要写脚本或改文件时用 read、write、edit、bash，文件都在办公室的工作目录里，path 用相对路径。",
     "姿态只能是 idle、arrive、think、read、type、run、wait、handoff、report、done、error。label 不超过 16 个字。",
@@ -373,8 +389,18 @@ function thought(message: AgentMessage) {
   return message.role === "assistant" && message.content.some((part) => part.type === "thinking");
 }
 
+function dutyList(duties: Duty[], people: { id: string; name: string }[]) {
+  if (!duties.length) return "现在没有定时。";
+  return duties
+    .map((duty) => {
+      const name = people.find((person) => person.id === duty.person_id)?.name ?? "已离职";
+      return `- ${duty.id} ${name} ${everyLabel(duty.every_ms)}：${duty.task}`;
+    })
+    .join("\n");
+}
+
 function replay(line: LineRow): AgentMessage[] {
-  if (line.role === "user") return [{ role: "user", content: line.text, timestamp: line.created_at }];
+  if (line.role === "user" || line.role === "clock") return [{ role: "user", content: line.text, timestamp: line.created_at }];
   if (!line.raw) return [];
   try {
     const message = JSON.parse(line.raw) as AgentMessage;

@@ -161,6 +161,7 @@ export async function dismissPerson(
     const existing = await db.prepare("SELECT id FROM people WHERE id = ?").bind(id).first<{ id: string }>();
     if (!existing) return null;
     await db.batch([
+      db.prepare("DELETE FROM duty WHERE person_id = ?").bind(id),
       db.prepare("DELETE FROM person_memory WHERE person_id = ?").bind(id),
       db.prepare("DELETE FROM work_desk WHERE person_id = ?").bind(id),
       db.prepare("DELETE FROM people WHERE id = ?").bind(id),
