@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { onSite } from "../office/shift";
 import type { PersonRow } from "../people/record";
 import { loadWork, sayWork, type DutyHold, type FloorMark, type WorkLine, type WorkOffice } from "./api";
 import { Markdown } from "./MarkdownView";
@@ -249,11 +250,12 @@ export function WorkPanel({
   );
 }
 
-function liveDuringSend(current: FloorMark[], incoming: FloorMark[]) {
-  if (current.length === 0) return incoming;
-  return current.map((mark) => {
-    if (mark.label === "不在") return mark;
-    return incoming.find((item) => item.person_id === mark.person_id) ?? mark;
+function liveDuringSend(current: FloorMark[], incoming: FloorMark[], now = Date.now()) {
+  const previous = new Map(current.map((mark) => [mark.person_id, mark]));
+  return incoming.map((mark) => {
+    const prior = previous.get(mark.person_id);
+    if (!onSite(prior, now) && onSite(mark, now)) return { ...mark, pose: "arrive" as const, label: "进来了" };
+    return mark;
   });
 }
 

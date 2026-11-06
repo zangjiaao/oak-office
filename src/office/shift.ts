@@ -23,6 +23,12 @@ export function nameLabel(stored: string, view: string, dutyLabel: string, pose:
   return dutyLabel;
 }
 
+export function onSite(mark: { pose: Pose; label: string; updated_at?: number } | undefined, now: number) {
+  if (!mark) return false;
+  const view = shift(mark, now);
+  return view.label !== "不在" && view.label !== "下班";
+}
+
 export function stillWorking(mark: { pose: Pose; label: string; updated_at?: number } | undefined, now: number, held = false) {
   if (!mark) return false;
   const view = shift(mark, now, held ? "守着" : "");
