@@ -226,19 +226,21 @@ export function WorkPanel({
         {error ? <p className="file-error">{error}</p> : null}
       </div>
       <form onSubmit={(event) => void say(event)}>
-        <textarea
-          ref={fieldRef}
-          value={text}
-          rows={1}
-          onChange={(event) => {
-            setText(event.target.value);
-            fitComposer(event.currentTarget);
-          }}
-          onKeyDown={(event) => submitOnEnter(event)}
-          disabled={!lead || sending}
-          placeholder={lead ? "跟主管说一句" : "先指定一位主管"}
-          maxLength={1000}
-        />
+        <div className="composer">
+          <textarea
+            ref={fieldRef}
+            value={text}
+            rows={1}
+            onChange={(event) => {
+              setText(event.target.value);
+              fitComposer(event.currentTarget);
+            }}
+            onKeyDown={(event) => submitOnEnter(event)}
+            disabled={!lead || sending}
+            placeholder={lead ? "跟主管说一句" : "先指定一位主管"}
+            maxLength={1000}
+          />
+        </div>
         <button type="submit" disabled={!lead || sending || text.trim() === ""}>
           发送
         </button>
