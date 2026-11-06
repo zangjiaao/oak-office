@@ -267,11 +267,12 @@ button, input, textarea {
   line-height: 1.45;
 }
 
-.composer textarea {
+.chat > form .composer textarea {
   display: block;
   width: calc(100% + 24px);
   border: 0;
   background: transparent;
+  overflow-x: hidden;
   overflow-y: auto;
   padding-right: 24px;
 }
