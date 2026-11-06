@@ -14,4 +14,7 @@ export interface Env {
   DB: D1Database;
   DEEPSEEK_API_KEY?: string;
   AI_MODEL?: string;
+  TAVILY_API_KEY?: string;
+  OFFICE_HOST?: string;
+  OFFICE_HOST_TOKEN?: string;
 }

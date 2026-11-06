@@ -2,5 +2,6 @@ node_modules
 dist
 .wrangler
 .dev.vars
+workspace
 *.log
 .DS_Store
