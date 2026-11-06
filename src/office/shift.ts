@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Pose } from "./types";
 
-export const DONE_MS = 6000;
-export const IDLE_MS = 6000;
+export const DONE_MS = 20_000;
+export const IDLE_MS = 40_000;
 export const LEAVE_MS = 2800;
 
 export function shift(mark: { pose: Pose; label: string; updated_at?: number }, now: number) {
