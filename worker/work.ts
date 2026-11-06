@@ -53,6 +53,7 @@ export type WorkBeat = {
   hold: number;
   line?: WorkLine;
   lineAt?: "start" | "end";
+  visit?: string;
 };
 
 export type WorkOffice = {
@@ -228,7 +229,14 @@ export async function speak(
       spoken.length > 1
         ? { id: crypto.randomUUID(), role: "lead" as const, person_id: null, text: spoken[0] }
         : undefined;
-    const play = sceneOf(lead.id, jobs, plan, inside, turn.leadSteps);
+    const play = sceneOf(
+      lead.id,
+      jobs,
+      plan,
+      inside,
+      turn.leadSteps,
+      new Map(people.map((person) => [person.id, person.name])),
+    );
     const started = Date.now();
     let cursor = started;
     const restAt = new Map<string, number>();
@@ -659,6 +667,7 @@ function sceneOf(
   plan: WorkLine | undefined,
   inside: Set<string>,
   leadSteps: { pose: Pose; label: string }[],
+  names: Map<string, string>,
 ): WorkBeat[] {
   const beats: WorkBeat[] = [{ person_id: leadId, pose: "think", label: "在听", hold: 1100 }];
   for (const step of leadSteps) {
@@ -666,6 +675,11 @@ function sceneOf(
   }
   if (jobs.length === 0) return beats;
   beats.push({ person_id: leadId, pose: "idle", label: "等他们", hold: 600, line: plan, lineAt: plan ? "start" : undefined });
+  const passed = jobs.filter((job) => job.note && !job.stuck);
+  const nextTo = new Map<string, string>();
+  for (let index = 0; index < passed.length - 1; index += 1) {
+    nextTo.set(passed[index].personId, passed[index + 1].personId);
+  }
   for (const job of jobs) {
     if (!inside.has(job.personId)) beats.push({ person_id: job.personId, pose: "arrive", label: "进来了", hold: 3200 });
     for (const step of job.steps) {
@@ -689,15 +703,25 @@ function sceneOf(
     if (job.stuck) {
       beats.push({ person_id: job.personId, pose: "error", label: "卡住", hold: 1200, line: job.note });
       beats.push({ person_id: job.personId, pose: "done", label: "做完", hold: 900 });
+      continue;
     }
+    const target = nextTo.get(job.personId);
+    if (!target) continue;
+    beats.push({
+      person_id: job.personId,
+      pose: "handoff",
+      label: `递给${names.get(target) ?? "同事"}`,
+      hold: 3800,
+      visit: target,
+      line: job.note,
+    });
+    beats.push({ person_id: job.personId, pose: "done", label: "做完", hold: 900 });
   }
-  const reporting = jobs.filter((job) => job.note && !job.stuck);
-  if (reporting.length > 0) {
+  const last = passed.at(-1);
+  if (last) {
     beats.push({ person_id: leadId, pose: "think", label: "在听汇报", hold: 700 });
-    for (const job of reporting) {
-      beats.push({ person_id: job.personId, pose: "report", label: "来回报", hold: 2600, line: job.note });
-      beats.push({ person_id: job.personId, pose: "done", label: "做完", hold: 900 });
-    }
+    beats.push({ person_id: last.personId, pose: "report", label: "来回报", hold: 2600, line: last.note });
+    beats.push({ person_id: last.personId, pose: "done", label: "做完", hold: 900 });
   }
   return beats;
 }

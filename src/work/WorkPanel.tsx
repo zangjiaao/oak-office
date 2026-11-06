@@ -148,7 +148,12 @@ export function WorkPanel({
     const playing = new Map(base.map((mark) => [mark.person_id, mark]));
     try {
       for (const [index, step] of (office.play ?? []).entries()) {
-        playing.set(step.person_id, { person_id: step.person_id, pose: step.pose, label: step.label });
+        playing.set(step.person_id, {
+          person_id: step.person_id,
+          pose: step.pose,
+          label: step.label,
+          ...(step.visit ? { visit: step.visit } : {}),
+        });
         showFloor([...playing.values()]);
         const hold = index === 0 && step.label === "在听" ? Math.max(0, step.hold - credit) : step.hold;
         credit = 0;

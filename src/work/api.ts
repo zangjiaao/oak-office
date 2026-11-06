@@ -1,6 +1,6 @@
 import type { Pose } from "../office/types";
 
-export type FloorMark = { person_id: string; pose: Pose; label: string; updated_at?: number };
+export type FloorMark = { person_id: string; pose: Pose; label: string; updated_at?: number; visit?: string };
 
 export type DutyHold = { person_id: string; label: string };
 
@@ -18,6 +18,7 @@ export type WorkBeat = {
   hold: number;
   line?: WorkLine;
   lineAt?: "start" | "end";
+  visit?: string;
 };
 
 export type WorkOffice = {

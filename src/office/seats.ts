@@ -33,14 +33,14 @@ export function rosterView(
   people: PersonRow[],
   draft: DraftPreview | null,
   selectedId: string | null,
-  floor?: Record<string, { pose: Pose; label: string }>,
+  floor?: Record<string, { pose: Pose; label: string; visit?: string }>,
   present = false,
 ) {
   const room = present ? floor ?? {} : null;
+  const placed = layout(people, fittingDraft(people, draft), selectedId, room);
+  const points = new Map(placed.map((person) => [person.id, person.point]));
   return {
-    actors: layout(people, fittingDraft(people, draft), selectedId, room).map((person) =>
-      actor(person, room ? floor?.[person.id] : undefined),
-    ),
+    actors: placed.map((person) => actor(person, room ? floor?.[person.id] : undefined, points)),
     desks: fixedDesks(),
     room: { w: ROOM.w, h: ROW_Y[1] + (ROOM.h - ROW_Y[0]) },
   };
@@ -160,15 +160,19 @@ function inRoom(mark?: { label: string }) {
   return Boolean(mark && mark.label !== "不在");
 }
 
-function actor(person: Placed, mark?: { pose: Pose; label: string }): ActorFrame {
+function actor(person: Placed, mark?: { pose: Pose; label: string; visit?: string }, points?: Map<string, Point>): ActorFrame {
   const entering = mark?.pose === "arrive" && mark.label === "进来了" && !person.lead;
   const leaving = mark?.label === "下班" && !person.lead;
   const reporting = mark?.pose === "report" && !person.lead;
+  const host = mark?.visit ? points?.get(mark.visit) : undefined;
+  const handing = mark?.pose === "handoff" && Boolean(host) && !person.lead;
   const point = leaving
     ? { x: SPOTS.door.x, y: SPOTS.door.y }
     : reporting
       ? { x: person.point.x < SPOTS.lead.x ? 184 : 216, y: 140 }
-      : person.point;
+      : handing && host
+        ? { x: host.x + (person.point.x <= host.x ? -20 : 20), y: host.y }
+        : person.point;
   return {
     id: person.id,
     name: person.name,
@@ -177,7 +181,7 @@ function actor(person: Placed, mark?: { pose: Pose; label: string }): ActorFrame
     label: mark?.label ?? (person.lead ? "主管" : "闲置"),
     x: point.x,
     y: point.y,
-    face: point.x > SPOTS.lead.x ? -1 : 1,
+    face: handing && host ? (host.x >= point.x ? 1 : -1) : point.x > SPOTS.lead.x ? -1 : 1,
     walking: false,
     walkFrom: entering ? { x: SPOTS.door.x, y: SPOTS.door.y } : undefined,
     selected: person.selected,
