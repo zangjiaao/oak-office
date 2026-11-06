@@ -52,6 +52,33 @@ export const GENERIC_BRIEF = "办公室里的人。";
 export const GENERIC_DOSSIER = "没有额外设定。做交给他们的事。";
 
 /** Employee desks. The lead's desk is separate and does not count. */
+export const MODELS = ["deepseek-flash", "deepseek-v4-pro"] as const;
+export type OfficeModel = (typeof MODELS)[number];
+export const MODEL_LABEL: Record<OfficeModel, string> = {
+  "deepseek-flash": "DeepSeek Flash",
+  "deepseek-v4-pro": "DeepSeek V4 Pro",
+};
+
+export const THINKING = ["off", "low", "high", "max"] as const;
+export type Thinking = (typeof THINKING)[number];
+export const THINKING_LABEL: Record<Thinking, string> = {
+  off: "关闭",
+  low: "低",
+  high: "高",
+  max: "最大",
+};
+
+/** Levels the catalog actually accepts. V4 Pro has no low. */
+export const THINKING_FOR: Record<OfficeModel, readonly Thinking[]> = {
+  "deepseek-flash": ["off", "low", "high", "max"],
+  "deepseek-v4-pro": ["off", "high", "max"],
+};
+
+export function thinkingFor(model: string, thinking: string): Thinking {
+  const allowed = THINKING_FOR[model as OfficeModel] ?? THINKING;
+  return (allowed as readonly string[]).includes(thinking) ? (thinking as Thinking) : "high";
+}
+
 export const STAFF_LIMIT = 8;
 export const STAFF_FULL = "工位已满。员工最多八个。";
 
@@ -115,6 +142,8 @@ export type PersonRow = {
   brief: string | null;
   dossier: string | null;
   is_lead: 0 | 1;
+  model: OfficeModel;
+  thinking: Thinking;
   /** Employee desk 0–7. Null while this person is the lead. */
   seat: number | null;
   created_at: number;
@@ -132,6 +161,8 @@ export type PersonDraft = {
   brief: string | null;
   dossier: string | null;
   is_lead: 0 | 1;
+  model: OfficeModel;
+  thinking: Thinking;
 };
 
 const NAME_MAX = 32;
@@ -184,6 +215,15 @@ export function parseDraft(input: unknown): { ok: true; value: PersonDraft } | {
   if (!dossier.ok) return dossier;
   const isLead = leadFlag(body.is_lead);
   if (isLead === null) return { ok: false, error: "要选是不是主管。" };
+  if (typeof body.model !== "string" || !MODELS.includes(body.model as OfficeModel)) {
+    return { ok: false, error: "要选一个模型。" };
+  }
+  if (typeof body.thinking !== "string" || !THINKING.includes(body.thinking as Thinking)) {
+    return { ok: false, error: "要选思考级别。" };
+  }
+  if (!THINKING_FOR[body.model as OfficeModel].includes(body.thinking as Thinking)) {
+    return { ok: false, error: "这个模型没有这个思考级别。" };
+  }
   return {
     ok: true,
     value: {
@@ -197,6 +237,8 @@ export function parseDraft(input: unknown): { ok: true; value: PersonDraft } | {
       brief: brief.value,
       dossier: dossier.value,
       is_lead: isLead,
+      model: body.model as OfficeModel,
+      thinking: body.thinking as Thinking,
     },
   };
 }

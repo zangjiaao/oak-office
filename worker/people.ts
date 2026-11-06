@@ -9,7 +9,7 @@ import {
 import type { D1Database } from "./env";
 
 const COLUMNS =
-  "id, name, gender, hair, skin, shirt, pants, hair_style, brief, dossier, is_lead, seat, created_at, updated_at";
+  "id, name, gender, hair, skin, shirt, pants, hair_style, brief, dossier, is_lead, model, thinking, seat, created_at, updated_at";
 
 export class RosterDbError extends Error {
   status: number;
@@ -51,7 +51,7 @@ export async function hirePerson(db: D1Database, draft: PersonDraft): Promise<Pe
       ...moved,
       db
         .prepare(
-          `INSERT INTO people (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO people (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .bind(
           row.id,
@@ -65,6 +65,8 @@ export async function hirePerson(db: D1Database, draft: PersonDraft): Promise<Pe
           row.brief,
           row.dossier,
           row.is_lead,
+          row.model,
+          row.thinking,
           row.seat,
           row.created_at,
           row.updated_at,
@@ -114,7 +116,7 @@ export async function updatePerson(
         .prepare(
           `UPDATE people
            SET name = ?, gender = ?, hair = ?, skin = ?, shirt = ?, pants = ?, hair_style = ?,
-               brief = ?, dossier = ?, is_lead = ?, seat = ?, updated_at = ?
+               brief = ?, dossier = ?, is_lead = ?, model = ?, thinking = ?, seat = ?, updated_at = ?
            WHERE id = ?`,
         )
         .bind(
@@ -128,6 +130,8 @@ export async function updatePerson(
           row.brief,
           row.dossier,
           row.is_lead,
+          row.model,
+          row.thinking,
           row.seat,
           row.updated_at,
           row.id,

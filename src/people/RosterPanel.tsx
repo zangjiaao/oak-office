@@ -7,7 +7,11 @@ import {
   GENDERS,
   HAIR_LABEL,
   LOOK_PRESETS,
+  MODEL_LABEL,
+  MODELS,
   STAFF_FULL,
+  THINKING_FOR,
+  THINKING_LABEL,
   applyPerson,
   canHire,
   dropPerson,
@@ -16,7 +20,9 @@ import {
   parseDraft,
   staffFits,
   type Gender,
+  type OfficeModel,
   type PersonRow,
+  type Thinking,
 } from "./record";
 
 type FormState = {
@@ -28,6 +34,8 @@ type FormState = {
   brief: string;
   dossier: string;
   isLead: boolean;
+  model: OfficeModel;
+  thinking: Thinking;
 };
 
 export function RosterPanel({
@@ -115,6 +123,8 @@ export function RosterPanel({
       brief: form.brief,
       dossier: form.dossier,
       is_lead: form.isLead ? 1 : 0,
+      model: form.model,
+      thinking: form.thinking,
     });
     if (!parsed.ok) {
       setError(parsed.error);
@@ -235,6 +245,44 @@ export function RosterPanel({
               {people && !staffFits(people, { kind: form.kind, id: form.id, isLead: form.isLead }) ? (
                 <p className="file-error">{STAFF_FULL}</p>
               ) : null}
+            </div>
+            <div className="field">
+              <span>模型</span>
+              <div className="choices">
+                {MODELS.map((model) => (
+                  <button
+                    key={model}
+                    type="button"
+                    className={form.model === model ? "on" : ""}
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        model,
+                        thinking: THINKING_FOR[model].includes(form.thinking) ? form.thinking : "high",
+                      })
+                    }
+                  >
+                    {MODEL_LABEL[model]}
+                  </button>
+                ))}
+              </div>
+              <p className="hint">每个人可以用自己的模型。</p>
+            </div>
+            <div className="field">
+              <span>思考</span>
+              <div className="choices">
+                {THINKING_FOR[form.model].map((level) => (
+                  <button
+                    key={level}
+                    type="button"
+                    className={form.thinking === level ? "on" : ""}
+                    onClick={() => setForm({ ...form, thinking: level })}
+                  >
+                    {THINKING_LABEL[level]}
+                  </button>
+                ))}
+              </div>
+              <p className="hint">想过的内容不进聊天。开着的时候，办公室里显示在想。</p>
             </div>
             <div className="field">
               <span>性别</span>
@@ -373,6 +421,8 @@ function createForm(): FormState {
     brief: "",
     dossier: "",
     isLead: false,
+    model: "deepseek-flash",
+    thinking: "low",
   };
 }
 
@@ -386,6 +436,8 @@ function editForm(person: PersonRow): FormState {
     brief: person.brief ?? "",
     dossier: person.dossier ?? "",
     isLead: person.is_lead === 1,
+    model: person.model,
+    thinking: person.thinking,
   };
 }
 

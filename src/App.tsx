@@ -106,7 +106,7 @@ export function App() {
     mode === "roster" ? draft : null,
     mode === "roster" ? selectedId : null,
     shownFloor,
-    true,
+    mode === "work",
   );
   const stood = useWalk(roster.actors, mode === "work");
   const actors = mode === "rehearsal" ? rehearsalActors : stood;

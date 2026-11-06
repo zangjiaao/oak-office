@@ -36,9 +36,10 @@ export function rosterView(
   floor?: Record<string, { pose: Pose; label: string }>,
   present = false,
 ) {
+  const room = present ? floor ?? {} : null;
   return {
-    actors: layout(people, fittingDraft(people, draft), selectedId, present ? floor ?? {} : null).map((person) =>
-      actor(person, floor?.[person.id]),
+    actors: layout(people, fittingDraft(people, draft), selectedId, room).map((person) =>
+      actor(person, room ? floor?.[person.id] : undefined),
     ),
     desks: fixedDesks(),
     room: { w: ROOM.w, h: ROW_Y[1] + (ROOM.h - ROW_Y[0]) },

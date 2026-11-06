@@ -23,6 +23,7 @@ export function openPi(env: Env) {
       };
     }
   }
+  const modelFor = (id: string) => models.getModel("deepseek", id) ?? null;
   if (!model) {
     const known = models
       .getModels("deepseek")
@@ -33,6 +34,7 @@ export function openPi(env: Env) {
   return {
     ok: true as const,
     model,
+    modelFor,
     streamFn: (maxTokens: number): StreamFn => (next, context, options) =>
       models.streamSimple(next, context, { ...options, maxTokens }),
     getApiKey: () => key,
