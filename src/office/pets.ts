@@ -1,5 +1,7 @@
 export type PetKind = "cat" | "dog";
 
+export type PetActivity = "walk" | "rest" | "sleep" | "play";
+
 export type PetFrame = {
   id: string;
   kind: PetKind;
@@ -9,6 +11,7 @@ export type PetFrame = {
   y: number;
   face: 1 | -1;
   walking: boolean;
+  activity: PetActivity;
   frame: number;
 };
 
@@ -20,9 +23,15 @@ type PetRoute = {
   coat: string;
   accent: string;
   points: Point[];
+  beats: Exclude<PetActivity, "walk">[];
   speed: number;
-  pause: number;
   phase: number;
+};
+
+const HOLD: Record<Exclude<PetActivity, "walk">, number> = {
+  rest: 18,
+  play: 28,
+  sleep: 52,
 };
 
 function routes(roomH: number): PetRoute[] {
@@ -44,8 +53,8 @@ function routes(roomH: number): PetRoute[] {
         { x: 366, y: 130 },
         { x: 34, y: 130 },
       ],
+      beats: ["sleep", "rest", "play", "rest"],
       speed: 2.4,
-      pause: 10,
       phase: 0,
     },
     {
@@ -55,11 +64,12 @@ function routes(roomH: number): PetRoute[] {
       accent: "#8c5a32",
       points: [
         { x: 46, y: fore },
+        { x: 200, y: fore },
         { x: 354, y: fore },
       ],
+      beats: ["play", "rest", "sleep"],
       speed: 2.6,
-      pause: 12,
-      phase: 20,
+      phase: 0,
     },
     {
       id: "cat-gray",
@@ -67,12 +77,13 @@ function routes(roomH: number): PetRoute[] {
       coat: "#5c646c",
       accent: "#d5dbe0",
       points: [
-        { x: 300, y: fore },
-        { x: 70, y: fore },
+        { x: 320, y: fore },
+        { x: 180, y: fore },
+        { x: 60, y: fore },
       ],
+      beats: ["rest", "play", "sleep"],
       speed: 1.7,
-      pause: 16,
-      phase: 0,
+      phase: 70,
     },
   ];
 }
@@ -88,14 +99,30 @@ function walk(route: PetRoute, frame: number, roomH: number): PetFrame {
     const length = Math.hypot(to.x - from.x, to.y - from.y);
     return { from, to, frames: Math.max(1, Math.round(length / route.speed)) };
   });
-  const cycle = segments.reduce((total, segment) => total + segment.frames + route.pause, 0);
+  const cycle = segments.reduce(
+    (total, segment, index) => total + segment.frames + HOLD[route.beats[index % route.beats.length]],
+    0,
+  );
   let time = (frame + route.phase) % cycle;
-  for (const segment of segments) {
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    const beat = route.beats[index % route.beats.length];
     const face: 1 | -1 = segment.to.x >= segment.from.x ? 1 : -1;
-    if (time < route.pause) {
-      return { ...route, x: segment.from.x, y: segment.from.y, face, walking: false, frame };
+    const hold = HOLD[beat];
+    if (time < hold) {
+      const hop = beat === "play" && Math.floor(time / 6) % 2 === 0 ? -3 : 0;
+      const dart = beat === "play" ? (Math.floor(time / 6) % 2 === 0 ? 5 : -2) : 0;
+      return {
+        ...route,
+        x: segment.from.x + dart * face,
+        y: segment.from.y + hop,
+        face,
+        walking: false,
+        activity: beat,
+        frame,
+      };
     }
-    time -= route.pause;
+    time -= hold;
     if (time < segment.frames) {
       const along = time / segment.frames;
       return {
@@ -104,13 +131,14 @@ function walk(route: PetRoute, frame: number, roomH: number): PetFrame {
         y: segment.from.y + (segment.to.y - segment.from.y) * along,
         face,
         walking: true,
+        activity: "walk",
         frame,
       };
     }
     time -= segment.frames;
   }
   const first = points[0];
-  return { ...route, x: first.x, y: first.y, face: 1, walking: false, frame };
+  return { ...route, x: first.x, y: first.y, face: 1, walking: false, activity: "rest", frame };
 }
 
 export function petsAt(frame: number, roomH: number): PetFrame[] {

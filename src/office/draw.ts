@@ -191,49 +191,105 @@ function drawPet(ctx: CanvasRenderingContext2D, pet: PetFrame) {
   if (pet.face < 0) ctx.scale(-1, 1);
   const step = pet.walking && Math.floor(pet.frame / 4) % 2 === 0 ? 2 : 0;
   const tail = Math.floor(pet.frame / 6) % 2 === 0 ? -2 : 0;
-  if (pet.kind === "cat") {
-    if (pet.walking) {
-      rect(ctx, -14, -11 + tail, 4, 2, pet.coat);
-      rect(ctx, -11, -9, 12, 5, pet.coat);
-      rect(ctx, -8, -7, 6, 2, pet.accent);
-      rect(ctx, -1, -14, 7, 6, pet.coat);
-      rect(ctx, 0, -16, 2, 2, pet.coat);
-      rect(ctx, 4, -16, 2, 2, pet.coat);
-      rect(ctx, 3, -12, 1, 1, "#1a1714");
-      rect(ctx, -8, -4, 2, 4 + step, pet.coat);
-      rect(ctx, -2, -4, 2, 4 - step, pet.coat);
-    } else {
-      rect(ctx, -12, -8 + tail, 3, 3, pet.coat);
-      rect(ctx, -8, -10, 10, 8, pet.coat);
-      rect(ctx, -6, -6, 5, 3, pet.accent);
-      rect(ctx, 0, -15, 7, 6, pet.coat);
-      rect(ctx, 1, -17, 2, 2, pet.coat);
-      rect(ctx, 5, -17, 2, 2, pet.coat);
-      rect(ctx, 4, -13, 1, 1, "#1a1714");
-    }
-  } else if (pet.walking) {
-    rect(ctx, -16, -8 + tail, 4, 2, pet.coat);
-    rect(ctx, -12, -10, 16, 6, pet.coat);
-    rect(ctx, -8, -8, 7, 3, pet.accent);
-    rect(ctx, 2, -14, 8, 7, pet.coat);
-    rect(ctx, 3, -16, 3, 3, pet.accent);
-    rect(ctx, 8, -10, 4, 3, pet.accent);
-    rect(ctx, 11, -9, 1, 1, "#1a1714");
-    rect(ctx, 5, -12, 1, 1, "#1a1714");
-    rect(ctx, -9, -4, 2, 4 + step, pet.coat);
-    rect(ctx, -2, -4, 2, 4 - step, pet.coat);
-    rect(ctx, 4, -4, 2, 4 + step, pet.coat);
-  } else {
-    rect(ctx, -14, -6 + tail, 4, 2, pet.coat);
-    rect(ctx, -10, -8, 14, 6, pet.coat);
-    rect(ctx, -6, -6, 6, 3, pet.accent);
-    rect(ctx, 2, -13, 8, 7, pet.coat);
-    rect(ctx, 3, -15, 3, 3, pet.accent);
-    rect(ctx, 8, -9, 4, 3, pet.accent);
-    rect(ctx, 11, -8, 1, 1, "#1a1714");
-    rect(ctx, 5, -11, 1, 1, "#1a1714");
-  }
+  const blink = Math.floor(pet.frame / 8) % 7 === 0;
+  if (pet.activity === "sleep") drawAsleep(ctx, pet, tail);
+  else if (pet.activity === "play") drawPlaying(ctx, pet, tail);
+  else if (pet.kind === "cat" && pet.walking) drawCatWalk(ctx, pet, step, tail);
+  else if (pet.kind === "cat") drawCatRest(ctx, pet, tail, blink);
+  else if (pet.walking) drawDogWalk(ctx, pet, step, tail);
+  else drawDogRest(ctx, pet, tail, blink);
   ctx.restore();
+}
+
+function drawAsleep(ctx: CanvasRenderingContext2D, pet: PetFrame, tail: number) {
+  if (pet.kind === "cat") {
+    rect(ctx, -12, -6, 16, 5, pet.coat);
+    rect(ctx, -8, -5, 6, 2, pet.accent);
+    rect(ctx, -14, -8 + tail, 4, 3, pet.coat);
+    rect(ctx, 2, -9, 6, 5, pet.coat);
+    rect(ctx, 3, -11, 2, 2, pet.coat);
+    rect(ctx, 4, -7, 2, 1, "#1a1714");
+  } else {
+    rect(ctx, -16, -6, 24, 5, pet.coat);
+    rect(ctx, -6, -5, 8, 2, pet.accent);
+    rect(ctx, 6, -10, 8, 6, pet.coat);
+    rect(ctx, 7, -12, 3, 3, pet.accent);
+    rect(ctx, 10, -8, 2, 1, "#1a1714");
+  }
+  const lift = Math.floor(pet.frame / 10) % 3;
+  rect(ctx, 12, -16 - lift * 3, 3, 2, "#fffaf2");
+  rect(ctx, 14, -18 - lift * 3, 2, 2, "#fffaf2");
+}
+
+function drawPlaying(ctx: CanvasRenderingContext2D, pet: PetFrame, tail: number) {
+  const bat = Math.floor(pet.frame / 6) % 2 === 0;
+  if (pet.kind === "cat") {
+    rect(ctx, -12, -8 + tail, 3, 3, pet.coat);
+    rect(ctx, -8, -8, 12, 5, pet.coat);
+    rect(ctx, -4, -6, 5, 2, pet.accent);
+    rect(ctx, 2, -13, 7, 6, pet.coat);
+    rect(ctx, 3, -15, 2, 2, pet.coat);
+    rect(ctx, 6, -15, 2, 2, pet.coat);
+    rect(ctx, 6, -11, 1, 1, "#1a1714");
+    rect(ctx, 8, bat ? -8 : -4, 4, 2, pet.coat);
+  } else {
+    rect(ctx, -14, -12, 8, 6, pet.coat);
+    rect(ctx, -12, -6 + tail, 3, 3, pet.coat);
+    rect(ctx, -6, -7, 12, 4, pet.coat);
+    rect(ctx, 4, -12, 8, 6, pet.coat);
+    rect(ctx, 5, -14, 3, 3, pet.accent);
+    rect(ctx, 9, -10, 1, 1, "#1a1714");
+    rect(ctx, -10, -6, 2, 6, pet.coat);
+    rect(ctx, 2, -3, 3, 3, pet.coat);
+  }
+  rect(ctx, 14, bat ? -3 : -6, 4, 4, "#a8322a");
+}
+
+function drawCatWalk(ctx: CanvasRenderingContext2D, pet: PetFrame, step: number, tail: number) {
+  rect(ctx, -14, -11 + tail, 4, 2, pet.coat);
+  rect(ctx, -11, -9, 12, 5, pet.coat);
+  rect(ctx, -8, -7, 6, 2, pet.accent);
+  rect(ctx, -1, -14, 7, 6, pet.coat);
+  rect(ctx, 0, -16, 2, 2, pet.coat);
+  rect(ctx, 4, -16, 2, 2, pet.coat);
+  rect(ctx, 3, -12, 1, 1, "#1a1714");
+  rect(ctx, -8, -4, 2, 4 + step, pet.coat);
+  rect(ctx, -2, -4, 2, 4 - step, pet.coat);
+}
+
+function drawCatRest(ctx: CanvasRenderingContext2D, pet: PetFrame, tail: number, blink: boolean) {
+  rect(ctx, -12, -8 + tail, 3, 3, pet.coat);
+  rect(ctx, -8, -10, 10, 8, pet.coat);
+  rect(ctx, -6, -6, 5, 3, pet.accent);
+  rect(ctx, 0, -15, 7, 6, pet.coat);
+  rect(ctx, 1, -17, 2, 2, pet.coat);
+  rect(ctx, 5, -17, 2, 2, pet.coat);
+  if (!blink) rect(ctx, 4, -13, 1, 1, "#1a1714");
+}
+
+function drawDogWalk(ctx: CanvasRenderingContext2D, pet: PetFrame, step: number, tail: number) {
+  rect(ctx, -16, -8 + tail, 4, 2, pet.coat);
+  rect(ctx, -12, -10, 16, 6, pet.coat);
+  rect(ctx, -8, -8, 7, 3, pet.accent);
+  rect(ctx, 2, -14, 8, 7, pet.coat);
+  rect(ctx, 3, -16, 3, 3, pet.accent);
+  rect(ctx, 8, -10, 4, 3, pet.accent);
+  rect(ctx, 11, -9, 1, 1, "#1a1714");
+  rect(ctx, 5, -12, 1, 1, "#1a1714");
+  rect(ctx, -9, -4, 2, 4 + step, pet.coat);
+  rect(ctx, -2, -4, 2, 4 - step, pet.coat);
+  rect(ctx, 4, -4, 2, 4 + step, pet.coat);
+}
+
+function drawDogRest(ctx: CanvasRenderingContext2D, pet: PetFrame, tail: number, blink: boolean) {
+  rect(ctx, -14, -6 + tail, 4, 2, pet.coat);
+  rect(ctx, -10, -8, 14, 6, pet.coat);
+  rect(ctx, -6, -6, 6, 3, pet.accent);
+  rect(ctx, 2, -13, 8, 7, pet.coat);
+  rect(ctx, 3, -15, 3, 3, pet.accent);
+  rect(ctx, 8, -9, 4, 3, pet.accent);
+  rect(ctx, 11, -8, 1, 1, "#1a1714");
+  if (!blink) rect(ctx, 5, -11, 1, 1, "#1a1714");
 }
 
 function occupant(actors: ActorFrame[], desk: DeskSpot) {
