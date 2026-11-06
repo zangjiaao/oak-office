@@ -79,8 +79,9 @@ export function WorkPanel({
         showFloor([...playing.values()]);
         const hold = index === 0 && step.label === "在听" ? Math.max(0, step.hold - credit) : step.hold;
         credit = 0;
+        if (step.line && step.lineAt === "start") setLines((current) => [...(current ?? []), step.line!]);
         if (hold > 0) await wait(hold);
-        if (step.line) setLines((current) => [...(current ?? []), step.line!]);
+        if (step.line && step.lineAt !== "start") setLines((current) => [...(current ?? []), step.line!]);
       }
       if (office.closing) {
         await wait(700);

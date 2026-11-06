@@ -15,6 +15,7 @@ export type WorkBeat = {
   label: string;
   hold: number;
   line?: WorkLine;
+  lineAt?: "start" | "end";
 };
 
 export type WorkOffice = {

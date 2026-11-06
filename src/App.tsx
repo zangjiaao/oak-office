@@ -5,6 +5,7 @@ import { ROOM } from "./office/roster";
 import { DURATION } from "./office/script";
 import { activePoses, actorsAt, linesAt } from "./office/scene";
 import { rosterView, type DraftPreview } from "./office/seats";
+import { useWalk } from "./office/walk";
 import { POSE_NAME, type Pose } from "./office/types";
 import { listPeople } from "./people/api";
 import { RosterPanel } from "./people/RosterPanel";
@@ -98,7 +99,8 @@ export function App() {
     mode === "roster" ? selectedId : null,
     mode === "work" ? floor : undefined,
   );
-  const actors = mode === "rehearsal" ? rehearsalActors : roster.actors;
+  const stood = useWalk(roster.actors, mode === "work");
+  const actors = mode === "rehearsal" ? rehearsalActors : stood;
   const poses = activePoses(time);
 
   useEffect(() => {
