@@ -18,6 +18,7 @@ const TEXT_MAX = 1000;
 const HISTORY = 16;
 const SEARCH_MAX = 16;
 const STAFF_TOOL_MAX = 24;
+const STAFF_TOKENS = 8_000;
 const TURN_MS = 180_000;
 const toolUses = new Map<string, number>();
 const searchUses = new Map<string, number>();
@@ -406,7 +407,7 @@ export async function runStaffDuty(
     searchUses.set(person.id, 0);
     const steps: { pose: Pose; label: string }[] = [];
     const staff = new Agent({
-      streamFn: runtime.streamFn(1500),
+      streamFn: runtime.streamFn(STAFF_TOKENS),
       getApiKey: runtime.getApiKey,
       toolExecution: "sequential",
       beforeToolCall: async ({ toolCall, args }) => {
@@ -582,7 +583,7 @@ function askTool(
       const staff =
         staying ??
         new Agent({
-          streamFn: runtime.streamFn(1500),
+          streamFn: runtime.streamFn(STAFF_TOKENS),
           getApiKey: runtime.getApiKey,
           toolExecution: "sequential",
           beforeToolCall: async ({ toolCall, args }) => {
@@ -640,6 +641,29 @@ function askTool(
       const heard = staff.state.messages.length;
       try {
         await staff.prompt(task);
+        let outcome = staffOutcome(staff.state.messages, heard);
+        if (!outcome.note && !staff.state.errorMessage && !signal?.aborted && !parent?.aborted) {
+          trace("员工没写出来", { name: person.name, stop: outcome.stop, parts: outcome.parts, tools: outcome.tools });
+          await staff.prompt("用文字给出结果。缺的标成不确定。不要只思考。");
+          outcome = staffOutcome(staff.state.messages, heard);
+        }
+        if (!outcome.note || staff.state.errorMessage) {
+          const reason = staff.state.errorMessage
+            ? clip(staff.state.errorMessage, 300)
+            : outcome.stop === "length"
+              ? "写到字数上限，没有交卷。"
+              : "没有写出文字结果。";
+          trace("派工失败", {
+            name: person.name,
+            error: reason,
+            stop: outcome.stop,
+            parts: outcome.parts,
+            tools: outcome.tools,
+          });
+          job.stuck = true;
+          await setDesk(env.DB, person.id, "error", "卡住");
+          return fail(reason);
+        }
       } finally {
         signal?.removeEventListener("abort", stop);
         parent?.removeEventListener("abort", stop);
@@ -649,12 +673,6 @@ function askTool(
       }
       const answer = [...staff.state.messages].reverse().find((message) => message.role === "assistant");
       const note = answer ? clip(visibleText(answer), 500) : "";
-      if (!note || staff.state.errorMessage) {
-        trace("派工失败", { name: person.name, error: clip(staff.state.errorMessage ?? note, 300) });
-        job.stuck = true;
-        await setDesk(env.DB, person.id, "error", "卡住");
-        return fail(note || "员工这回没接上。");
-      }
       trace("派工完成", {
         name: person.name,
         label,
@@ -1027,6 +1045,19 @@ async function setDesk(
     )
     .bind(id, pose, label, task, note, now)
     .run();
+}
+
+function staffOutcome(messages: AgentMessage[], from: number) {
+  const fresh = messages.slice(from);
+  const answer = [...fresh].reverse().find((message) => message.role === "assistant");
+  const note = answer ? clip(visibleText(answer), 500) : "";
+  const parts = answer ? answer.content.map((part) => part.type) : [];
+  return {
+    note,
+    parts,
+    stop: answer?.stopReason ?? "none",
+    tools: fresh.filter((message) => message.role === "toolResult").length,
+  };
 }
 
 function staffToolGate(personId: string, name: string, args: unknown) {
