@@ -7,6 +7,12 @@ export type Duty = {
 };
 
 export const DUTY_MIN_MINUTES = 1;
+export const DUTY_RETRY_MS = 60_000;
+
+export function nextDueAt(now: number, everyMs: number, ok: boolean) {
+  if (ok) return now + everyMs;
+  return now + Math.min(everyMs, DUTY_RETRY_MS);
+}
 export const DUTY_MAX_MINUTES = 10_080;
 
 export function everyLabel(ms: number) {

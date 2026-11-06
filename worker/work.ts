@@ -300,6 +300,89 @@ export async function settleShift(env: Env, personId: string) {
   armCrew(personId, at + DONE_MS + IDLE_MS);
 }
 
+export async function runStaffDuty(
+  env: Env,
+  personId: string,
+  task: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (running) return { ok: false, error: "主管还在忙。" };
+  running = true;
+  try {
+    const runtime = openPi(env);
+    if (!runtime.ok) return { ok: false, error: runtime.error };
+    const person = await hired(env.DB, personId);
+    if (!person || person.is_lead === 1) return { ok: false, error: "没有这个员工。" };
+    const model = runtime.modelFor(person.model);
+    if (!model) return { ok: false, error: `${person.name}的模型不在目录里。` };
+    const jobText = clip(task, 500);
+    if (!jobText) return { ok: false, error: "这件事是空的。" };
+    releaseCrew(person.id);
+    toolUses.set(person.id, 0);
+    const steps: { pose: Pose; label: string }[] = [];
+    const staff = new Agent({
+      streamFn: runtime.streamFn(1500),
+      getApiKey: runtime.getApiKey,
+      toolExecution: "sequential",
+      beforeToolCall: async () => {
+        const used = (toolUses.get(person.id) ?? 0) + 1;
+        toolUses.set(person.id, used);
+        return used > 8 ? { block: true, reason: "工具用得够多了。" } : undefined;
+      },
+      initialState: {
+        model,
+        systemPrompt: staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT)),
+        thinkingLevel: thinkingFor(person.model, person.thinking),
+      },
+    });
+    staff.state.tools = [
+      ...deskTools(env, steps, (pose, label) => setDesk(env.DB, person.id, pose, label)),
+      rememberTool(env, person.id),
+    ];
+    await setDesk(env.DB, person.id, "type", clip(jobText, 16), jobText, null);
+    const timer = setTimeout(() => staff.abort(), 50_000);
+    try {
+      await staff.prompt(`到点了。请现在完成这件事，用简短中文给出结果。不要派别人：${jobText}`);
+    } finally {
+      clearTimeout(timer);
+    }
+    const answer = [...staff.state.messages].reverse().find((message) => message.role === "assistant");
+    const note = answer ? clip(visibleText(answer), 500) : "";
+    if (!note || staff.state.errorMessage) {
+      releaseCrew(person.id);
+      await setDesk(env.DB, person.id, "error", "卡住");
+      return { ok: false, error: note || "员工这回没接上。" };
+    }
+    keepCrew(person.id, staff);
+    const duties = await listDuties(env.DB);
+    const rest = Date.now();
+    await setDesk(env.DB, person.id, "done", "做完", undefined, undefined, rest);
+    await env.DB.prepare("UPDATE work_desk SET note = ? WHERE person_id = ?").bind(note, person.id).run();
+    if (duties.some((duty) => duty.person_id === person.id)) disarmCrew(person.id);
+    else armCrew(person.id, rest + DONE_MS + IDLE_MS);
+    await remember(env.DB, person.id, jobMemory(jobText, note));
+    const clock = `到点了。${person.name}做了：${jobText}。结果：${note}`;
+    const report = `${person.name}回报：${note}`;
+    let at = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'clock', NULL, ?, NULL, ?)",
+      ).bind(crypto.randomUUID(), clock, at),
+      env.DB.prepare(
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'staff', ?, ?, NULL, ?)",
+      ).bind(crypto.randomUUID(), person.id, note, (at += 1)),
+      env.DB.prepare(
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'lead', NULL, ?, NULL, ?)",
+      ).bind(crypto.randomUUID(), report, (at += 1)),
+    ]);
+    return { ok: true };
+  } catch (error) {
+    console.error(error);
+    return { ok: false, error: "员工这回没接上。" };
+  } finally {
+    running = false;
+  }
+}
+
 function askTool(
   env: Env,
   runtime: Extract<ReturnType<typeof openPi>, { ok: true }>,
@@ -429,7 +512,7 @@ function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], dutie
     promptMemory(lead.memories),
     "你只和用户说话，用简短中文。要派人时，先单独说一句安排谁做什么，再调用 ask，用他们的 id。",
     "以后还用得上的事实用 remember 记一句。档案和最近的对话不用再记。",
-    "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字，最少 1。这个人已经有一条定时时，再用 schedule 就是改间隔和内容，不要另加一条。到点会再叫你：员工的事用 ask 派给指定的人，等他做完后用一句话把他的结果告诉用户；你自己的事就自己做完再告诉用户。不要再 schedule 或 unschedule。取消时用 unschedule。",
+    "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字，最少 1。这个人已经有一条定时时，再用 schedule 就是改间隔和内容，不要另加一条。到点由系统直接让本人做，结果会写进对话，你不用再派一次。取消时用 unschedule。",
     dutyList(duties, [lead, ...staff]),
     "不能发明员工，不能派给自己。问完之后用 mark 标成回报或卡住。全部做完后，再单独说一句总结，不要和安排写在同一句里。",
     "需要外界信息时用 search。要写脚本或改文件时用 read、write、edit、bash，文件都在办公室的工作目录里，path 用相对路径。",
