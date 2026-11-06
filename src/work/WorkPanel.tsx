@@ -47,15 +47,18 @@ export function WorkPanel({
   }, [leadId, onFloor, onHolding]);
 
   useEffect(() => {
+    let ticks = 0;
     const timer = setInterval(() => {
-      if (sendingRef.current || playingRef.current) return;
+      ticks += 1;
+      if (playingRef.current) return;
+      if (!sendingRef.current && ticks % 5 !== 0) return;
       void loadWork()
         .then((office) => {
-          if (sendingRef.current || playingRef.current) return;
+          if (playingRef.current) return;
           void present(office);
         })
         .catch(() => {});
-    }, 5_000);
+    }, 1_000);
     return () => clearInterval(timer);
   }, [onFloor, onHolding]);
 
@@ -91,7 +94,7 @@ export function WorkPanel({
     const started = Date.now();
     try {
       const office = await sayWork(said);
-      await playBeats(office, previousFloor, Date.now() - started);
+      await playBeats(office, floorRef.current, Date.now() - started);
     } catch (caught) {
       setText(said);
       setError(caught instanceof Error ? caught.message : "主管这回没接上。");
@@ -112,13 +115,20 @@ export function WorkPanel({
   }
 
   function showFloor(marks: FloorMark[]) {
+    floorRef.current = marks;
     setFloor(marks);
     onFloor(marks);
   }
 
   async function present(office: WorkOffice) {
+    if (playingRef.current) return;
+    if (sendingRef.current) {
+      onHolding(office.holding ?? []);
+      showFloor(liveDuringSend(floorRef.current, office.floor));
+      return;
+    }
     const fresh = Boolean(office.playId && office.play?.length && !playedRef.current.has(office.playId));
-    if (!fresh || sendingRef.current || playingRef.current) {
+    if (!fresh || playingRef.current) {
       if (!playingRef.current && !sendingRef.current) {
         setLead(office.lead);
         onHolding(office.holding ?? []);
@@ -211,6 +221,14 @@ export function WorkPanel({
       </form>
     </aside>
   );
+}
+
+function liveDuringSend(current: FloorMark[], incoming: FloorMark[]) {
+  if (current.length === 0) return incoming;
+  return current.map((mark) => {
+    if (mark.label === "不在") return mark;
+    return incoming.find((item) => item.person_id === mark.person_id) ?? mark;
+  });
 }
 
 function wait(ms: number) {

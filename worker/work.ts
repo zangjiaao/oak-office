@@ -522,6 +522,7 @@ function askTool(
       if (person.is_lead === 1) return fail("主管不派给自己。");
       const label = clip(args.label, 16);
       const task = clip(args.task, 200);
+      const pose = workingPose(args.pose);
       if (!label || !task) return fail("派工要写清事情和状态。");
       const received = clip(args.task, 200);
       trace("派工", {
@@ -531,10 +532,10 @@ function askTool(
         taskChars: [...clip(args.task, 100000)].length,
         taskCut: [...clip(args.task, 100000)].length > [...received].length,
       });
-      const job = takeJob(turn, person.id, args.pose, label);
+      const job = takeJob(turn, person.id, pose, label);
       job.steps = [];
       job.visit = undefined;
-      await setDesk(env.DB, person.id, args.pose, label, task, null);
+      await setDesk(env.DB, person.id, pose, label, task, null);
       toolUses.set(person.id, 0);
       const model = runtime.modelFor(person.model);
       if (!model) return fail(`${person.name}的模型不在目录里。`);
@@ -838,6 +839,11 @@ export function dutyScene(input: {
   const first = beats[0];
   if (first) beats[0] = { ...first, line: input.clock, lineAt: "start" };
   return beats;
+}
+
+function workingPose(pose: Pose): Pose {
+  if (pose === "think" || pose === "read" || pose === "type" || pose === "run" || pose === "wait") return pose;
+  return "type";
 }
 
 function holdFor(pose: Pose, label: string) {
