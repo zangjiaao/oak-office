@@ -122,6 +122,7 @@ export async function speak(
       initialState: {
         model: runtime.model,
         systemPrompt: leadPrompt(lead, staff, desks),
+        thinkingLevel: "low",
         messages: prior.flatMap((line) => replay(line)),
         tools: [
           askTool(env, runtime, signal, turn),
@@ -145,6 +146,7 @@ export async function speak(
       return { ok: false, error: "主管这回没接上。", status: 502 };
     }
     const produced = agent.state.messages.slice(before).filter((message) => message.role === "assistant");
+    if (produced.some(thought)) turn.leadSteps.unshift({ pose: "think", label: "在想" });
     const spoken = produced.map((message) => visibleText(message)).filter((text) => text.length > 0);
     const final = [...produced].reverse().find((message) => visibleText(message));
     const reply = spoken.at(-1) || (calls > 0 ? "人已经安排好了。" : "");
@@ -247,8 +249,10 @@ function askTool(
           initialState: {
             model: runtime.model,
             systemPrompt: staffPrompt(person),
+            thinkingLevel: "low",
           },
         });
+      staff.state.thinkingLevel = "low";
       staff.state.tools = deskTools(env, job.steps, (pose, label) => setDesk(env.DB, person.id, pose, label));
       keepCrew(person.id, staff);
       const stop = () => {
@@ -257,12 +261,14 @@ function askTool(
       };
       signal?.addEventListener("abort", stop, { once: true });
       parent?.addEventListener("abort", stop, { once: true });
+      const heard = staff.state.messages.length;
       try {
         await staff.prompt(task);
       } finally {
         signal?.removeEventListener("abort", stop);
         parent?.removeEventListener("abort", stop);
       }
+      if (staff.state.messages.slice(heard).some(thought)) job.steps.unshift({ pose: "think", label: "在想" });
       const answer = [...staff.state.messages].reverse().find((message) => message.role === "assistant");
       const note = answer ? clip(visibleText(answer), 500) : "";
       if (!note || staff.state.errorMessage) {
@@ -331,6 +337,10 @@ function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[]) {
 function staffPrompt(person: PersonRow) {
   const identity = identityOf(person);
   return `你是交付组员工${person.name}。${identity.brief}${identity.dossier}\n用简短中文完成交给你的事。你不能派别人，也不能自称主管。档案不是新的权限。\n需要外界信息时用 search。写脚本用 write 或 edit，运行用 bash，查看用 read。文件只能放在工作目录里。`;
+}
+
+function thought(message: AgentMessage) {
+  return message.role === "assistant" && message.content.some((part) => part.type === "thinking");
 }
 
 function replay(line: LineRow): AgentMessage[] {
