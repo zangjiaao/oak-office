@@ -8,13 +8,16 @@ export function rehearsalDesks(): DeskSpot[] {
 
 type Screen = "off" | "read" | "type" | "run" | "ok" | "error";
 
-function screenFor(pose: Pose, atDesk: boolean): Screen {
+const QUIET = new Set(["闲置", "不在", "下班", "主管", "等你一句话"]);
+
+function screenFor(pose: Pose, atDesk: boolean, label = ""): Screen {
   if (!atDesk) return "off";
   if (pose === "read" || pose === "think") return "read";
   if (pose === "type" || pose === "wait") return "type";
   if (pose === "run") return "run";
   if (pose === "done") return "ok";
   if (pose === "error") return "error";
+  if (label && !QUIET.has(label)) return "read";
   return "off";
 }
 
@@ -197,7 +200,7 @@ export function drawOffice(
       ctx,
       desk.x,
       desk.y - 8,
-      screenFor(owner?.pose ?? "idle", Boolean(owner)),
+      screenFor(owner?.pose ?? "idle", Boolean(owner), owner?.label ?? ""),
       frame,
       desk.lead,
     );
