@@ -19,9 +19,15 @@ button, input {
 
 .app {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 8px var(--chat-width, 340px);
   height: 100%;
   min-height: 0;
+}
+
+.split {
+  background: #6b4428;
+  cursor: col-resize;
+  touch-action: none;
 }
 
 .floor {
@@ -112,7 +118,6 @@ button, input {
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   background: #f3ead7;
-  border-left: 8px solid #6b4428;
 }
 
 .chat header, .chat form, .roster { padding: 14px 16px; }
@@ -128,7 +133,10 @@ button, input {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  scrollbar-width: none;
 }
+
+.log::-webkit-scrollbar { width: 0; height: 0; }
 
 .empty { margin: 0; color: #7a6a56; }
 
@@ -393,5 +401,6 @@ button, input {
 
 @media (max-width: 800px) {
   .app { grid-template-columns: 1fr; grid-template-rows: minmax(280px, 1fr) minmax(240px, 42vh); }
-  .chat { border-left: 0; border-top: 8px solid #6b4428; }
+  .split { display: none; }
+  .chat { border-top: 8px solid #6b4428; }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { rehearsalDesks } from "./office/draw";
 import { OfficeStage } from "./office/OfficeStage";
 import { ROOM } from "./office/roster";
@@ -13,6 +13,10 @@ import { RosterPanel } from "./people/RosterPanel";
 import type { PersonRow } from "./people/record";
 import { WorkPanel } from "./work/WorkPanel";
 import type { FloorMark } from "./work/api";
+
+const CHAT_WIDTH_KEY = "oak-office-chat-width";
+const CHAT_MIN = 280;
+const CHAT_MAX = 720;
 
 const POSES: Pose[] = [
   "idle",
@@ -29,6 +33,18 @@ const POSES: Pose[] = [
 ];
 
 type Mode = "work" | "roster" | "rehearsal";
+
+function readChatWidth() {
+  const raw = localStorage.getItem(CHAT_WIDTH_KEY);
+  const saved = raw === null ? Number.NaN : Number(raw);
+  if (!Number.isFinite(saved)) return 340;
+  return clampChat(saved, window.innerWidth);
+}
+
+function clampChat(width: number, viewport: number) {
+  const max = Math.max(CHAT_MIN, Math.min(CHAT_MAX, viewport - 360));
+  return Math.min(max, Math.max(CHAT_MIN, Math.round(width)));
+}
 
 function format(ms: number) {
   const sec = Math.floor(ms / 1000);
@@ -50,6 +66,8 @@ export function App() {
   const timeRef = useRef(0);
   const modeRef = useRef<Mode>("work");
   const logRef = useRef<HTMLDivElement>(null);
+  const [chatWidth, setChatWidth] = useState(readChatWidth);
+  const chatWidthRef = useRef(chatWidth);
   const onDraft = useCallback((next: DraftPreview | null) => setDraft(next), []);
   const onFloor = useCallback((marks: FloorMark[]) => {
     setFloor(Object.fromEntries(marks.map((mark) => [mark.person_id, mark])));
@@ -128,8 +146,35 @@ export function App() {
     setPickRequest({ id, n: pickN.current });
   }
 
+  function resizeChat(next: number) {
+    const width = clampChat(next, window.innerWidth);
+    chatWidthRef.current = width;
+    setChatWidth(width);
+    localStorage.setItem(CHAT_WIDTH_KEY, String(width));
+  }
+
+  function dragChat(event: ReactPointerEvent<HTMLDivElement>) {
+    if (window.innerWidth <= 800) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    handle.setPointerCapture(event.pointerId);
+    const startX = event.clientX;
+    const startW = chatWidthRef.current;
+    function move(next: PointerEvent) {
+      resizeChat(startW - (next.clientX - startX));
+    }
+    function up() {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+    }
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  }
+
   return (
-    <main className="app">
+    <main className="app" style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}>
       <section className="floor">
         <header className="floor-bar">
           <div>
@@ -182,6 +227,22 @@ export function App() {
           </footer>
         ) : null}
       </section>
+      <div
+        className="split"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整对话框宽度"
+        aria-valuemin={CHAT_MIN}
+        aria-valuemax={CHAT_MAX}
+        aria-valuenow={chatWidth}
+        tabIndex={0}
+        onPointerDown={dragChat}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          resizeChat(chatWidthRef.current + (event.key === "ArrowLeft" ? 24 : -24));
+        }}
+      />
       {mode === "work" ? (
         <WorkPanel people={people} loadError={loadError} onFloor={onFloor} onRetry={() => void load()} />
       ) : mode === "roster" ? (
