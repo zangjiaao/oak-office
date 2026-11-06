@@ -27,6 +27,7 @@ export type WorkOffice = {
   holding: DutyHold[];
   play?: WorkBeat[];
   closing?: WorkLine;
+  playId?: string;
 };
 
 export async function loadWork(): Promise<WorkOffice> {

@@ -17,6 +17,7 @@ const TEXT_MAX = 1000;
 const HISTORY = 16;
 const toolUses = new Map<string, number>();
 let running = false;
+let staged: { id: string; play: WorkBeat[]; until: number } | null = null;
 
 export function officeBusy() {
   return running;
@@ -61,6 +62,7 @@ export type WorkOffice = {
   holding: { person_id: string; label: string }[];
   play?: WorkBeat[];
   closing?: WorkLine;
+  playId?: string;
 };
 
 type DeskRow = {
@@ -107,7 +109,9 @@ export async function getWork(db: Env["DB"]): Promise<WorkOffice> {
     seen.add(duty.person_id);
     return [{ person_id: duty.person_id, label: dutyHoldLabel(duty) }];
   });
-  return office(people, lines, floor, holding);
+  const view = office(people, lines, floor, holding);
+  if (!staged || staged.until <= Date.now()) return view;
+  return { ...view, playId: staged.id, play: staged.play };
 }
 
 export async function speak(
@@ -154,7 +158,7 @@ export async function speak(
         model,
         systemPrompt: leadPrompt(lead, staff, desks, duties),
         thinkingLevel: thinkingFor(lead.model, lead.thinking),
-        messages: prior.flatMap((line) => replay(line)),
+        messages: prior.flatMap((line, index) => replay(line, people, prior[index - 1])),
         tools: [
           askTool(env, runtime, signal, turn),
           markTool(env, turn),
@@ -262,7 +266,7 @@ export async function speak(
     );
     await env.DB.batch(writes);
     const office = await getWork(env.DB);
-    return { ok: true, office: { ...office, play, closing } };
+    return { ok: true, office: { ...office, play, closing, playId: undefined } };
   } catch (error) {
     if (touched && !placed) await restoreDesks(env.DB, desks).catch(() => {});
     console.error(error);
@@ -316,6 +320,13 @@ export async function runStaffDuty(
     if (!model) return { ok: false, error: `${person.name}的模型不在目录里。` };
     const jobText = clip(task, 500);
     if (!jobText) return { ok: false, error: "这件事是空的。" };
+    const prior = await env.DB.prepare(
+      "SELECT person_id, pose, label, task, note, updated_at FROM work_desk WHERE person_id = ?",
+    )
+      .bind(person.id)
+      .first<DeskRow>();
+    const inside = stillWorking(prior ?? undefined, Date.now(), true);
+    const lead = (await listPeople(env.DB)).find((row) => row.is_lead === 1);
     releaseCrew(person.id);
     toolUses.set(person.id, 0);
     const steps: { pose: Pose; label: string }[] = [];
@@ -368,19 +379,30 @@ export async function runStaffDuty(
     if (duties.some((duty) => duty.person_id === person.id)) disarmCrew(person.id);
     else armCrew(person.id, rest + DONE_MS + IDLE_MS);
     await remember(env.DB, person.id, jobMemory(jobText, note));
-    const clock = `到点了。${person.name}做了：${jobText}。结果：${note}`;
-    const report = `${person.name}回报：${note}`;
+    const clock = `到点了。${person.name}做了：${jobText}`;
     let at = Date.now();
+    const clockLine: WorkLine = { id: crypto.randomUUID(), role: "clock", person_id: null, text: clock };
+    const staffLine: WorkLine = { id: crypto.randomUUID(), role: "staff", person_id: person.id, text: note };
+    staged = {
+      id: clockLine.id,
+      play: dutyScene({
+        personId: person.id,
+        leadId: lead?.id ?? null,
+        inside,
+        thinking: thinking !== "off",
+        steps,
+        clock: clockLine,
+        staff: staffLine,
+      }),
+      until: at + 120_000,
+    };
     await env.DB.batch([
       env.DB.prepare(
         "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'clock', NULL, ?, NULL, ?)",
-      ).bind(crypto.randomUUID(), clock, at),
+      ).bind(clockLine.id, clock, at),
       env.DB.prepare(
         "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'staff', ?, ?, NULL, ?)",
-      ).bind(crypto.randomUUID(), person.id, note, (at += 1)),
-      env.DB.prepare(
-        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'lead', NULL, ?, NULL, ?)",
-      ).bind(crypto.randomUUID(), report, (at += 1)),
+      ).bind(staffLine.id, person.id, note, (at += 1)),
     ]);
     return { ok: true };
   } catch (error) {
@@ -559,8 +581,12 @@ function dutyList(duties: Duty[], people: { id: string; name: string }[]) {
     .join("\n");
 }
 
-function replay(line: LineRow): AgentMessage[] {
+function replay(line: LineRow, people: { id: string; name: string }[], previous?: LineRow): AgentMessage[] {
   if (line.role === "user" || line.role === "clock") return [{ role: "user", content: line.text, timestamp: line.created_at }];
+  if (line.role === "staff" && previous?.role === "clock") {
+    const name = people.find((person) => person.id === line.person_id)?.name ?? "员工";
+    return [{ role: "user", content: `${name}回报：${line.text}`, timestamp: line.created_at }];
+  }
   if (!line.raw) return [];
   try {
     const message = JSON.parse(line.raw) as AgentMessage;
@@ -629,6 +655,30 @@ function sceneOf(
       beats.push({ person_id: job.personId, pose: "done", label: "做完", hold: 900 });
     }
   }
+  return beats;
+}
+
+export function dutyScene(input: {
+  personId: string;
+  leadId: string | null;
+  inside: boolean;
+  thinking: boolean;
+  steps: { pose: Pose; label: string }[];
+  clock: WorkLine;
+  staff: WorkLine;
+}): WorkBeat[] {
+  const beats: WorkBeat[] = [];
+  if (!input.inside) beats.push({ person_id: input.personId, pose: "arrive", label: "进来了", hold: 3200 });
+  if (input.thinking) beats.push({ person_id: input.personId, pose: "think", label: "在想", hold: 1500 });
+  const work = input.steps.length > 0 ? input.steps : [{ pose: "type" as const, label: "在写" }];
+  for (const step of work) {
+    beats.push({ person_id: input.personId, pose: step.pose, label: step.label, hold: holdFor(step.pose, step.label) });
+  }
+  if (input.leadId) beats.push({ person_id: input.leadId, pose: "think", label: "在听汇报", hold: 700 });
+  beats.push({ person_id: input.personId, pose: "report", label: "来回报", hold: 1600, line: input.staff });
+  beats.push({ person_id: input.personId, pose: "done", label: "做完", hold: 900 });
+  const first = beats[0];
+  if (first) beats[0] = { ...first, line: input.clock, lineAt: "start" };
   return beats;
 }
 

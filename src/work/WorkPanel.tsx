@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { PersonRow } from "../people/record";
-import { loadWork, sayWork, type DutyHold, type FloorMark, type WorkLine } from "./api";
+import { loadWork, sayWork, type DutyHold, type FloorMark, type WorkLine, type WorkOffice } from "./api";
 
 export function WorkPanel({
   people,
@@ -23,6 +23,10 @@ export function WorkPanel({
   const [sending, setSending] = useState(false);
   const logRef = useRef<HTMLDivElement>(null);
   const sendingRef = useRef(false);
+  const playingRef = useRef(false);
+  const floorRef = useRef(floor);
+  const playedRef = useRef(new Set<string>());
+  floorRef.current = floor;
   const leadId = people?.find((person) => person.is_lead === 1)?.id ?? null;
 
   useEffect(() => {
@@ -30,12 +34,8 @@ export function WorkPanel({
     void loadWork()
       .then((office) => {
         if (gone) return;
-        setLead(office.lead);
-        setLines(office.lines);
-        setFloor(office.floor);
-        onFloor(office.floor);
-        onHolding(office.holding ?? []);
         setError(null);
+        void present(office);
       })
       .catch((caught) => {
         if (gone) return;
@@ -48,30 +48,26 @@ export function WorkPanel({
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (sendingRef.current) return;
+      if (sendingRef.current || playingRef.current) return;
       void loadWork()
         .then((office) => {
-          if (sendingRef.current) return;
-          setLead(office.lead);
-          setLines((current) => {
-            const next = office.lines;
-            if (current && current.length === next.length && current.every((line, index) => line.id === next[index]?.id)) {
-              return current;
-            }
-            return next;
-          });
-          setFloor(office.floor);
-          onFloor(office.floor);
-          onHolding(office.holding ?? []);
+          if (sendingRef.current || playingRef.current) return;
+          void present(office);
         })
         .catch(() => {});
     }, 5_000);
     return () => clearInterval(timer);
   }, [onFloor, onHolding]);
 
+  const tailId = lines?.at(-1)?.id ?? "";
   useEffect(() => {
-    logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
-  }, [lines?.length, sending]);
+    const log = logRef.current;
+    if (!log) return;
+    const pin = () => log.scrollTo({ top: log.scrollHeight });
+    pin();
+    const frame = requestAnimationFrame(pin);
+    return () => cancelAnimationFrame(frame);
+  }, [tailId, sending]);
 
   async function say(event: FormEvent) {
     event.preventDefault();
@@ -95,29 +91,7 @@ export function WorkPanel({
     const started = Date.now();
     try {
       const office = await sayWork(said);
-      onHolding(office.holding ?? []);
-      const hidden = new Set<string>();
-      for (const step of office.play ?? []) if (step.line) hidden.add(step.line.id);
-      if (office.closing) hidden.add(office.closing.id);
-      setLead(office.lead);
-      setLines(office.lines.filter((line) => !hidden.has(line.id)));
-      let credit = Date.now() - started;
-      const playing = new Map(previousFloor.map((mark) => [mark.person_id, mark]));
-      for (const [index, step] of (office.play ?? []).entries()) {
-        playing.set(step.person_id, { person_id: step.person_id, pose: step.pose, label: step.label });
-        showFloor([...playing.values()]);
-        const hold = index === 0 && step.label === "在听" ? Math.max(0, step.hold - credit) : step.hold;
-        credit = 0;
-        if (step.line && step.lineAt === "start") setLines((current) => [...(current ?? []), step.line!]);
-        if (hold > 0) await wait(hold);
-        if (step.line && step.lineAt !== "start") setLines((current) => [...(current ?? []), step.line!]);
-      }
-      if (office.closing) {
-        await wait(700);
-        setLines((current) => [...(current ?? []), office.closing!]);
-      }
-      showFloor(office.floor);
-      setFloor(office.floor);
+      await playBeats(office, previousFloor, Date.now() - started);
     } catch (caught) {
       setText(said);
       setError(caught instanceof Error ? caught.message : "主管这回没接上。");
@@ -140,6 +114,56 @@ export function WorkPanel({
   function showFloor(marks: FloorMark[]) {
     setFloor(marks);
     onFloor(marks);
+  }
+
+  async function present(office: WorkOffice) {
+    const fresh = Boolean(office.playId && office.play?.length && !playedRef.current.has(office.playId));
+    if (!fresh || sendingRef.current || playingRef.current) {
+      if (!playingRef.current && !sendingRef.current) {
+        setLead(office.lead);
+        onHolding(office.holding ?? []);
+        setLines((current) => {
+          const next = office.lines;
+          if (current && current.length === next.length && current.every((line, index) => line.id === next[index]?.id)) {
+            return current;
+          }
+          return next;
+        });
+        showFloor(office.floor);
+      }
+      return;
+    }
+    playedRef.current.add(office.playId!);
+    await playBeats(office, floorRef.current, 0);
+  }
+
+  async function playBeats(office: WorkOffice, base: FloorMark[], credit: number) {
+    onHolding(office.holding ?? []);
+    setLead(office.lead);
+    playingRef.current = true;
+    const hidden = new Set<string>();
+    for (const step of office.play ?? []) if (step.line) hidden.add(step.line.id);
+    if (office.closing) hidden.add(office.closing.id);
+    setLines(office.lines.filter((line) => !hidden.has(line.id)));
+    const playing = new Map(base.map((mark) => [mark.person_id, mark]));
+    try {
+      for (const [index, step] of (office.play ?? []).entries()) {
+        playing.set(step.person_id, { person_id: step.person_id, pose: step.pose, label: step.label });
+        showFloor([...playing.values()]);
+        const hold = index === 0 && step.label === "在听" ? Math.max(0, step.hold - credit) : step.hold;
+        credit = 0;
+        if (step.line && step.lineAt === "start") setLines((current) => [...(current ?? []), step.line!]);
+        if (hold > 0) await wait(hold);
+        if (step.line && step.lineAt !== "start") setLines((current) => [...(current ?? []), step.line!]);
+      }
+      if (office.closing) {
+        await wait(700);
+        setLines((current) => [...(current ?? []), office.closing!]);
+      }
+      showFloor(office.floor);
+    } finally {
+      playingRef.current = false;
+    }
   }
 
   const named = new Map(people?.map((person) => [person.id, person.name]));
