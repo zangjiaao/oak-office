@@ -98,10 +98,10 @@ export function WorkPanel({
     setText("");
     setLines([...(lines ?? []), { id: "pending-user", role: "user", person_id: null, text: said }]);
     const listening = previousFloor.map((mark) =>
-      mark.person_id === lead.id ? { ...mark, pose: "think" as const, label: "在听" } : mark,
+      mark.person_id === lead.id ? { ...mark, pose: "think" as const, label: "在想" } : mark,
     );
     if (!listening.some((mark) => mark.person_id === lead.id)) {
-      listening.push({ person_id: lead.id, pose: "think", label: "在听" });
+      listening.push({ person_id: lead.id, pose: "think", label: "在想" });
     }
     showFloor(listening);
     const started = Date.now();
@@ -179,7 +179,7 @@ export function WorkPanel({
           ...(step.visit ? { visit: step.visit } : {}),
         });
         showFloor([...playing.values()]);
-        const hold = index === 0 && step.label === "在听" ? Math.max(0, step.hold - credit) : step.hold;
+        const hold = index === 0 && (step.label === "在听" || step.label === "在想") ? Math.max(0, step.hold - credit) : step.hold;
         credit = 0;
         if (step.line && step.lineAt === "start") setLines((current) => [...(current ?? []), step.line!]);
         if (hold > 0) await wait(hold);
@@ -223,7 +223,7 @@ export function WorkPanel({
             </div>
           </article>
         ))}
-        {sending ? <p className="empty">主管在听。</p> : null}
+        {sending ? <p className="empty">{leadActivity(floor.find((mark) => mark.person_id === lead?.id)?.label)}</p> : null}
         {error ? <p className="file-error">{error}</p> : null}
       </div>
       <form onSubmit={(event) => void say(event)}>
@@ -248,6 +248,13 @@ export function WorkPanel({
       </form>
     </aside>
   );
+}
+
+function leadActivity(label: string | undefined) {
+  if (!label || label === "等你一句话" || label === "闲置" || label === "不在") return "主管在想。";
+  if (label === "在听") return "主管在想。";
+  if (label === "等他们") return "主管在派活。";
+  return `主管${label}。`;
 }
 
 function liveDuringSend(current: FloorMark[], incoming: FloorMark[], now = Date.now()) {
