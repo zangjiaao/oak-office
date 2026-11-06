@@ -2,7 +2,7 @@ import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { obj, oneOf, str, type Static } from "@earendil-works/pi-schema";
 import { identityOf, thinkingFor, type PersonRow } from "../src/people/record";
 import { DONE_MS, IDLE_MS, stillWorking } from "../src/office/shift";
-import { armCrew, keepCrew, liveCrew, releaseCrew, unarmedCrew } from "./crew";
+import { armCrew, disarmCrew, keepCrew, liveCrew, releaseCrew, unarmedCrew } from "./crew";
 import { jobMemory, promptMemory, recentNotes, remember, NOTES_IN_PROMPT } from "./memory";
 import { listDuties, scheduleTool, unscheduleTool } from "./duty";
 import { everyLabel, type Duty } from "../src/work/duty";
@@ -58,6 +58,7 @@ export type WorkOffice = {
   lead: { id: string; name: string } | null;
   lines: WorkLine[];
   floor: { person_id: string; pose: Pose; label: string; updated_at?: number }[];
+  holding: string[];
   play?: WorkBeat[];
   closing?: WorkLine;
 };
@@ -99,7 +100,8 @@ export async function getWork(db: Env["DB"]): Promise<WorkOffice> {
   const people = await listPeople(db);
   const lines = await linesOf(db);
   const floor = await floorOf(db);
-  return office(people, lines, floor);
+  const duties = await listDuties(db);
+  return office(people, lines, floor, [...new Set(duties.map((duty) => duty.person_id))]);
 }
 
 export async function speak(
@@ -185,7 +187,10 @@ export async function speak(
       return { ok: false, error: "主管没有说完。", status: 502 };
     }
     const jobs = [...turn.jobs.values()];
-    const inside = new Set(desks.filter((desk) => stillWorking(desk, Date.now())).map((desk) => desk.person_id));
+    const dutyIds = new Set(duties.map((duty) => duty.person_id));
+    const inside = new Set(
+      desks.filter((desk) => stillWorking(desk, Date.now(), dutyIds.has(desk.person_id))).map((desk) => desk.person_id),
+    );
     const plan =
       spoken.length > 1
         ? { id: crypto.randomUUID(), role: "lead" as const, person_id: null, text: spoken[0] }
@@ -198,10 +203,12 @@ export async function speak(
       cursor += step.hold;
       if (step.label === "做完") restAt.set(step.person_id, cursor + 700);
     }
+    const heldNow = new Set((await listDuties(env.DB)).map((duty) => duty.person_id));
     for (const job of jobs) {
       const rest = restAt.get(job.personId) ?? cursor + 700;
       await setDesk(env.DB, job.personId, "done", "做完", undefined, undefined, rest);
-      armCrew(job.personId, rest + DONE_MS + IDLE_MS);
+      if (heldNow.has(job.personId)) disarmCrew(job.personId);
+      else armCrew(job.personId, rest + DONE_MS + IDLE_MS);
     }
     await setDesk(env.DB, lead.id, "idle", "等你一句话");
     placed = true;
@@ -236,10 +243,32 @@ export async function speak(
     }
     return { ok: false, error: "主管这回没接上。", status: 500 };
   } finally {
+    const heldNow = new Set((await listDuties(env.DB).catch(() => [])).map((duty) => duty.person_id));
     const fallback = Date.now() + DONE_MS + IDLE_MS;
-    for (const id of unarmedCrew()) armCrew(id, fallback);
+    for (const id of unarmedCrew()) {
+      if (heldNow.has(id)) disarmCrew(id);
+      else armCrew(id, fallback);
+    }
     running = false;
   }
+}
+
+export async function settleShift(env: Env, personId: string) {
+  const still = await env.DB.prepare("SELECT id FROM duty WHERE person_id = ? LIMIT 1").bind(personId).first();
+  if (still) {
+    disarmCrew(personId);
+    return;
+  }
+  const desk = await env.DB.prepare("SELECT label, updated_at FROM work_desk WHERE person_id = ?")
+    .bind(personId)
+    .first<{ label: string; updated_at: number }>();
+  if (!desk || desk.label !== "做完") return;
+  let at = desk.updated_at;
+  if (Date.now() - at >= DONE_MS) {
+    at = Date.now() - DONE_MS;
+    await setDesk(env.DB, personId, "done", "做完", undefined, undefined, at);
+  }
+  armCrew(personId, at + DONE_MS + IDLE_MS);
 }
 
 function askTool(
@@ -496,6 +525,7 @@ function office(
   people: PersonRow[],
   lines: LineRow[],
   floor: { person_id: string; pose: Pose; label: string; updated_at?: number }[],
+  holding: string[],
 ): WorkOffice {
   const lead = people.find((person) => person.is_lead === 1);
   return {
@@ -507,6 +537,7 @@ function office(
       text: line.text,
     })),
     floor,
+    holding,
   };
 }
 

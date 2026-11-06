@@ -29,6 +29,14 @@ export function keepCrew(id: string, run: Run) {
   crew.set(id, { run: next && next.run === run ? next.run : run, releaseAt: null });
 }
 
+export function disarmCrew(id: string) {
+  const held = crew.get(id);
+  if (!held) return;
+  if (held.timer) clearTimeout(held.timer);
+  held.timer = undefined;
+  held.releaseAt = null;
+}
+
 export function armCrew(id: string, releaseAt: number) {
   const held = crew.get(id);
   if (!held) return;

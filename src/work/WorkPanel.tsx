@@ -6,11 +6,13 @@ export function WorkPanel({
   people,
   loadError,
   onFloor,
+  onHolding,
   onRetry,
 }: {
   people: PersonRow[] | null;
   loadError: string | null;
   onFloor: (floor: FloorMark[]) => void;
+  onHolding: (ids: string[]) => void;
   onRetry: () => void;
 }) {
   const [lead, setLead] = useState<{ id: string; name: string } | null>(null);
@@ -32,6 +34,7 @@ export function WorkPanel({
         setLines(office.lines);
         setFloor(office.floor);
         onFloor(office.floor);
+        onHolding(office.holding ?? []);
         setError(null);
       })
       .catch((caught) => {
@@ -41,7 +44,7 @@ export function WorkPanel({
     return () => {
       gone = true;
     };
-  }, [leadId, onFloor]);
+  }, [leadId, onFloor, onHolding]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -59,11 +62,12 @@ export function WorkPanel({
           });
           setFloor(office.floor);
           onFloor(office.floor);
+          onHolding(office.holding ?? []);
         })
         .catch(() => {});
     }, 5_000);
     return () => clearInterval(timer);
-  }, [onFloor]);
+  }, [onFloor, onHolding]);
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
@@ -91,6 +95,7 @@ export function WorkPanel({
     const started = Date.now();
     try {
       const office = await sayWork(said);
+      onHolding(office.holding ?? []);
       const hidden = new Set<string>();
       for (const step of office.play ?? []) if (step.line) hidden.add(step.line.id);
       if (office.closing) hidden.add(office.closing.id);
@@ -121,6 +126,7 @@ export function WorkPanel({
         setLead(office.lead);
         setLines(office.lines);
         showFloor(office.floor);
+        onHolding(office.holding ?? []);
       } catch {
         setLines(previousLines);
         showFloor(previousFloor);

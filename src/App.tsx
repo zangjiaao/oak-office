@@ -61,6 +61,7 @@ export function App() {
   const [pickRequest, setPickRequest] = useState<{ id: string; n: number } | null>(null);
   const [draft, setDraft] = useState<DraftPreview | null>(null);
   const [floor, setFloor] = useState<Record<string, FloorMark>>({});
+  const [holding, setHolding] = useState<string[]>([]);
   const pickN = useRef(0);
   const playingRef = useRef(true);
   const timeRef = useRef(0);
@@ -72,6 +73,7 @@ export function App() {
   const onFloor = useCallback((marks: FloorMark[]) => {
     setFloor(Object.fromEntries(marks.map((mark) => [mark.person_id, mark])));
   }, []);
+  const onHolding = useCallback((ids: string[]) => setHolding(ids), []);
 
   useEffect(() => {
     playingRef.current = playing;
@@ -115,7 +117,7 @@ export function App() {
   const now = useNow(mode !== "rehearsal");
   const shownFloor = Object.fromEntries(
     Object.entries(floor).map(([id, mark]) => {
-      const view = shift(mark, now);
+      const view = shift(mark, now, holding.includes(id));
       return [id, { ...mark, pose: view.pose, label: view.label }];
     }),
   );
@@ -244,7 +246,13 @@ export function App() {
         }}
       />
       <div className={mode === "work" ? "pane-on" : "pane-off"}>
-        <WorkPanel people={people} loadError={loadError} onFloor={onFloor} onRetry={() => void load()} />
+        <WorkPanel
+          people={people}
+          loadError={loadError}
+          onFloor={onFloor}
+          onHolding={onHolding}
+          onRetry={() => void load()}
+        />
       </div>
       {mode === "roster" ? (
         <RosterPanel

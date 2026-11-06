@@ -22,6 +22,7 @@ export type WorkOffice = {
   lead: { id: string; name: string } | null;
   lines: WorkLine[];
   floor: FloorMark[];
+  holding: string[];
   play?: WorkBeat[];
   closing?: WorkLine;
 };

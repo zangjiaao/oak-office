@@ -2,7 +2,7 @@ import { cancelDuty, listDuties, runDue } from "./duty";
 import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
-import { getWork, speak } from "./work";
+import { getWork, settleShift, speak } from "./work";
 import type { Env } from "./env";
 import type { PersonDraft } from "../src/people/record";
 
@@ -59,8 +59,9 @@ export default {
         const id = decodeURIComponent(dutyMatch[1]);
         if (!UUID.test(id)) return json({ error: "没有这个定时。" }, 404);
         if (request.method !== "DELETE") return new Response(null, { status: 405, headers: { allow: "DELETE" } });
-        const removed = await cancelDuty(env.DB, id);
-        if (!removed) return json({ error: "没有这个定时。" }, 404);
+        const personId = await cancelDuty(env.DB, id);
+        if (!personId) return json({ error: "没有这个定时。" }, 404);
+        await settleShift(env, personId);
         return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
       }
       if (url.pathname === "/api/people") {

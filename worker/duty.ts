@@ -1,5 +1,6 @@
 import { obj, str, type Static } from "@earendil-works/pi-schema";
 import { DUTY_MAX_MINUTES, DUTY_MIN_MINUTES, everyLabel, type Duty } from "../src/work/duty";
+import { disarmCrew } from "./crew";
 import type { Env } from "./env";
 
 const DUTY_LIMIT = 8;
@@ -60,6 +61,7 @@ export function scheduleTool(env: Env) {
       )
         .bind(duty.id, duty.person_id, duty.task, duty.every_ms, duty.next_at, duty.created_at)
         .run();
+      disarmCrew(person.id);
       return text(`已排上。${person.name}${everyLabel(duty.every_ms)}做一次：${duty.task}。编号 ${duty.id}。`);
     },
   };
@@ -73,18 +75,20 @@ export function unscheduleTool(env: Env) {
     parameters: CancelArgs,
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Static<typeof CancelArgs>) => {
-      const removed = await cancelDuty(env.DB, args.duty_id);
-      if (!removed) return miss("没有这个定时。");
+      const personId = await cancelDuty(env.DB, args.duty_id);
+      if (!personId) return miss("没有这个定时。");
+      const { settleShift } = await import("./work");
+      await settleShift(env, personId);
       return text("已经取消。");
     },
   };
 }
 
 export async function cancelDuty(db: Env["DB"], id: string) {
-  const existing = await db.prepare("SELECT id FROM duty WHERE id = ?").bind(id).first<{ id: string }>();
-  if (!existing) return false;
+  const existing = await db.prepare("SELECT person_id FROM duty WHERE id = ?").bind(id).first<{ person_id: string }>();
+  if (!existing) return null;
   await db.prepare("DELETE FROM duty WHERE id = ?").bind(id).run();
-  return true;
+  return existing.person_id;
 }
 
 export async function runDue(env: Env): Promise<{ ran: number }> {
