@@ -338,6 +338,34 @@ button, input {
 
 .hint { margin: 12px 0 0; color: #7a6a56; font-size: 13px; line-height: 1.45; }
 
+.memories {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memories li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.memories p { margin: 0; flex: 1; line-height: 1.45; }
+
+.memories button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid #d9c7a4;
+  background: #fffaf2;
+  color: #241c16;
+  padding: 4px 8px;
+}
+
+.memories button:disabled { opacity: 0.55; cursor: default; }
+
 .file-error { margin: 12px 0 0; color: #a8322a; }
 
 .staff-bar {

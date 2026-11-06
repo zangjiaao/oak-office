@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { rosterLabel, rosterNote, type DraftPreview } from "../office/seats";
 import type { HairStyle, Look } from "../office/types";
-import { dismissPerson, hirePerson, updatePerson } from "./api";
+import { dismissPerson, forgetMemory, hirePerson, updatePerson } from "./api";
 import {
   GENDER_LABEL,
   GENDERS,
@@ -180,6 +180,28 @@ export function RosterPanel({
   const note = people ? rosterNote(people) : null;
   const roomForHire = people ? canHire(people) : false;
   const identity = form ? identityOf({ brief: form.brief, dossier: form.dossier }) : null;
+  const memories =
+    form?.kind === "edit" && form.id ? (people?.find((person) => person.id === form.id)?.memories ?? []) : [];
+
+  async function forget(noteId: string) {
+    if (!form?.id || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await forgetMemory(form.id, noteId);
+      onPeople(
+        (people ?? []).map((person) =>
+          person.id === form.id
+            ? { ...person, memories: (person.memories ?? []).filter((note) => note.id !== noteId) }
+            : person,
+        ),
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "这条记忆没有去掉。");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <aside className="chat staff">
@@ -372,6 +394,25 @@ export function RosterPanel({
                   ? `通用身份：${identity.brief}${identity.dossier}`
                   : "空着的部分用通用身份。"}
               </p>
+            ) : null}
+            {form.kind === "edit" ? (
+              <div className="field">
+                <span>记忆</span>
+                {memories.length === 0 ? (
+                  <p className="hint">还没有记忆。做完的事，和记住的事实，会出现在这里。</p>
+                ) : (
+                  <ul className="memories">
+                    {memories.map((note) => (
+                      <li key={note.id}>
+                        <p>{note.text}</p>
+                        <button type="button" onClick={() => void forget(note.id)} disabled={saving}>
+                          忘掉
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ) : null}
             {error ? <p className="file-error">{error}</p> : null}
           </form>

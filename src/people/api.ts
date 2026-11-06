@@ -15,6 +15,16 @@ export async function updatePerson(id: string, draft: PersonDraft): Promise<Pers
   return (body as { person: PersonRow }).person;
 }
 
+export async function forgetMemory(personId: string, noteId: string): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`/api/people/${personId}/memory/${noteId}`, { method: "DELETE" });
+  } catch {
+    throw new Error("档案库没连上。");
+  }
+  if (!response.ok) throw new Error(await errorMessage(response));
+}
+
 export async function dismissPerson(id: string): Promise<void> {
   let response: Response;
   try {

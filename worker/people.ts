@@ -7,6 +7,7 @@ import {
   type PersonRow,
 } from "../src/people/record";
 import type { D1Database } from "./env";
+import { listNotes } from "./memory";
 
 const COLUMNS =
   "id, name, gender, hair, skin, shirt, pants, hair_style, brief, dossier, is_lead, model, thinking, seat, created_at, updated_at";
@@ -25,7 +26,13 @@ export async function listPeople(db: D1Database): Promise<PersonRow[]> {
     const { results } = await db
       .prepare(`SELECT ${COLUMNS} FROM people ORDER BY created_at ASC, id ASC`)
       .all<PersonRow>();
-    return results;
+    const notes = await listNotes(db);
+    return results.map((person) => ({
+      ...person,
+      memories: notes
+        .filter((note) => note.person_id === person.id)
+        .map(({ id, text, created_at }) => ({ id, text, created_at })),
+    }));
   } catch (error) {
     throw stored(error);
   }
@@ -154,6 +161,7 @@ export async function dismissPerson(
     const existing = await db.prepare("SELECT id FROM people WHERE id = ?").bind(id).first<{ id: string }>();
     if (!existing) return null;
     await db.batch([
+      db.prepare("DELETE FROM person_memory WHERE person_id = ?").bind(id),
       db.prepare("DELETE FROM work_desk WHERE person_id = ?").bind(id),
       db.prepare("DELETE FROM people WHERE id = ?").bind(id),
     ]);
