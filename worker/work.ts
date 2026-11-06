@@ -22,11 +22,12 @@ function trace(event: string, detail?: Record<string, unknown>) {
   const extra = detail ? ` ${JSON.stringify(detail)}` : "";
   console.error(`[oak] ${event}${extra}`);
 }
-let running = false;
-let staged: { departmentId: string; id: string; play: WorkBeat[]; closing: WorkLine; until: number } | null = null;
+const busy = new Set<string>();
+const staged = new Map<string, { id: string; play: WorkBeat[]; closing: WorkLine; until: number }>();
 
-export function officeBusy() {
-  return running;
+export function officeBusy(departmentId?: string) {
+  if (departmentId) return busy.has(departmentId);
+  return busy.size > 0;
 }
 
 const AskArgs = obj({
@@ -122,8 +123,12 @@ export async function getWork(db: Env["DB"], departmentId: string): Promise<Work
     return [{ person_id: duty.person_id, label: dutyHoldLabel(duty) }];
   });
   const view = office(people, lines, floor, holding);
-  if (!staged || staged.until <= Date.now() || staged.departmentId !== departmentId) return view;
-  return { ...view, playId: staged.id, play: staged.play, closing: staged.closing };
+  const pending = staged.get(departmentId);
+  if (!pending || pending.until <= Date.now()) {
+    if (pending) staged.delete(departmentId);
+    return view;
+  }
+  return { ...view, playId: pending.id, play: pending.play, closing: pending.closing };
 }
 
 export async function speak(
@@ -136,8 +141,8 @@ export async function speak(
   const said = text.trim();
   if (!said) return { ok: false, error: "先写一句。", status: 400 };
   if ([...said].length > TEXT_MAX) return { ok: false, error: "这句话太长。", status: 400 };
-  if (running) return { ok: false, error: "主管还在忙。", status: 409 };
-  running = true;
+  if (busy.has(departmentId)) return { ok: false, error: "主管还在忙。", status: 409 };
+  busy.add(departmentId);
   let touched = false;
   let placed = false;
   let desks: DeskRow[] = [];
@@ -326,13 +331,18 @@ export async function speak(
     }
     return { ok: false, error: "主管这回没接上。", status: 500 };
   } finally {
-    const heldNow = new Set((await listDuties(env.DB).catch(() => [])).map((duty) => duty.person_id));
-    const fallback = Date.now() + DONE_MS + IDLE_MS;
-    for (const id of unarmedCrew()) {
-      if (heldNow.has(id)) disarmCrew(id);
-      else armCrew(id, fallback);
+    if (floorId) {
+      const roster = await listPeople(env.DB, floorId).catch(() => []);
+      const here = new Set(roster.map((person) => person.id));
+      const heldNow = new Set((await listDuties(env.DB, floorId).catch(() => [])).map((duty) => duty.person_id));
+      const fallback = Date.now() + DONE_MS + IDLE_MS;
+      for (const id of unarmedCrew()) {
+        if (!here.has(id)) continue;
+        if (heldNow.has(id)) disarmCrew(id);
+        else armCrew(id, fallback);
+      }
     }
-    running = false;
+    busy.delete(departmentId);
   }
 }
 
@@ -359,13 +369,13 @@ export async function runStaffDuty(
   personId: string,
   task: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  if (running) return { ok: false, error: "主管还在忙。" };
-  running = true;
+  const person = await hired(env.DB, personId);
+  if (!person || person.is_lead === 1) return { ok: false, error: "没有这个员工。" };
+  if (busy.has(person.department_id)) return { ok: false, error: "主管还在忙。" };
+  busy.add(person.department_id);
   try {
     const runtime = openPi(env);
     if (!runtime.ok) return { ok: false, error: runtime.error };
-    const person = await hired(env.DB, personId);
-    if (!person || person.is_lead === 1) return { ok: false, error: "没有这个员工。" };
     const department = await departmentById(env.DB, person.department_id);
     if (!department) return { ok: false, error: "没有这一层。" };
     const rules = houseRules(department.name, department.rules);
@@ -483,8 +493,7 @@ export async function runStaffDuty(
     let at = Date.now();
     const clockLine: WorkLine = { id: crypto.randomUUID(), role: "clock", person_id: null, text: clock };
     const closing: WorkLine = { id: crypto.randomUUID(), role: "lead", person_id: null, text: report };
-    staged = {
-      departmentId: department.id,
+    staged.set(department.id, {
       id: clockLine.id,
       play: dutyScene({
         personId: person.id,
@@ -496,7 +505,7 @@ export async function runStaffDuty(
       }),
       closing,
       until: at + 120_000,
-    };
+    });
     await env.DB.batch([
       env.DB.prepare(
         "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, 'clock', NULL, ?, NULL, ?, ?)",
@@ -513,7 +522,7 @@ export async function runStaffDuty(
     });
     return { ok: false, error: "员工这回没接上。" };
   } finally {
-    running = false;
+    busy.delete(person.department_id);
   }
 }
 

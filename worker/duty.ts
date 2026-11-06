@@ -126,21 +126,28 @@ export async function runDue(env: Env): Promise<{ ran: number }> {
   ticking = true;
   try {
     const { speak, officeBusy, runStaffDuty } = await import("./work");
-    if (officeBusy()) return { ran: 0 };
     const now = Date.now();
-    const due = await env.DB.prepare(
-      "SELECT id, person_id, task, every_ms, next_at, created_at FROM duty WHERE next_at <= ? ORDER BY next_at ASC, id ASC LIMIT 1",
+    const dueRows = await env.DB.prepare(
+      "SELECT id, person_id, task, every_ms, next_at, created_at FROM duty WHERE next_at <= ? ORDER BY next_at ASC, id ASC LIMIT 8",
     )
       .bind(now)
-      .first<StoredDuty>();
-    if (!due) return { ran: 0 };
-    const person = await env.DB.prepare("SELECT id, name, is_lead, department_id FROM people WHERE id = ?")
-      .bind(due.person_id)
-      .first<{ id: string; name: string; is_lead: 0 | 1; department_id: string }>();
-    if (!person) {
-      await cancelDuty(env.DB, due.id);
-      return { ran: 0 };
+      .all<StoredDuty>();
+    let due: StoredDuty | undefined;
+    let person: { id: string; name: string; is_lead: 0 | 1; department_id: string } | null = null;
+    for (const row of dueRows.results) {
+      const owner = await env.DB.prepare("SELECT id, name, is_lead, department_id FROM people WHERE id = ?")
+        .bind(row.person_id)
+        .first<{ id: string; name: string; is_lead: 0 | 1; department_id: string }>();
+      if (!owner) {
+        await cancelDuty(env.DB, row.id);
+        continue;
+      }
+      if (officeBusy(owner.department_id)) continue;
+      due = row;
+      person = owner;
+      break;
     }
+    if (!due || !person) return { ran: 0 };
     const result =
       person.is_lead === 1
         ? await speak(
