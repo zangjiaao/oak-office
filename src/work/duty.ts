@@ -6,7 +6,7 @@ export type Duty = {
   next_at: number;
 };
 
-export const DUTY_MIN_MINUTES = 5;
+export const DUTY_MIN_MINUTES = 1;
 export const DUTY_MAX_MINUTES = 10_080;
 
 export function everyLabel(ms: number) {

@@ -30,7 +30,7 @@ export function scheduleTool(env: Env) {
     name: "schedule",
     label: "定时",
     description:
-      "安排一件周期工作。person_id 是主管自己或员工的 id。task 是到点要做的事。every_minutes 是间隔分钟，最少 5，最多 10080。第一次在大约半分钟后。",
+      `安排一件周期工作。person_id 是主管自己或员工的 id。task 是到点要做的事。every_minutes 是间隔分钟，最少 ${DUTY_MIN_MINUTES}，最多 ${DUTY_MAX_MINUTES}。第一次在大约半分钟后。`,
     parameters: ScheduleArgs,
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Static<typeof ScheduleArgs>) => {
@@ -119,8 +119,8 @@ export async function runDue(env: Env): Promise<{ ran: number }> {
     if (!lead) return { ran: 0 };
     const text =
       person.id === lead.id
-        ? `到点了。请你自己完成这件事，不要派给员工，也不要新建或取消定时：${due.task}`
-        : `到点了。请派 ${person.name}（${person.id}）完成这件事，不要新建或取消定时：${due.task}`;
+        ? `到点了。请你自己完成这件事，做完后用一句话告诉用户结果。不要派给员工，也不要新建或取消定时：${due.task}`
+        : `到点了。请派 ${person.name}（${person.id}）完成这件事，等他做完后用一句话向用户汇报他的结果。不要新建或取消定时：${due.task}`;
     const result = await speak(env, text, undefined, "clock");
     return { ran: result.ok ? 1 : 0 };
   } finally {

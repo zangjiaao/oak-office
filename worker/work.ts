@@ -181,12 +181,35 @@ export async function speak(
     }
     const spoken = produced.map((message) => visibleText(message)).filter((text) => text.length > 0);
     const final = [...produced].reverse().find((message) => visibleText(message));
-    const reply = spoken.at(-1) || (calls > 0 ? "人已经安排好了。" : "");
-    if (!reply || !final) {
+    const jobs = [...turn.jobs.values()];
+    const fresh = agent.state.messages.slice(before);
+    let sawTool = false;
+    let spokeAfterTools = false;
+    for (const message of fresh) {
+      if (message.role === "toolResult") sawTool = true;
+      if (message.role === "assistant" && visibleText(message) && sawTool) spokeAfterTools = true;
+    }
+    let reply = spoken.at(-1) || "";
+    let closingMessage = final;
+    if (from === "clock" && !spokeAfterTools) {
+      const report = jobs
+        .flatMap((job) => {
+          if (!job.note) return [];
+          const name = people.find((person) => person.id === job.personId)?.name ?? "员工";
+          return [`${name}回报：${job.note.text}`];
+        })
+        .join("\n");
+      if (report) {
+        reply = report;
+        const base = produced.at(-1);
+        closingMessage = base ? { ...base, content: [{ type: "text", text: reply }] } : final;
+      }
+    }
+    if (!reply && calls > 0) reply = "人已经安排好了。";
+    if (!reply || !closingMessage) {
       await restoreDesks(env.DB, desks);
       return { ok: false, error: "主管没有说完。", status: 502 };
     }
-    const jobs = [...turn.jobs.values()];
     const dutyIds = new Set(duties.map((duty) => duty.person_id));
     const inside = new Set(
       desks.filter((desk) => stillWorking(desk, Date.now(), dutyIds.has(desk.person_id))).map((desk) => desk.person_id),
@@ -229,7 +252,7 @@ export async function speak(
     writes.push(
       env.DB.prepare(
         "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'lead', NULL, ?, ?, ?)",
-      ).bind(closing.id, closing.text, JSON.stringify(replayMessage(final)), at),
+      ).bind(closing.id, closing.text, JSON.stringify(replayMessage(closingMessage)), at),
     );
     await env.DB.batch(writes);
     const office = await getWork(env.DB);
@@ -400,7 +423,7 @@ function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], dutie
     promptMemory(lead.memories),
     "你只和用户说话，用简短中文。要派人时，先单独说一句安排谁做什么，再调用 ask，用他们的 id。",
     "以后还用得上的事实用 remember 记一句。档案和最近的对话不用再记。",
-    "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字。到点会再叫你，那时候做完即可，不要再 schedule 或 unschedule。取消时用 unschedule。",
+    "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字，最少 1。到点会再叫你：员工的事用 ask 派给指定的人，等他做完后用一句话把他的结果告诉用户；你自己的事就自己做完再告诉用户。不要再 schedule 或 unschedule。取消时用 unschedule。",
     dutyList(duties, [lead, ...staff]),
     "不能发明员工，不能派给自己。问完之后用 mark 标成回报或卡住。全部做完后，再单独说一句总结，不要和安排写在同一句里。",
     "需要外界信息时用 search。要写脚本或改文件时用 read、write、edit、bash，文件都在办公室的工作目录里，path 用相对路径。",
