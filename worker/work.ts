@@ -327,6 +327,9 @@ export async function runStaffDuty(
       .first<DeskRow>();
     const inside = stillWorking(prior ?? undefined, Date.now(), true);
     const lead = (await listPeople(env.DB)).find((row) => row.is_lead === 1);
+    if (!lead) return { ok: false, error: "先指定一位主管。" };
+    const leadModel = runtime.modelFor(lead.model);
+    if (!leadModel) return { ok: false, error: `${lead.name}的模型不在目录里。` };
     releaseCrew(person.id);
     toolUses.set(person.id, 0);
     const steps: { pose: Pose; label: string }[] = [];
@@ -380,7 +383,48 @@ export async function runStaffDuty(
     else armCrew(person.id, rest + DONE_MS + IDLE_MS);
     await remember(env.DB, person.id, jobMemory(jobText, note));
     const clock = `到点了。${person.name}做了：${jobText}`;
-    const report = `${person.name}回报：${note}`;
+    const history = await linesOf(env.DB);
+    const identity = identityOf(lead);
+    const leader = new Agent({
+      streamFn: runtime.streamFn(1200),
+      getApiKey: runtime.getApiKey,
+      initialState: {
+        model: leadModel,
+        systemPrompt: [
+          `你是交付组主管${lead.name}。${identity.brief}${identity.dossier}`,
+          promptMemory(lead.memories),
+          "员工的定时任务已经做完。用你自己的话向用户说结果。不要派工，不要加「某某回报：」前缀，也不要原样贴出员工交来的全文。",
+        ]
+          .filter((line) => line.length > 0)
+          .join("\n"),
+        thinkingLevel: thinkingFor(lead.model, lead.thinking),
+        messages: history.flatMap((line, index) => replay(line, history[index - 1])),
+        tools: [],
+      },
+    });
+    await setDesk(env.DB, lead.id, "think", "在听");
+    const leadTimer = setTimeout(() => leader.abort(), 40_000);
+    try {
+      await leader.prompt(
+        `到点了。${person.name}已经做完：${jobText}。员工交来的结果是：${note}。请用你自己的话告诉用户。`,
+      );
+    } finally {
+      clearTimeout(leadTimer);
+      await setDesk(env.DB, lead.id, "idle", "等你一句话");
+    }
+    const leadAnswer = [...leader.state.messages]
+      .filter((message) => message.role === "assistant")
+      .reverse()
+      .find((message) => visibleText(message));
+    const report = leadAnswer ? clip(visibleText(leadAnswer), TEXT_MAX) : "";
+    if (!leadAnswer || !report || leader.state.errorMessage) {
+      await env.DB.prepare(
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'clock', NULL, ?, NULL, ?)",
+      )
+        .bind(crypto.randomUUID(), clock, Date.now())
+        .run();
+      return { ok: true };
+    }
     let at = Date.now();
     const clockLine: WorkLine = { id: crypto.randomUUID(), role: "clock", person_id: null, text: clock };
     const closing: WorkLine = { id: crypto.randomUUID(), role: "lead", person_id: null, text: report };
@@ -402,8 +446,8 @@ export async function runStaffDuty(
         "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'clock', NULL, ?, NULL, ?)",
       ).bind(clockLine.id, clock, at),
       env.DB.prepare(
-        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'lead', NULL, ?, NULL, ?)",
-      ).bind(closing.id, report, (at += 1)),
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'lead', NULL, ?, ?, ?)",
+      ).bind(closing.id, report, JSON.stringify(replayMessage(leadAnswer)), (at += 1)),
     ]);
     return { ok: true };
   } catch (error) {
