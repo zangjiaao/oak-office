@@ -2,12 +2,27 @@ import type { Pose } from "../office/types";
 
 export type FloorMark = { person_id: string; pose: Pose; label: string };
 
-export type WorkLine = { id: string; role: "user" | "lead"; text: string };
+export type WorkLine = {
+  id: string;
+  role: "user" | "lead" | "staff";
+  person_id: string | null;
+  text: string;
+};
+
+export type WorkBeat = {
+  person_id: string;
+  pose: Pose;
+  label: string;
+  hold: number;
+  line?: WorkLine;
+};
 
 export type WorkOffice = {
   lead: { id: string; name: string } | null;
   lines: WorkLine[];
   floor: FloorMark[];
+  play?: WorkBeat[];
+  closing?: WorkLine;
 };
 
 export async function loadWork(): Promise<WorkOffice> {

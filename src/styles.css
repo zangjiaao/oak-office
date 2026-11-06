@@ -146,9 +146,9 @@ button, input {
 }
 
 .log .user { align-self: flex-end; max-width: 92%; }
-.log .lead { align-self: flex-start; max-width: 96%; }
+.log .lead, .log .staff { align-self: flex-start; max-width: 96%; }
 
-.log .user p, .log .lead p {
+.log .user p, .log .lead p, .log .staff p {
   padding: 8px 10px;
 }
 
@@ -160,6 +160,11 @@ button, input {
 .log .lead p {
   background: #fffaf2;
   border: 1px solid #e0d2b8;
+}
+
+.log .staff p {
+  background: #efe2c4;
+  border: 1px solid #c6a15b;
 }
 
 .chat form { border-top: 1px solid #e0d2b8; }

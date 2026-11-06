@@ -26,10 +26,27 @@ const MarkArgs = obj({
 type Ask = Static<typeof AskArgs>;
 type Mark = Static<typeof MarkArgs>;
 
+export type WorkLine = {
+  id: string;
+  role: "user" | "lead" | "staff";
+  person_id: string | null;
+  text: string;
+};
+
+export type WorkBeat = {
+  person_id: string;
+  pose: Pose;
+  label: string;
+  hold: number;
+  line?: WorkLine;
+};
+
 export type WorkOffice = {
   lead: { id: string; name: string } | null;
-  lines: { id: string; role: "user" | "lead"; text: string }[];
+  lines: WorkLine[];
   floor: { person_id: string; pose: Pose; label: string }[];
+  play?: WorkBeat[];
+  closing?: WorkLine;
 };
 
 type DeskRow = {
@@ -42,10 +59,16 @@ type DeskRow = {
 
 type LineRow = {
   id: string;
-  role: "user" | "lead";
+  role: "user" | "lead" | "staff";
+  person_id: string | null;
   text: string;
   raw: string | null;
   created_at: number;
+};
+
+type Turn = {
+  beats: WorkBeat[];
+  notes: Map<string, WorkLine>;
 };
 
 export async function getWork(db: Env["DB"]): Promise<WorkOffice> {
@@ -72,6 +95,8 @@ export async function speak(
     const staff = people.filter((person) => person.is_lead === 0);
     const desks = await desksOf(env.DB);
     const prior = await linesOf(env.DB);
+    const turn: Turn = { beats: [], notes: new Map() };
+    beat(turn, lead.id, "think", "在听");
     let calls = 0;
     const agent = new Agent({
       streamFn: runtime.streamFn(700),
@@ -83,7 +108,7 @@ export async function speak(
         model: runtime.model,
         systemPrompt: leadPrompt(lead, staff, desks),
         messages: prior.flatMap((line) => replay(line)),
-        tools: [askTool(env, runtime, signal), markTool(env)],
+        tools: [askTool(env, runtime, signal, turn), markTool(env, turn)],
       },
     });
     const timer = setTimeout(() => agent.abort(), 50_000);
@@ -104,25 +129,41 @@ export async function speak(
     const final = [...produced].reverse().find((message) => visibleText(message));
     const reply = final ? visibleText(final) : calls > 0 ? "人已经安排好了。" : "";
     if (!reply || !final) return { ok: false, error: "主管没有说完。", status: 502 };
+    for (const [personId, line] of turn.notes) {
+      await setDesk(env.DB, personId, "done", "做完");
+      beat(turn, personId, "done", "做完", line);
+    }
     const listening = await deskOf(env.DB, lead.id);
     if (listening?.pose === "think" && listening.label === "在听") {
       await setDesk(env.DB, lead.id, "idle", "等你一句话");
     }
     const now = Date.now();
-    await env.DB.batch([
-      env.DB.prepare("INSERT INTO work_line (id, role, text, raw, created_at) VALUES (?, 'user', ?, NULL, ?)").bind(
-        crypto.randomUUID(),
-        said,
-        now,
-      ),
-      env.DB.prepare("INSERT INTO work_line (id, role, text, raw, created_at) VALUES (?, 'lead', ?, ?, ?)").bind(
-        crypto.randomUUID(),
-        reply,
-        JSON.stringify(replayMessage(final)),
-        now + 1,
-      ),
-    ]);
-    return { ok: true, office: await getWork(env.DB) };
+    const userLine: WorkLine = { id: crypto.randomUUID(), role: "user", person_id: null, text: said };
+    const closing: WorkLine = { id: crypto.randomUUID(), role: "lead", person_id: null, text: reply };
+    const staffLines = turn.beats.flatMap((step) => (step.line ? [step.line] : []));
+    let at = now;
+    const writes = [
+      env.DB.prepare(
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'user', NULL, ?, NULL, ?)",
+      ).bind(userLine.id, userLine.text, at),
+    ];
+    for (const line of staffLines) {
+      at += 1;
+      writes.push(
+        env.DB.prepare(
+          "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'staff', ?, ?, NULL, ?)",
+        ).bind(line.id, line.person_id, line.text, at),
+      );
+    }
+    at += 1;
+    writes.push(
+      env.DB.prepare(
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at) VALUES (?, 'lead', NULL, ?, ?, ?)",
+      ).bind(closing.id, closing.text, JSON.stringify(replayMessage(final)), at),
+    );
+    await env.DB.batch(writes);
+    const office = await getWork(env.DB);
+    return { ok: true, office: { ...office, play: turn.beats, closing } };
   } catch (error) {
     console.error(error);
     const message = error instanceof Error ? error.message : "";
@@ -133,7 +174,12 @@ export async function speak(
   }
 }
 
-function askTool(env: Env, runtime: Extract<ReturnType<typeof openPi>, { ok: true }>, parent?: AbortSignal) {
+function askTool(
+  env: Env,
+  runtime: Extract<ReturnType<typeof openPi>, { ok: true }>,
+  parent: AbortSignal | undefined,
+  turn: Turn,
+) {
   return {
     name: "ask",
     label: "派给员工",
@@ -148,6 +194,7 @@ function askTool(env: Env, runtime: Extract<ReturnType<typeof openPi>, { ok: tru
       const task = clip(args.task, 200);
       if (!label || !task) return fail("派工要写清事情和状态。");
       await setDesk(env.DB, person.id, args.pose, label, task, null);
+      beat(turn, person.id, args.pose, label);
       const staff = new Agent({
         streamFn: runtime.streamFn(400),
         getApiKey: runtime.getApiKey,
@@ -169,17 +216,24 @@ function askTool(env: Env, runtime: Extract<ReturnType<typeof openPi>, { ok: tru
       const note = answer ? clip(visibleText(answer), 500) : "";
       if (!note || staff.state.errorMessage) {
         await setDesk(env.DB, person.id, "error", "卡住");
+        beat(turn, person.id, "error", "卡住");
         return fail(note || "员工这回没接上。");
       }
       await env.DB.prepare("UPDATE work_desk SET note = ?, updated_at = ? WHERE person_id = ?")
         .bind(note, Date.now(), person.id)
         .run();
+      turn.notes.set(person.id, {
+        id: crypto.randomUUID(),
+        role: "staff",
+        person_id: person.id,
+        text: note,
+      });
       return { content: [{ type: "text" as const, text: note }], details: { person_id: person.id } };
     },
   };
 }
 
-function markTool(env: Env) {
+function markTool(env: Env, turn: Turn) {
   return {
     name: "mark",
     label: "改姿态",
@@ -192,6 +246,9 @@ function markTool(env: Env) {
       const label = clip(args.label, 16);
       if (!label) return fail("状态要写一句话。");
       await setDesk(env.DB, person.id, args.pose, label);
+      const note = turn.notes.get(person.id);
+      if (note) turn.notes.delete(person.id);
+      beat(turn, person.id, args.pose, label, note);
       return { content: [{ type: "text" as const, text: `${person.name}现在${label}。` }], details: { person_id: person.id } };
     },
   };
@@ -239,11 +296,29 @@ function replay(line: LineRow): AgentMessage[] {
   }
 }
 
+function beat(turn: Turn, personId: string, pose: Pose, label: string, line?: WorkLine) {
+  turn.beats.push({ person_id: personId, pose, label, hold: holdFor(pose, label), line });
+}
+
+function holdFor(pose: Pose, label: string) {
+  if (label === "在听") return 1100;
+  if (pose === "report") return 1600;
+  if (pose === "read" || pose === "type" || pose === "run" || pose === "wait" || pose === "handoff" || pose === "think") {
+    return 1500;
+  }
+  return 1000;
+}
+
 function office(people: PersonRow[], lines: LineRow[], floor: { person_id: string; pose: Pose; label: string }[]): WorkOffice {
   const lead = people.find((person) => person.is_lead === 1);
   return {
     lead: lead ? { id: lead.id, name: lead.name } : null,
-    lines: lines.map((line) => ({ id: line.id, role: line.role, text: line.text })),
+    lines: lines.map((line) => ({
+      id: line.id,
+      role: line.role,
+      person_id: line.person_id,
+      text: line.text,
+    })),
     floor,
   };
 }
@@ -251,7 +326,7 @@ function office(people: PersonRow[], lines: LineRow[], floor: { person_id: strin
 async function linesOf(db: Env["DB"]) {
   const { results } = await db
     .prepare(
-      `SELECT id, role, text, raw, created_at FROM work_line ORDER BY created_at DESC, id DESC LIMIT ${HISTORY}`,
+      `SELECT id, role, person_id, text, raw, created_at FROM work_line ORDER BY created_at DESC, id DESC LIMIT ${HISTORY}`,
     )
     .all<LineRow>();
   return results.reverse();
