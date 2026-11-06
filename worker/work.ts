@@ -1,6 +1,6 @@
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { obj, oneOf, str, type Static } from "@earendil-works/pi-schema";
-import { identityOf, type PersonRow } from "../src/people/record";
+import { identityOf, thinkingFor, type PersonRow } from "../src/people/record";
 import { DONE_MS, IDLE_MS, stillWorking } from "../src/office/shift";
 import { armCrew, keepCrew, liveCrew, releaseCrew, unarmedCrew } from "./crew";
 import { deskTools } from "./tools";
@@ -111,6 +111,8 @@ export async function speak(
     const staff = people.filter((person) => person.is_lead === 0);
     const desks = await desksOf(env.DB);
     const prior = await linesOf(env.DB);
+    const model = runtime.modelFor(lead.model);
+    if (!model) return { ok: false, error: `${lead.name}的模型不在目录里。`, status: 400 };
     const turn: Turn = { jobs: new Map(), leadSteps: [] };
     let calls = 0;
     const agent = new Agent({
@@ -120,9 +122,9 @@ export async function speak(
       beforeToolCall: async () =>
         ++calls > 12 ? { block: true, terminate: true, reason: "这一轮派得够多了。" } : undefined,
       initialState: {
-        model: runtime.model,
+        model,
         systemPrompt: leadPrompt(lead, staff, desks),
-        thinkingLevel: "low",
+        thinkingLevel: thinkingFor(lead.model, lead.thinking),
         messages: prior.flatMap((line) => replay(line)),
         tools: [
           askTool(env, runtime, signal, turn),
@@ -146,7 +148,9 @@ export async function speak(
       return { ok: false, error: "主管这回没接上。", status: 502 };
     }
     const produced = agent.state.messages.slice(before).filter((message) => message.role === "assistant");
-    if (produced.some(thought)) turn.leadSteps.unshift({ pose: "think", label: "在想" });
+    if (thinkingFor(lead.model, lead.thinking) !== "off" && produced.some(thought)) {
+      turn.leadSteps.unshift({ pose: "think", label: "在想" });
+    }
     const spoken = produced.map((message) => visibleText(message)).filter((text) => text.length > 0);
     const final = [...produced].reverse().find((message) => visibleText(message));
     const reply = spoken.at(-1) || (calls > 0 ? "人已经安排好了。" : "");
@@ -234,6 +238,8 @@ function askTool(
       job.steps = [];
       await setDesk(env.DB, person.id, args.pose, label, task, null);
       toolUses.set(person.id, 0);
+      const model = runtime.modelFor(person.model);
+      if (!model) return fail(`${person.name}的模型不在目录里。`);
       const staying = liveCrew(person.id);
       const staff =
         staying ??
@@ -247,12 +253,14 @@ function askTool(
             return used > 8 ? { block: true, reason: "工具用得够多了。" } : undefined;
           },
           initialState: {
-            model: runtime.model,
+            model,
             systemPrompt: staffPrompt(person),
-            thinkingLevel: "low",
+            thinkingLevel: thinkingFor(person.model, person.thinking),
           },
         });
-      staff.state.thinkingLevel = "low";
+      const thinking = thinkingFor(person.model, person.thinking);
+      staff.state.model = model;
+      staff.state.thinkingLevel = thinking;
       staff.state.tools = deskTools(env, job.steps, (pose, label) => setDesk(env.DB, person.id, pose, label));
       keepCrew(person.id, staff);
       const stop = () => {
@@ -268,7 +276,9 @@ function askTool(
         signal?.removeEventListener("abort", stop);
         parent?.removeEventListener("abort", stop);
       }
-      if (staff.state.messages.slice(heard).some(thought)) job.steps.unshift({ pose: "think", label: "在想" });
+      if (thinking !== "off" && staff.state.messages.slice(heard).some(thought)) {
+        job.steps.unshift({ pose: "think", label: "在想" });
+      }
       const answer = [...staff.state.messages].reverse().find((message) => message.role === "assistant");
       const note = answer ? clip(visibleText(answer), 500) : "";
       if (!note || staff.state.errorMessage) {
@@ -469,7 +479,7 @@ async function desksOf(db: Env["DB"]) {
 async function hired(db: Env["DB"], id: string) {
   return db
     .prepare(
-      "SELECT id, name, gender, hair, skin, shirt, pants, hair_style, brief, dossier, is_lead, seat, created_at, updated_at FROM people WHERE id = ?",
+      "SELECT id, name, gender, hair, skin, shirt, pants, hair_style, brief, dossier, is_lead, model, thinking, seat, created_at, updated_at FROM people WHERE id = ?",
     )
     .bind(id)
     .first<PersonRow>();
