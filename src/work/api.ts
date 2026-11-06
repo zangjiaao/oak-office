@@ -1,10 +1,12 @@
 import type { Pose } from "../office/types";
 
-export type FloorMark = { person_id: string; pose: Pose; label: string; updated_at?: number };
+export type FloorMark = { person_id: string; pose: Pose; label: string; updated_at?: number; visit?: string };
+
+export type DutyHold = { person_id: string; label: string };
 
 export type WorkLine = {
   id: string;
-  role: "user" | "lead" | "staff";
+  role: "user" | "lead" | "staff" | "clock";
   person_id: string | null;
   text: string;
 };
@@ -16,14 +18,17 @@ export type WorkBeat = {
   hold: number;
   line?: WorkLine;
   lineAt?: "start" | "end";
+  visit?: string;
 };
 
 export type WorkOffice = {
   lead: { id: string; name: string } | null;
   lines: WorkLine[];
   floor: FloorMark[];
+  holding: DutyHold[];
   play?: WorkBeat[];
   closing?: WorkLine;
+  playId?: string;
 };
 
 export async function loadWork(): Promise<WorkOffice> {

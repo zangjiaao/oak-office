@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { rosterLabel, rosterNote, type DraftPreview } from "../office/seats";
 import type { HairStyle, Look } from "../office/types";
-import { dismissPerson, hirePerson, updatePerson } from "./api";
+import { dismissPerson, forgetMemory, hirePerson, updatePerson } from "./api";
+import { cancelDuty, everyLabel, listDuties, type Duty } from "../work/duty";
 import {
   GENDER_LABEL,
   GENDERS,
@@ -61,6 +62,7 @@ export function RosterPanel({
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  const [duties, setDuties] = useState<Duty[]>([]);
   const handledPick = useRef<number | null>(pickRequest?.n ?? null);
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -73,6 +75,18 @@ export function RosterPanel({
   }, [form, onDraft]);
 
   useEffect(() => () => onDraft(null), [onDraft]);
+
+  useEffect(() => {
+    let gone = false;
+    void listDuties()
+      .then((rows) => {
+        if (!gone) setDuties(rows);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [people]);
 
   useEffect(() => {
     if (!form) return;
@@ -180,6 +194,43 @@ export function RosterPanel({
   const note = people ? rosterNote(people) : null;
   const roomForHire = people ? canHire(people) : false;
   const identity = form ? identityOf({ brief: form.brief, dossier: form.dossier }) : null;
+  const memories =
+    form?.kind === "edit" && form.id ? (people?.find((person) => person.id === form.id)?.memories ?? []) : [];
+  const dutiesHere = form?.kind === "edit" && form.id ? duties.filter((duty) => duty.person_id === form.id) : [];
+
+  async function dropDuty(dutyId: string) {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await cancelDuty(dutyId);
+      setDuties((current) => current.filter((duty) => duty.id !== dutyId));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "这个定时没有取消。");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function forget(noteId: string) {
+    if (!form?.id || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await forgetMemory(form.id, noteId);
+      onPeople(
+        (people ?? []).map((person) =>
+          person.id === form.id
+            ? { ...person, memories: (person.memories ?? []).filter((note) => note.id !== noteId) }
+            : person,
+        ),
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "这条记忆没有去掉。");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <aside className="chat staff">
@@ -372,6 +423,46 @@ export function RosterPanel({
                   ? `通用身份：${identity.brief}${identity.dossier}`
                   : "空着的部分用通用身份。"}
               </p>
+            ) : null}
+            {form.kind === "edit" ? (
+              <div className="field">
+                <span>定时</span>
+                {dutiesHere.length === 0 ? (
+                  <p className="hint">还没有定时。跟主管说周期要做的事，会排在这里。</p>
+                ) : (
+                  <ul className="memories">
+                    {dutiesHere.map((duty) => (
+                      <li key={duty.id}>
+                        <p>
+                          {everyLabel(duty.every_ms)}：{duty.task}
+                        </p>
+                        <button type="button" onClick={() => void dropDuty(duty.id)} disabled={saving}>
+                          取消定时
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+            {form.kind === "edit" ? (
+              <div className="field">
+                <span>记忆</span>
+                {memories.length === 0 ? (
+                  <p className="hint">还没有记忆。做完的事，和记住的事实，会出现在这里。</p>
+                ) : (
+                  <ul className="memories">
+                    {memories.map((note) => (
+                      <li key={note.id}>
+                        <p>{note.text}</p>
+                        <button type="button" onClick={() => void forget(note.id)} disabled={saving}>
+                          忘掉
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ) : null}
             {error ? <p className="file-error">{error}</p> : null}
           </form>

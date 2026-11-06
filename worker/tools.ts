@@ -1,6 +1,7 @@
 import { obj, str, type Static } from "@earendil-works/pi-schema";
 import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
+import { remember } from "./memory";
 
 type Step = { pose: Pose; label: string };
 type Mark = (pose: Pose, label: string) => Promise<void>;
@@ -19,6 +20,23 @@ export function deskTools(env: Env, steps: Step[], mark: Mark) {
     editTool(env, steps, mark),
     bashTool(env, steps, mark),
   ];
+}
+
+const RememberArgs = obj({ text: str() });
+
+export function rememberTool(env: Env, personId: string) {
+  return {
+    name: "remember",
+    label: "记住",
+    description: "记下以后还用得上的一句事实，比如用户的偏好或已经定下的决定。不要把整段对话记进去。",
+    parameters: RememberArgs,
+    executionMode: "sequential" as const,
+    execute: async (_id: string, args: Static<typeof RememberArgs>) => {
+      const note = await remember(env.DB, personId, args.text);
+      if (!note) return miss("要记住的内容是空的。");
+      return text("记住了。");
+    },
+  };
 }
 
 function searchTool(env: Env, steps: Step[], mark: Mark) {

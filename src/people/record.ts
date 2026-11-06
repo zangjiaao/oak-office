@@ -130,6 +130,12 @@ export function openSeat(
  * `brief` and `dossier` are null when the file leaves them blank.
  * Pi may only dispatch rows in this table. Rehearsal does not read it.
  */
+export type MemoryNote = {
+  id: string;
+  text: string;
+  created_at: number;
+};
+
 export type PersonRow = {
   id: string;
   name: string;
@@ -148,6 +154,8 @@ export type PersonRow = {
   seat: number | null;
   created_at: number;
   updated_at: number;
+  /** Present on roster reads. Writes leave it unset so a save does not wipe notes. */
+  memories?: MemoryNote[];
 };
 
 export type PersonDraft = {
@@ -248,7 +256,7 @@ export function applyPerson(people: PersonRow[], person: PersonRow): PersonRow[]
   const next = people.map((item) => {
     if (item.id === person.id) {
       found = true;
-      return person;
+      return { ...person, memories: person.memories ?? item.memories ?? [] };
     }
     if (person.is_lead === 1 && item.is_lead === 1) {
       return { ...item, is_lead: 0 as const, seat: openSeat(people, [person.id, item.id]) };

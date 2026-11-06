@@ -20,8 +20,13 @@ export function approach(from: Point, to: Point, elapsed: number) {
 export function useWalk(actors: ActorFrame[], enabled: boolean) {
   const settled = useRef<Record<string, Point>>({});
   const actorsRef = useRef(actors);
+  const offsetRef = useRef<Record<string, ReturnType<typeof approach>>>({});
+  // True for the commit that shows the office again. StrictMode runs that
+  // effect twice before microtasks, so both passes must skip walkFrom.
+  const resume = useRef(false);
   const [offset, setOffset] = useState<Record<string, ReturnType<typeof approach>>>({});
   actorsRef.current = actors;
+  offsetRef.current = offset;
   const key = enabled
     ? actors
         .map((actor) => {
@@ -33,12 +38,28 @@ export function useWalk(actors: ActorFrame[], enabled: boolean) {
     : "";
 
   useLayoutEffect(() => {
-    if (!enabled) return;
     const current = actorsRef.current;
+    if (!enabled) {
+      for (const actor of current) {
+        const frame = offsetRef.current[actor.id];
+        if (frame && !frame.done) settled.current[actor.id] = { x: frame.x, y: frame.y };
+      }
+      resume.current = true;
+      setOffset({});
+      return;
+    }
+    if (resume.current) {
+      for (const actor of current) settled.current[actor.id] = { x: actor.x, y: actor.y };
+      queueMicrotask(() => {
+        resume.current = false;
+      });
+      setOffset({});
+      return;
+    }
     const from: Record<string, Point> = {};
     let moving = false;
     for (const actor of current) {
-      const start = actor.walkFrom ?? settled.current[actor.id] ?? { x: actor.x, y: actor.y };
+      const start = settled.current[actor.id] ?? actor.walkFrom ?? { x: actor.x, y: actor.y };
       from[actor.id] = start;
       if (Math.hypot(actor.x - start.x, actor.y - start.y) >= 1) moving = true;
     }
@@ -52,8 +73,8 @@ export function useWalk(actors: ActorFrame[], enabled: boolean) {
       for (const actor of current) {
         const frame = approach(from[actor.id], actor, elapsed);
         next[actor.id] = frame;
-        if (frame.done) settled.current[actor.id] = { x: actor.x, y: actor.y };
-        else still = true;
+        settled.current[actor.id] = frame.done ? { x: actor.x, y: actor.y } : { x: frame.x, y: frame.y };
+        if (!frame.done) still = true;
       }
       setOffset(next);
       return still;

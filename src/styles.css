@@ -19,10 +19,19 @@ button, input {
 
 .app {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
+  grid-template-columns: minmax(0, 1fr) 8px var(--chat-width, 340px);
   height: 100%;
   min-height: 0;
 }
+
+.split {
+  background: #6b4428;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.pane-on { display: contents; }
+.pane-off { display: none; }
 
 .floor {
   display: grid;
@@ -112,7 +121,6 @@ button, input {
   grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   background: #f3ead7;
-  border-left: 8px solid #6b4428;
 }
 
 .chat header, .chat form, .roster { padding: 14px 16px; }
@@ -128,7 +136,10 @@ button, input {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  scrollbar-width: none;
 }
+
+.log::-webkit-scrollbar { width: 0; height: 0; }
 
 .empty { margin: 0; color: #7a6a56; }
 
@@ -147,6 +158,7 @@ button, input {
 
 .log .user { align-self: flex-end; max-width: 92%; }
 .log .lead, .log .staff { align-self: flex-start; max-width: 96%; }
+.log .clock { align-self: flex-start; max-width: 96%; }
 
 .log .user p, .log .lead p, .log .staff p {
   padding: 8px 10px;
@@ -165,6 +177,13 @@ button, input {
 .log .staff p {
   background: #efe2c4;
   border: 1px solid #c6a15b;
+}
+
+.log .clock p {
+  background: transparent;
+  color: #7a6a56;
+  padding: 0;
+  text-align: left;
 }
 
 .chat form { border-top: 1px solid #e0d2b8; }
@@ -338,6 +357,34 @@ button, input {
 
 .hint { margin: 12px 0 0; color: #7a6a56; font-size: 13px; line-height: 1.45; }
 
+.memories {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memories li {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.memories p { margin: 0; flex: 1; line-height: 1.45; }
+
+.memories button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid #d9c7a4;
+  background: #fffaf2;
+  color: #241c16;
+  padding: 4px 8px;
+}
+
+.memories button:disabled { opacity: 0.55; cursor: default; }
+
 .file-error { margin: 12px 0 0; color: #a8322a; }
 
 .staff-bar {
@@ -365,5 +412,6 @@ button, input {
 
 @media (max-width: 800px) {
   .app { grid-template-columns: 1fr; grid-template-rows: minmax(280px, 1fr) minmax(240px, 42vh); }
-  .chat { border-left: 0; border-top: 8px solid #6b4428; }
+  .split { display: none; }
+  .chat { border-top: 8px solid #6b4428; }
 }
