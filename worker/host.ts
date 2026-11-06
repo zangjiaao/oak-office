@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { accessSync, constants } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import path from "node:path";
@@ -67,25 +68,57 @@ async function edit(response: import("node:http").ServerResponse, body: Record<s
   send(response, 200, { ok: true, text: `已修改 ${String(body.path)}` });
 }
 
-function bash(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+async function bash(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
   const command = typeof body.command === "string" ? body.command.trim() : "";
   if (!command) return send(response, 400, { ok: false, error: "没有命令。" });
+  await mkdir(ROOT, { recursive: true });
   const timeout = Math.min(30, Math.max(1, Number(body.timeout) || 20)) * 1000;
-  const child = spawn("bash", ["-lc", command], {
+  const child = spawn(bashBin(), ["-lc", command], {
     cwd: ROOT,
     env: cleanEnv(),
   });
   let output = "";
+  let settled = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const finish = (body: unknown) => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(timer);
+    send(response, 200, body);
+  };
   const take = (chunk: Buffer) => {
     if (output.length < 8000) output += chunk.toString("utf8");
   };
-  child.stdout.on("data", take);
-  child.stderr.on("data", take);
-  const timer = setTimeout(() => child.kill("SIGKILL"), timeout);
-  child.on("close", (code) => {
-    clearTimeout(timer);
-    send(response, 200, { ok: true, text: clip(output, 6000), exitCode: code ?? 1 });
+  child.stdout?.on("data", take);
+  child.stderr?.on("data", take);
+  timer = setTimeout(() => child.kill("SIGKILL"), timeout);
+  child.on("error", (error: NodeJS.ErrnoException) => {
+    const missing = error.code === "ENOENT";
+    finish({
+      ok: false,
+      error: missing ? "这台机器找不到 bash，脚本跑不了。" : "脚本没跑起来。",
+    });
   });
+  child.on("close", (code) => {
+    finish({ ok: true, text: clip(output, 6000), exitCode: code ?? 1 });
+  });
+}
+
+function bashBin() {
+  const candidates =
+    process.platform === "win32"
+      ? ["C:\\Program Files\\Git\\bin\\bash.exe", "C:\\Program Files\\Git\\usr\\bin\\bash.exe", "bash"]
+      : ["/bin/bash", "/usr/bin/bash", "bash"];
+  for (const bin of candidates) {
+    if (bin === "bash") return bin;
+    try {
+      accessSync(bin, constants.X_OK);
+      return bin;
+    } catch {
+      /* This path is not the shell. */
+    }
+  }
+  return "bash";
 }
 
 async function locate(input: unknown) {
