@@ -1,6 +1,7 @@
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { obj, oneOf, str, type Static } from "@earendil-works/pi-schema";
 import { identityOf, type PersonRow } from "../src/people/record";
+import { stillWorking } from "../src/office/shift";
 import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
 import { listPeople } from "./people";
@@ -45,7 +46,7 @@ export type WorkBeat = {
 export type WorkOffice = {
   lead: { id: string; name: string } | null;
   lines: WorkLine[];
-  floor: { person_id: string; pose: Pose; label: string }[];
+  floor: { person_id: string; pose: Pose; label: string; updated_at?: number }[];
   play?: WorkBeat[];
   closing?: WorkLine;
 };
@@ -56,6 +57,7 @@ type DeskRow = {
   label: string;
   task: string | null;
   note: string | null;
+  updated_at: number;
 };
 
 type LineRow = {
@@ -139,15 +141,23 @@ export async function speak(
     const reply = spoken.at(-1) || (calls > 0 ? "人已经安排好了。" : "");
     if (!reply || !final) return { ok: false, error: "主管没有说完。", status: 502 };
     const jobs = [...turn.jobs.values()];
-    for (const job of jobs) {
-      await setDesk(env.DB, job.personId, job.stuck ? "error" : "done", job.stuck ? "卡住" : "做完");
-    }
-    await setDesk(env.DB, lead.id, "idle", "等你一句话");
+    const inside = new Set(desks.filter((desk) => stillWorking(desk, Date.now())).map((desk) => desk.person_id));
     const plan =
       spoken.length > 1
         ? { id: crypto.randomUUID(), role: "lead" as const, person_id: null, text: spoken[0] }
         : undefined;
-    const play = sceneOf(lead.id, jobs, plan);
+    const play = sceneOf(lead.id, jobs, plan, inside);
+    const started = Date.now();
+    let cursor = started;
+    const restAt = new Map<string, number>();
+    for (const step of play) {
+      cursor += step.hold;
+      if (step.label === "做完") restAt.set(step.person_id, cursor + 700);
+    }
+    for (const job of jobs) {
+      await setDesk(env.DB, job.personId, "done", "做完", undefined, undefined, restAt.get(job.personId) ?? cursor + 700);
+    }
+    await setDesk(env.DB, lead.id, "idle", "等你一句话");
     const now = Date.now();
     const userLine: WorkLine = { id: crypto.randomUUID(), role: "user", person_id: null, text: said };
     const closing: WorkLine = { id: crypto.randomUUID(), role: "lead", person_id: null, text: reply };
@@ -316,12 +326,12 @@ function takeJob(turn: Turn, personId: string, pose: Pose, label: string) {
   return job;
 }
 
-function sceneOf(leadId: string, jobs: Job[], plan?: WorkLine): WorkBeat[] {
+function sceneOf(leadId: string, jobs: Job[], plan: WorkLine | undefined, inside: Set<string>): WorkBeat[] {
   const beats: WorkBeat[] = [{ person_id: leadId, pose: "think", label: "在听", hold: 1100 }];
   if (jobs.length === 0) return beats;
   beats.push({ person_id: leadId, pose: "idle", label: "等他们", hold: 600, line: plan, lineAt: plan ? "start" : undefined });
   for (const job of jobs) {
-    beats.push({ person_id: job.personId, pose: "arrive", label: "进来了", hold: 3200 });
+    if (!inside.has(job.personId)) beats.push({ person_id: job.personId, pose: "arrive", label: "进来了", hold: 3200 });
     beats.push({ person_id: job.personId, pose: job.pose, label: job.label, hold: holdFor(job.pose, job.label) });
     const next = job.next;
     if (
@@ -336,6 +346,7 @@ function sceneOf(leadId: string, jobs: Job[], plan?: WorkLine): WorkBeat[] {
     }
     if (job.stuck) {
       beats.push({ person_id: job.personId, pose: "error", label: "卡住", hold: 1200, line: job.note });
+      beats.push({ person_id: job.personId, pose: "done", label: "做完", hold: 900 });
     }
   }
   const reporting = jobs.filter((job) => job.note && !job.stuck);
@@ -358,7 +369,11 @@ function holdFor(pose: Pose, label: string) {
   return 1000;
 }
 
-function office(people: PersonRow[], lines: LineRow[], floor: { person_id: string; pose: Pose; label: string }[]): WorkOffice {
+function office(
+  people: PersonRow[],
+  lines: LineRow[],
+  floor: { person_id: string; pose: Pose; label: string; updated_at?: number }[],
+): WorkOffice {
   const lead = people.find((person) => person.is_lead === 1);
   return {
     lead: lead ? { id: lead.id, name: lead.name } : null,
@@ -383,14 +398,14 @@ async function linesOf(db: Env["DB"]) {
 
 async function floorOf(db: Env["DB"]) {
   const { results } = await db
-    .prepare("SELECT person_id, pose, label FROM work_desk")
-    .all<{ person_id: string; pose: Pose; label: string }>();
+      .prepare("SELECT person_id, pose, label, updated_at FROM work_desk")
+    .all<{ person_id: string; pose: Pose; label: string; updated_at: number }>();
   return results;
 }
 
 async function desksOf(db: Env["DB"]) {
   const { results } = await db
-    .prepare("SELECT person_id, pose, label, task, note FROM work_desk")
+      .prepare("SELECT person_id, pose, label, task, note, updated_at FROM work_desk")
     .all<DeskRow>();
   return results;
 }
@@ -411,8 +426,9 @@ async function setDesk(
   label: string,
   task?: string | null,
   note?: string | null,
+  at?: number,
 ) {
-  const now = Date.now();
+  const now = at ?? Date.now();
   if (task === undefined) {
     await db
       .prepare(

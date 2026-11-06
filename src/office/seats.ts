@@ -79,7 +79,7 @@ function layout(
     const editing = Boolean(draft?.kind === "edit" && draft.id === person.id);
     const name = editing && draft ? draft.name.trim() || person.name : person.name;
     const look = editing && draft ? draft.look : lookOf(person);
-    if (room && person.is_lead !== 1 && !room[person.id] && !(editing && draft?.isLead)) continue;
+    if (room && person.is_lead !== 1 && !inRoom(room[person.id]) && !(editing && draft?.isLead)) continue;
     if (editing && draft) {
       const point = draft.isLead ? SPOTS.lead : staffSpot(keptSeat(people, person, draft.isLead));
       if (!point) continue;
@@ -155,10 +155,19 @@ function staffPoint(seat: number): Point {
   return { x: COLS[seat % COLS.length], y: ROW_Y[Math.floor(seat / COLS.length)] };
 }
 
+function inRoom(mark?: { label: string }) {
+  return Boolean(mark && mark.label !== "不在");
+}
+
 function actor(person: Placed, mark?: { pose: Pose; label: string }): ActorFrame {
   const entering = mark?.pose === "arrive" && mark.label === "进来了" && !person.lead;
+  const leaving = mark?.label === "下班" && !person.lead;
   const reporting = mark?.pose === "report" && !person.lead;
-  const point = reporting ? { x: person.point.x < SPOTS.lead.x ? 168 : 232, y: 168 } : person.point;
+  const point = leaving
+    ? { x: SPOTS.door.x, y: SPOTS.door.y }
+    : reporting
+      ? { x: person.point.x < SPOTS.lead.x ? 168 : 232, y: 168 }
+      : person.point;
   return {
     id: person.id,
     name: person.name,

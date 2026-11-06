@@ -1,6 +1,6 @@
 import type { Pose } from "../office/types";
 
-export type FloorMark = { person_id: string; pose: Pose; label: string };
+export type FloorMark = { person_id: string; pose: Pose; label: string; updated_at?: number };
 
 export type WorkLine = {
   id: string;

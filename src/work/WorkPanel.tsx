@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { PersonRow } from "../people/record";
+import { shift, useNow } from "../office/shift";
 import { loadWork, sayWork, type FloorMark, type WorkLine } from "./api";
 
 export function WorkPanel({
@@ -104,6 +105,7 @@ export function WorkPanel({
     onFloor(marks);
   }
 
+  const now = useNow(true);
   const named = new Map(people?.map((person) => [person.id, person.name]));
 
   return (
@@ -145,10 +147,11 @@ export function WorkPanel({
       <ul className="roster">
         {(people ?? []).map((person) => {
           const mark = floor.find((item) => item.person_id === person.id);
+          const view = mark ? shift(mark, now) : null;
           return (
             <li key={person.id}>
               <b>{named.get(person.id) ?? person.name}</b>
-              <em>{mark?.label ?? (person.is_lead === 1 ? "主管" : "闲置")}</em>
+              <em>{view?.label ?? (person.is_lead === 1 ? "主管" : "闲置")}</em>
             </li>
           );
         })}
