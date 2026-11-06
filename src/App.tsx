@@ -5,10 +5,14 @@ import { ROOM } from "./office/roster";
 import { DURATION } from "./office/script";
 import { activePoses, actorsAt, linesAt } from "./office/scene";
 import { rosterView, type DraftPreview } from "./office/seats";
+import { shift, useNow } from "./office/shift";
+import { useWalk } from "./office/walk";
 import { POSE_NAME, type Pose } from "./office/types";
 import { listPeople } from "./people/api";
 import { RosterPanel } from "./people/RosterPanel";
 import type { PersonRow } from "./people/record";
+import { WorkPanel } from "./work/WorkPanel";
+import type { FloorMark } from "./work/api";
 
 const POSES: Pose[] = [
   "idle",
@@ -24,7 +28,7 @@ const POSES: Pose[] = [
   "error",
 ];
 
-type Mode = "roster" | "rehearsal";
+type Mode = "work" | "roster" | "rehearsal";
 
 function format(ms: number) {
   const sec = Math.floor(ms / 1000);
@@ -32,7 +36,7 @@ function format(ms: number) {
 }
 
 export function App() {
-  const [mode, setMode] = useState<Mode>("roster");
+  const [mode, setMode] = useState<Mode>("work");
   const [time, setTime] = useState(0);
   const [playing, setPlaying] = useState(true);
   const [people, setPeople] = useState<PersonRow[] | null>(null);
@@ -40,12 +44,16 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pickRequest, setPickRequest] = useState<{ id: string; n: number } | null>(null);
   const [draft, setDraft] = useState<DraftPreview | null>(null);
+  const [floor, setFloor] = useState<Record<string, FloorMark>>({});
   const pickN = useRef(0);
   const playingRef = useRef(true);
   const timeRef = useRef(0);
-  const modeRef = useRef<Mode>("roster");
+  const modeRef = useRef<Mode>("work");
   const logRef = useRef<HTMLDivElement>(null);
   const onDraft = useCallback((next: DraftPreview | null) => setDraft(next), []);
+  const onFloor = useCallback((marks: FloorMark[]) => {
+    setFloor(Object.fromEntries(marks.map((mark) => [mark.person_id, mark])));
+  }, []);
 
   useEffect(() => {
     playingRef.current = playing;
@@ -86,8 +94,22 @@ export function App() {
 
   const lines = mode === "rehearsal" ? linesAt(time) : [];
   const rehearsalActors = mode === "rehearsal" ? actorsAt(time) : [];
-  const roster = rosterView(people ?? [], draft, selectedId);
-  const actors = mode === "rehearsal" ? rehearsalActors : roster.actors;
+  const now = useNow(mode !== "rehearsal");
+  const shownFloor = Object.fromEntries(
+    Object.entries(floor).map(([id, mark]) => {
+      const view = shift(mark, now);
+      return [id, { ...mark, pose: view.pose, label: view.label }];
+    }),
+  );
+  const roster = rosterView(
+    people ?? [],
+    mode === "roster" ? draft : null,
+    mode === "roster" ? selectedId : null,
+    shownFloor,
+    true,
+  );
+  const stood = useWalk(roster.actors, mode === "work");
+  const actors = mode === "rehearsal" ? rehearsalActors : stood;
   const poses = activePoses(time);
 
   useEffect(() => {
@@ -112,14 +134,15 @@ export function App() {
         <header className="floor-bar">
           <div>
             <strong>Oak Office</strong>
-            <span>{mode === "roster" ? "交付组 · 编制" : "交付组 · 排练"}</span>
+            <span>
+              {mode === "roster" ? "交付组 · 编制" : mode === "rehearsal" ? "交付组 · 排练" : "交付组 · 办公"}
+            </span>
           </div>
           <div className="modes">
-            <button
-              type="button"
-              className={mode === "roster" ? "on" : ""}
-              onClick={() => setMode("roster")}
-            >
+            <button type="button" className={mode === "work" ? "on" : ""} onClick={() => setMode("work")}>
+              办公
+            </button>
+            <button type="button" className={mode === "roster" ? "on" : ""} onClick={() => setMode("roster")}>
               编制
             </button>
             <button
@@ -149,17 +172,19 @@ export function App() {
           desks={mode === "rehearsal" ? rehearsalDesks() : roster.desks}
           onPick={mode === "roster" ? pick : undefined}
         />
-        {mode === "rehearsal" ? (
+        {mode === "rehearsal" || mode === "work" ? (
           <footer className="poses">
             {POSES.map((pose) => (
-              <span key={pose} className={poses.has(pose) ? "on" : ""}>
+              <span key={pose} className={(mode === "rehearsal" ? poses : new Set(actors.map((actor) => actor.pose))).has(pose) ? "on" : ""}>
                 {POSE_NAME[pose]}
               </span>
             ))}
           </footer>
         ) : null}
       </section>
-      {mode === "roster" ? (
+      {mode === "work" ? (
+        <WorkPanel people={people} loadError={loadError} onFloor={onFloor} onRetry={() => void load()} />
+      ) : mode === "roster" ? (
         <RosterPanel
           people={people}
           loadError={loadError}

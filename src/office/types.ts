@@ -54,6 +54,7 @@ export type ActorFrame = {
   y: number;
   face: 1 | -1;
   walking: boolean;
+  walkFrom?: Point;
   selected?: boolean;
 };
 
