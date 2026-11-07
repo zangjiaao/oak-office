@@ -100,7 +100,19 @@ export function BoardDesk({
   return (
     <div className="desk-screen">
       <button type="button" className="desk-dim" aria-label="离开看板" onClick={onClose} />
-      <section className="slate" role="dialog" aria-label="看板" style={{ ...box, background: face, color: ink(face) } as CSSProperties}>
+      <section
+        className="slate"
+        role="dialog"
+        aria-label="看板"
+        style={
+          {
+            ...box,
+            backgroundColor: face,
+            backgroundImage: "linear-gradient(180deg, rgba(255,255,255,0.2), transparent 32%)",
+            color: ink(face),
+          } as CSSProperties
+        }
+      >
         <header>
           <strong>看板</strong>
           <button type="button" onClick={onClose}>
@@ -108,15 +120,18 @@ export function BoardDesk({
           </button>
         </header>
         <div className="slate-body">
-          {error ? <p>{error}</p> : null}
+          {error ? <p className="slip">{error}</p> : null}
           <h2>定时</h2>
           <ul>
-            {duties === null && !error ? <li>在读定时。</li> : null}
-            {duties && duties.length === 0 ? <li>还没有定时。</li> : null}
+            {duties === null && !error ? <li className="slip quiet">在读定时。</li> : null}
+            {duties && duties.length === 0 ? <li className="slip quiet">还没有定时。</li> : null}
             {duties?.map((duty) => (
-              <li key={duty.id}>
+              <li key={duty.id} className="slip">
                 <span>
-                  {personName(people, duty.person_id)} · {everyLabel(duty.every_ms)} · {duty.task}
+                  <small>
+                    {personName(people, duty.person_id)} · {everyLabel(duty.every_ms)}
+                  </small>
+                  <b>{duty.task}</b>
                 </span>
                 <em>{duty.next_at <= now ? "在做" : nextLabel(duty.next_at)}</em>
               </li>
@@ -124,12 +139,15 @@ export function BoardDesk({
           </ul>
           <h2>这件事</h2>
           <ul>
-            {tasks === null && !error ? <li>在读板上的事。</li> : null}
-            {tasks && tasks.length === 0 ? <li>还没有要记的事。</li> : null}
+            {tasks === null && !error ? <li className="slip quiet">在读板上的事。</li> : null}
+            {tasks && tasks.length === 0 ? <li className="slip quiet">还没有要记的事。</li> : null}
             {rows.map((task) => (
-              <li key={task.id} className={task.state === "done" ? "done" : ""}>
+              <li key={task.id} className={task.state === "done" ? "slip done" : "slip"}>
                 <span>
-                  {stateName(task.state)} · {personName(people, task.person_id)} · {task.title}
+                  <small>
+                    {stateName(task.state)} · {personName(people, task.person_id)}
+                  </small>
+                  <b>{task.title}</b>
                 </span>
                 <span className="slate-actions">
                   {task.state !== "doing" ? (
@@ -155,7 +173,7 @@ export function BoardDesk({
             ))}
           </ul>
         </div>
-        <form onSubmit={(event) => void addTask(event)}>
+        <form className="slip" onSubmit={(event) => void addTask(event)}>
           <input
             value={title}
             maxLength={80}

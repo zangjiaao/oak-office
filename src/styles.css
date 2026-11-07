@@ -502,20 +502,18 @@ button, input, textarea {
   min-height: 0;
   overflow: auto;
   scrollbar-width: none;
-  padding: 8px 12px;
-  border-radius: 2px;
-  background: #f4f7fb;
-  color: #241c16;
+  padding: 0 2px 4px;
+  background: transparent;
 }
 
 .slate-body::-webkit-scrollbar { display: none; }
 
 .slate h2 {
-  margin: 10px 0 6px;
-  font-size: 13px;
+  margin: 12px 2px 0;
+  font-size: 12px;
   font-weight: 600;
-  letter-spacing: 0.14em;
-  color: #6b5340;
+  letter-spacing: 0.16em;
+  color: inherit;
 }
 
 .slate ul {
@@ -524,16 +522,37 @@ button, input, textarea {
   list-style: none;
 }
 
-.slate li {
+.slate li,
+.slate .slip {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 4px 0;
-  line-height: 1.45;
 }
 
-.slate li > span:first-child { min-width: 0; }
+.slate .slip {
+  margin: 8px 0 0;
+  padding: 10px 12px 10px 14px;
+  border-radius: 2px;
+  background: #f4f7fb;
+  color: #241c16;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 8px 14px rgba(26, 23, 20, 0.16);
+}
+
+.slate .slip.quiet { color: #6b5340; }
+
+.slate li > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.slate li small {
+  color: #8a7564;
+  font-size: 12px;
+}
+
+.slate li b { font-weight: 600; }
 
 .slate li em {
   flex: none;
@@ -541,7 +560,7 @@ button, input, textarea {
   color: #6b4428;
 }
 
-.slate li.done > span:first-child {
+.slate li.done b {
   color: #8a7564;
   text-decoration: line-through;
 }
@@ -551,9 +570,8 @@ button, input, textarea {
 .slate form {
   display: flex;
   gap: 8px;
-  padding: 8px;
-  border-radius: 2px;
-  background: #f4f7fb;
+  align-items: center;
+  margin: 0;
 }
 
 .slate input, .slate select {
@@ -567,7 +585,14 @@ button, input, textarea {
 
 .slate input { flex: 1; }
 
-.slate form button { flex: none; background: #c6a15b; color: #1a1714; border-radius: 4px; }
+.slate form button {
+  flex: none;
+  border: 0;
+  background: #1a1714;
+  color: #f4f7fb;
+  border-radius: 4px;
+  padding: 6px 12px;
+}
 
 .poses {
   justify-content: flex-start;
