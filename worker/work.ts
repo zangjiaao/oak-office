@@ -19,8 +19,6 @@ const TEXT_MAX = 1000;
 const HISTORY = 16;
 const SEARCH_MAX = 16;
 const STAFF_TOOL_MAX = 24;
-const STAFF_TOKENS = 8_000;
-const LEAD_TOKENS = 8_000;
 const toolUses = new Map<string, number>();
 const searchUses = new Map<string, number>();
 
@@ -202,7 +200,7 @@ export async function speak(
     turn = { jobs: new Map(), leadSteps: [] };
     let calls = 0;
     const agent = new Agent({
-      streamFn: runtime.streamFn(LEAD_TOKENS),
+      streamFn: runtime.streamFn,
       getApiKey: runtime.getApiKey,
       toolExecution: "sequential",
       beforeToolCall: async ({ toolCall, args }) => {
@@ -448,7 +446,7 @@ export async function runStaffDuty(
     searchUses.set(person.id, 0);
     const steps: { pose: Pose; label: string }[] = [];
     const staff = new Agent({
-      streamFn: runtime.streamFn(STAFF_TOKENS),
+      streamFn: runtime.streamFn,
       getApiKey: runtime.getApiKey,
       toolExecution: "sequential",
       beforeToolCall: async ({ toolCall, args }) => {
@@ -496,7 +494,7 @@ export async function runStaffDuty(
     const history = await linesOf(env.DB, department.id);
     const identity = identityOf(lead);
     const leader = new Agent({
-      streamFn: runtime.streamFn(LEAD_TOKENS),
+      streamFn: runtime.streamFn,
       getApiKey: runtime.getApiKey,
       initialState: {
         model: leadModel,
@@ -635,7 +633,7 @@ function askTool(
         const staff =
           staying ??
           new Agent({
-            streamFn: runtime.streamFn(STAFF_TOKENS),
+            streamFn: runtime.streamFn,
             getApiKey: runtime.getApiKey,
             toolExecution: "sequential",
             beforeToolCall: async ({ toolCall, args }) => {
@@ -1211,7 +1209,7 @@ async function leadOnReport(
   const history = await linesOf(env.DB, lead.department_id);
   const identity = identityOf(lead);
   const leader = new Agent({
-    streamFn: runtime.streamFn(LEAD_TOKENS),
+    streamFn: runtime.streamFn,
     getApiKey: runtime.getApiKey,
     initialState: {
       model,
