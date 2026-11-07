@@ -142,15 +142,48 @@ async function write(response: import("node:http").ServerResponse, body: Record<
 
 async function edit(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
   const file = await locate(body.path);
-  if (!file || typeof body.old !== "string" || typeof body.new !== "string" || !body.old) {
-    return send(response, 400, { ok: false, error: "修改要写明原句和新句。" });
-  }
+  const edits = editList(body.edits);
+  if (!file || !edits) return send(response, 400, { ok: false, error: "修改要写明原句和新句。" });
   const text = await readFile(file, "utf8").catch(() => null);
   if (text === null) return send(response, 404, { ok: false, error: "没有这个文件。" });
-  const found = text.split(body.old).length - 1;
-  if (found !== 1) return send(response, 400, { ok: false, error: found === 0 ? "原文对不上。" : "原文出现了不止一次。" });
-  await writeFile(file, text.replace(body.old, body.new), "utf8");
-  send(response, 200, { ok: true, text: `已修改 ${String(body.path)}` });
+  const next = applyEdits(text, edits);
+  if (!next.ok) return send(response, 400, { ok: false, error: next.error });
+  await writeFile(file, next.text, "utf8");
+  send(response, 200, { ok: true, text: `已修改 ${String(body.path)}，${edits.length} 处。` });
+}
+
+function editList(input: unknown) {
+  if (!Array.isArray(input) || input.length === 0) return null;
+  const edits: { old: string; new: string }[] = [];
+  for (const item of input) {
+    if (!item || typeof item !== "object") return null;
+    const oldText = "old" in item && typeof item.old === "string" ? item.old : "";
+    const newText = "new" in item && typeof item.new === "string" ? item.new : "";
+    if (!oldText) return null;
+    edits.push({ old: oldText, new: newText });
+  }
+  return edits;
+}
+
+function applyEdits(content: string, edits: { old: string; new: string }[]) {
+  const spans: { start: number; end: number; text: string }[] = [];
+  for (const edit of edits) {
+    const start = content.indexOf(edit.old);
+    if (start < 0) return { ok: false as const, error: "原文对不上。" };
+    if (content.indexOf(edit.old, start + edit.old.length) >= 0) return { ok: false as const, error: "原文出现了不止一次。" };
+    spans.push({ start, end: start + edit.old.length, text: edit.new });
+  }
+  spans.sort((a, b) => a.start - b.start);
+  for (let i = 1; i < spans.length; i += 1) {
+    if (spans[i].start < spans[i - 1].end) return { ok: false as const, error: "这几处修改叠在一起了。合成一次改。" };
+  }
+  let next = "";
+  let cursor = 0;
+  for (const span of spans) {
+    next += content.slice(cursor, span.start) + span.text;
+    cursor = span.end;
+  }
+  return { ok: true as const, text: next + content.slice(cursor) };
 }
 
 async function bash(response: import("node:http").ServerResponse, body: Record<string, unknown>) {

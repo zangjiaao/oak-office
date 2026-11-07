@@ -118,7 +118,7 @@ export function boardTool(env: Env, departmentId: string) {
     name: "board",
     label: "看板",
     description:
-      "使用这一层的看板。action=add 新建。多件事放在同一次调用里，title 一行一件，每行最多 80 字，不要一件调用一次。person_id 写员工 id 或留空，这一次新建的都会交给这个人。state 写 open、doing 或 done。action=assign 改负责人，填 task_id 和 person_id。action=state 改状态，task_id 来自清单，state 用 open（还没做）、doing（在做）或 done（划掉）。返回里的 task_id 可填进 ask 的 board_task_id。定时不在这里改。",
+      "使用这一层的看板。一次调用处理一批，不要一件调用一次。action=add 新建，title 一行一件，每行最多 80 字。person_id 写员工 id 或留空，这一次新建的都会交给这个人。state 写 open、doing 或 done。action=assign 改负责人，task_id 一行一个 id，都交给 person_id。action=state 改状态，task_id 一行一条，写成「任务id open」或「任务id doing」或「任务id done」。返回里的 task_id 可填进 ask 的 board_task_id。定时不在这里改。",
     parameters: BoardArgs,
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Static<typeof BoardArgs>) => {
@@ -142,18 +142,44 @@ export function boardTool(env: Env, departmentId: string) {
         return text(`已记上\n${noted.join("\n")}`);
       }
       if (action === "assign") {
-        const assigned = await assignBoardTask(env.DB, departmentId, args.task_id.trim(), personId);
-        if (!assigned.ok) return miss(assigned.error);
-        return text(`已交给${personId ? "这个人" : "不指定"}：${assigned.task.title}`);
+        const ids = args.task_id
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+        if (!ids.length) return miss("先指明看板上的哪一件。");
+        const noted = [];
+        for (const id of ids) {
+          const assigned = await assignBoardTask(env.DB, departmentId, id, personId);
+          if (!assigned.ok) return miss(noted.length ? `${noted.join("\n")}\n其余没改：${assigned.error}` : assigned.error);
+          noted.push(`${personId ? "已交给这个人" : "不指定"}：${assigned.task.title}`);
+        }
+        return text(noted.join("\n"));
       }
       if (action === "state") {
-        const result = await setBoardState(env.DB, departmentId, args.task_id.trim(), args.state.trim());
-        if (!result.ok) return miss(result.error);
-        return text(`已标成${stateLabel(result.task.state)}：${result.task.title}`);
+        const updates = stateUpdates(args.task_id, args.state.trim());
+        if (!updates.length) return miss("先指明看板上的哪一件。");
+        const noted = [];
+        for (const update of updates) {
+          const result = await setBoardState(env.DB, departmentId, update.id, update.state);
+          if (!result.ok) return miss(noted.length ? `${noted.join("\n")}\n其余没改：${result.error}` : result.error);
+          noted.push(`已标成${stateLabel(result.task.state)}：${result.task.title}`);
+        }
+        return text(noted.join("\n"));
       }
       return miss("action 用 add、assign 或 state。");
     },
   };
+}
+
+function stateUpdates(taskId: string, fallback: string) {
+  return taskId
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [id, maybe] = line.split(/\s+/);
+      return { id, state: maybe && isState(maybe) ? maybe : fallback };
+    });
 }
 
 export function isState(value: string): value is BoardState {
