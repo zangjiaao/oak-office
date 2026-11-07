@@ -125,7 +125,7 @@ export async function runDue(env: Env): Promise<{ ran: number }> {
   if (ticking) return { ran: 0 };
   ticking = true;
   try {
-    const { speak, officeBusy, runStaffDuty } = await import("./work");
+    const { speak, officeBusy, runStaffDuty, personWorking } = await import("./work");
     const now = Date.now();
     const dueRows = await env.DB.prepare(
       "SELECT id, person_id, task, every_ms, next_at, created_at FROM duty WHERE next_at <= ? ORDER BY next_at ASC, id ASC LIMIT 8",
@@ -142,7 +142,7 @@ export async function runDue(env: Env): Promise<{ ran: number }> {
         await cancelDuty(env.DB, row.id);
         continue;
       }
-      if (officeBusy(owner.department_id)) continue;
+      if (officeBusy(owner.department_id) || personWorking(owner.id)) continue;
       due = row;
       person = owner;
       break;

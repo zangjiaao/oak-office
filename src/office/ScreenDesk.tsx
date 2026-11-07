@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CodeView } from "./CodeView";
 import { Markdown } from "../work/MarkdownView";
 
@@ -30,12 +30,22 @@ const TEXT = new Set([
   "svg",
 ]);
 
+type ShellRun = {
+  id: string;
+  command: string;
+  output: string;
+  exitCode: number | null;
+  finishedAt: number | null;
+};
+
 export function ScreenDesk({
   title,
+  personId,
   onClose,
   box,
 }: {
   title: string;
+  personId: string | null;
   onClose: () => void;
   box: { left: number; top: number; width: number; height: number };
 }) {
@@ -49,6 +59,11 @@ export function ScreenDesk({
   const [reload, setReload] = useState(0);
   const [pending, setPending] = useState<string | null>(null);
   const [night, setNight] = useState(previewNight);
+  const [pane, setPane] = useState<"files" | "term">("files");
+  const [runs, setRuns] = useState<ShellRun[] | null>(null);
+  const [shellError, setShellError] = useState<string | null>(null);
+  const termRef = useRef<HTMLDivElement>(null);
+  const panePick = useRef(false);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -78,6 +93,41 @@ export function ScreenDesk({
       gone = true;
     };
   }, [folder, reload]);
+
+  useEffect(() => {
+    if (!personId) return;
+    let gone = false;
+    const load = () => {
+      void fetch(`/api/shell?person=${encodeURIComponent(personId)}`)
+        .then(async (response) => {
+          if (!response.ok) throw new Error(await errorText(response));
+          return (await response.json()) as { runs?: ShellRun[] };
+        })
+        .then((body) => {
+          if (gone) return;
+          const next = body.runs ?? [];
+          setRuns(next);
+          setShellError(null);
+          if (!panePick.current && next.some((run) => run.finishedAt === null)) setPane("term");
+        })
+        .catch((caught) => {
+          if (!gone) setShellError(caught instanceof Error ? caught.message : "终端没打开。");
+        });
+    };
+    load();
+    const timer = setInterval(load, 1000);
+    return () => {
+      gone = true;
+      clearInterval(timer);
+    };
+  }, [personId]);
+
+  useEffect(() => {
+    const node = termRef.current;
+    if (!node || pane !== "term") return;
+    const nearBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
+    if (nearBottom) node.scrollTop = node.scrollHeight;
+  }, [runs, pane]);
 
   async function openFile(name: string) {
     const path = joinPath(folder, name);
@@ -149,13 +199,32 @@ export function ScreenDesk({
           <div className="glass">
             <header className="menu-bar">
               <strong>{title}</strong>
-              <span>工作区</span>
+              <button
+                type="button"
+                className={pane === "files" ? "on" : ""}
+                onClick={() => {
+                  panePick.current = true;
+                  setPane("files");
+                }}
+              >
+                工作区
+              </button>
+              <button
+                type="button"
+                className={pane === "term" ? "on" : ""}
+                onClick={() => {
+                  panePick.current = true;
+                  setPane("term");
+                }}
+              >
+                终端
+              </button>
               <time>{clock}</time>
               <button type="button" onClick={onClose}>
                 关机
               </button>
             </header>
-            <div className="desktop">
+            <div className={pane === "term" ? "desktop term" : "desktop"}>
               <aside>
                 <p className="crumbs">
                   <button type="button" onClick={() => setFolder("")}>
@@ -233,6 +302,22 @@ export function ScreenDesk({
                   {file && text === null && !note ? <p>在打开。</p> : null}
                 </article>
               </section>
+              {pane === "term" ? (
+                <div className="term-view" ref={termRef}>
+                  {!personId ? <p>这台电脑还没有人。</p> : null}
+                  {shellError ? <p>{shellError}</p> : null}
+                  {personId && runs === null && !shellError ? <p>在读终端。</p> : null}
+                  {runs && runs.length === 0 ? <p>还没有跑过命令。</p> : null}
+                  {runs?.map((run) => (
+                    <div key={run.id}>
+                      <p className="cmd">$ {run.command}</p>
+                      {run.output ? <p>{run.output}</p> : null}
+                      {run.finishedAt === null ? <p className="run">运行中</p> : null}
+                      {run.finishedAt !== null && run.exitCode ? <p className="bad">退出码 {run.exitCode}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

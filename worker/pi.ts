@@ -35,8 +35,7 @@ export function openPi(env: Env) {
     ok: true as const,
     model,
     modelFor,
-    streamFn: (maxTokens: number): StreamFn => (next, context, options) =>
-      models.streamSimple(next, context, { ...options, maxTokens }),
+    streamFn: ((next, context, options) => models.streamSimple(next, context, options)) satisfies StreamFn,
     getApiKey: () => key,
   };
 }

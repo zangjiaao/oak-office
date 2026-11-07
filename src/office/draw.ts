@@ -178,6 +178,12 @@ export function roomTransform(width: number, height: number, room = ROOM) {
 
 const BOARD = { x: 300, y: 16, w: 52, h: 36 };
 
+const RULES = { x: 18, y: 18, w: 46, h: 40 };
+
+export function rulesAt(roomX: number, roomY: number) {
+  return roomX >= RULES.x && roomX <= RULES.x + RULES.w && roomY >= RULES.y && roomY <= RULES.y + RULES.h;
+}
+
 export function boardAt(roomX: number, roomY: number, style: RoomLook["style"]) {
   if (style === "glass") return false;
   return roomX >= BOARD.x && roomX <= BOARD.x + BOARD.w && roomY >= BOARD.y && roomY <= BOARD.y + BOARD.h;
@@ -329,7 +335,6 @@ export function drawOffice(
   frame: number,
   room = ROOM,
   desks: DeskSpot[] = rehearsalDesks(),
-  sign = "交付组",
   look: RoomLook = DEFAULT_ROOM,
   pets: readonly PetId[] = [],
 ) {
@@ -363,14 +368,6 @@ export function drawOffice(
   layers.sort((a, b) => a.y - b.y);
   for (const layer of layers) layer.draw();
 
-  const plaque = sign.trim().slice(0, 16) || "部门";
-  ctx.fillStyle = "#fffaf2";
-  ctx.fillRect(8, 8, Math.max(78, 16 + plaque.length * 8), 28);
-  ctx.fillStyle = "#1a1714";
-  ctx.font = "8px ui-monospace, monospace";
-  ctx.textAlign = "left";
-  ctx.fillText("OAK OFFICE", 12, 19);
-  ctx.fillText(plaque, 12, 30);
   ctx.restore();
 
   ctx.textAlign = "center";

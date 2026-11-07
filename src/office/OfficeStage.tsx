@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { actorAt, boardAt, boardFace, drawOffice, monitorAt, roomTransform } from "./draw";
+import { actorAt, boardAt, boardFace, drawOffice, monitorAt, roomTransform, rulesAt } from "./draw";
 import { BoardDesk } from "./BoardDesk";
+import { RulesDesk } from "./RulesDesk";
 import { ScreenDesk } from "./ScreenDesk";
 import { type PetId } from "./pets";
 import { DEFAULT_ROOM, type RoomLook } from "./room";
@@ -13,7 +14,6 @@ export function OfficeStage({
   clock,
   room = ROOM,
   desks,
-  sign = "交付组",
   look = DEFAULT_ROOM,
   pets = [],
   onPick,
@@ -23,6 +23,11 @@ export function OfficeStage({
   onBoard,
   onCloseBoard,
   board = false,
+  onRules,
+  onCloseRules,
+  rules = false,
+  rulesText = "",
+  onSaveRules,
   departmentId = "",
   people = [],
 }: {
@@ -30,16 +35,20 @@ export function OfficeStage({
   clock: number | null;
   room?: { w: number; h: number };
   desks?: DeskSpot[];
-  sign?: string;
   look?: RoomLook;
   pets?: readonly PetId[];
   onPick?: (id: string) => void;
-  onScreen?: (desk: DeskSpot, title: string) => void;
+  onScreen?: (desk: DeskSpot, title: string, personId: string | null) => void;
   onCloseScreen?: () => void;
-  screen?: { x: number; y: number; title: string } | null;
+  screen?: { x: number; y: number; title: string; personId: string | null } | null;
   onBoard?: () => void;
   onCloseBoard?: () => void;
   board?: boolean;
+  onRules?: () => void;
+  onCloseRules?: () => void;
+  rules?: boolean;
+  rulesText?: string;
+  onSaveRules?: (rules: string) => Promise<void>;
   departmentId?: string;
   people?: { id: string; name: string }[];
 }) {
@@ -49,6 +58,7 @@ export function OfficeStage({
   const onPickRef = useRef(onPick);
   const onScreenRef = useRef(onScreen);
   const onBoardRef = useRef(onBoard);
+  const onRulesRef = useRef(onRules);
   const desksRef = useRef(desks);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [ambient, setAmbient] = useState(0);
@@ -58,6 +68,7 @@ export function OfficeStage({
   onPickRef.current = onPick;
   onScreenRef.current = onScreen;
   onBoardRef.current = onBoard;
+  onRulesRef.current = onRules;
   desksRef.current = desks;
 
   useEffect(() => {
@@ -97,17 +108,21 @@ export function OfficeStage({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, sign, look, pets);
-  }, [size, actors, drawn, room, desks, sign, look, pets]);
+    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, look, pets);
+  }, [size, actors, drawn, room, desks, look, pets]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
-    if (screen || board) return;
+    if (screen || board || rules) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const { scale, ox, oy } = roomTransform(rect.width, rect.height, room);
     const x = (event.clientX - rect.left - ox) / scale;
     const y = (event.clientY - rect.top - oy) / scale;
+    if (rulesAt(x, y) && onRulesRef.current) {
+      onRulesRef.current();
+      return;
+    }
     if (boardAt(x, y, look.style) && onBoardRef.current) {
       onBoardRef.current();
       return;
@@ -116,7 +131,8 @@ export function OfficeStage({
     const open = onScreenRef.current;
     if (desk && open) {
       const person = actorsRef.current.find((actor) => Math.hypot(actor.x - desk.x, actor.y - desk.y) < 36);
-      open(desk, person && person.id !== "draft" ? `${person.name}的电脑` : desk.lead ? "主管的电脑" : "工位的电脑");
+      const named = person && person.id !== "draft" ? person : null;
+      open(desk, named ? `${named.name}的电脑` : desk.lead ? "主管的电脑" : "工位的电脑", named?.id ?? null);
       return;
     }
     const choose = onPickRef.current;
@@ -128,13 +144,16 @@ export function OfficeStage({
   const box = officeBox(size.w, size.h, room);
 
   return (
-    <div className={screen || board ? "stage into" : "stage"} ref={wrapRef}>
-      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard ? "pick" : ""} />
+    <div className={screen || board || rules ? "stage into" : "stage"} ref={wrapRef}>
+      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard || onRules ? "pick" : ""} />
       {screen && onCloseScreen ? (
-        <ScreenDesk title={screen.title} onClose={onCloseScreen} box={box} />
+        <ScreenDesk title={screen.title} personId={screen.personId} onClose={onCloseScreen} box={box} />
       ) : null}
       {board && onCloseBoard && departmentId ? (
         <BoardDesk departmentId={departmentId} people={people} box={boardBox(box)} face={boardFace(look)} onClose={onCloseBoard} />
+      ) : null}
+      {rules && onCloseRules && onSaveRules ? (
+        <RulesDesk text={rulesText} box={boardBox(box)} face={look.wood} onClose={onCloseRules} onSave={onSaveRules} />
       ) : null}
     </div>
   );

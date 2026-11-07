@@ -11,10 +11,11 @@ import { rosterView, type DraftPreview } from "./office/seats";
 import { nameLabel, shift, useNow } from "./office/shift";
 import { useWalk } from "./office/walk";
 import { POSE_NAME, type Pose } from "./office/types";
-import { createDepartment, deleteDepartment, listDepartments, listPeople } from "./people/api";
+import { createDepartment, deleteDepartment, listDepartments, listPeople, updateDepartment } from "./people/api";
 import type { Department, DepartmentDraft } from "./people/department";
 import { RosterPanel } from "./people/RosterPanel";
 import type { PersonRow } from "./people/record";
+import { useTabStatus } from "./work/tabStatus";
 import { WorkPanel } from "./work/WorkPanel";
 import type { DutyHold, FloorMark } from "./work/api";
 
@@ -70,8 +71,9 @@ export function App() {
   const [roomDraft, setRoomDraft] = useState<RoomLook | null>(null);
   const [petDraft, setPetDraft] = useState<PetId[] | null>(null);
   const [floor, setFloor] = useState<Record<string, FloorMark>>({});
-  const [screen, setScreen] = useState<{ x: number; y: number; title: string } | null>(null);
+  const [screen, setScreen] = useState<{ x: number; y: number; title: string; personId: string | null } | null>(null);
   const [boardOpen, setBoardOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [floorDraft, setFloorDraft] = useState<DepartmentDraft | null>(null);
   const [floorLive, setFloorLive] = useState<DepartmentDraft | null>(null);
   const [holding, setHolding] = useState<DutyHold[]>([]);
@@ -156,6 +158,7 @@ export function App() {
   const stood = useWalk(roster.actors, mode === "work");
   const actors = mode === "rehearsal" ? rehearsalActors : stood;
   const poses = activePoses(time);
+  useTabStatus(mode === "work", Object.values(shownFloor));
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });
@@ -175,6 +178,7 @@ export function App() {
   async function choose(id: string) {
     setScreen(null);
     setBoardOpen(false);
+    setRulesOpen(false);
     dropDraft();
     localStorage.setItem(DEPARTMENT_KEY, id);
     setDepartmentId(id);
@@ -224,6 +228,24 @@ export function App() {
     setDepartments(rest);
     const next = rest[0];
     if (next) await choose(next.id);
+  }
+
+  async function saveRules(rules: string) {
+    if (!department) return;
+    const next = await updateDepartment(department.id, {
+      floor: department.floor,
+      name: department.name,
+      rules,
+      seats: department.seats,
+      pets: department.pets,
+      style: department.style ?? DEFAULT_ROOM.style,
+      wall: department.wall ?? DEFAULT_ROOM.wall,
+      ground: department.ground ?? DEFAULT_ROOM.ground,
+      trim: department.trim ?? DEFAULT_ROOM.trim,
+      wood: department.wood ?? DEFAULT_ROOM.wood,
+    });
+    saveDepartment(next);
+    setRulesOpen(false);
   }
 
   function saveDepartment(next: Department) {
@@ -309,6 +331,7 @@ export function App() {
               onClick={() => {
                 setScreen(null);
                 setBoardOpen(false);
+                setRulesOpen(false);
                 dropDraft();
                 setMode("work");
               }}
@@ -321,6 +344,7 @@ export function App() {
               onClick={() => {
                 setScreen(null);
                 setBoardOpen(false);
+                setRulesOpen(false);
                 setMode("roster");
               }}
             >
@@ -332,6 +356,7 @@ export function App() {
               onClick={() => {
                 setScreen(null);
                 setBoardOpen(false);
+                setRulesOpen(false);
                 dropDraft();
                 setMode("rehearsal");
               }}
@@ -356,9 +381,6 @@ export function App() {
           clock={mode === "rehearsal" ? time : null}
           room={mode === "rehearsal" ? ROOM : roster.room}
           desks={mode === "rehearsal" ? rehearsalDesks() : roster.desks}
-          sign={
-            mode === "rehearsal" ? "排练" : floorDraft ? floorLive?.name.trim() || "新的一层" : (department?.name ?? "部门")
-          }
           look={
             mode === "rehearsal"
               ? DEFAULT_ROOM
@@ -383,18 +405,29 @@ export function App() {
           }
           pets={mode === "rehearsal" ? [] : floorDraft ? (petDraft ?? []) : (petDraft ?? petIds(department?.pets) ?? [])}
           onPick={mode === "roster" ? pick : undefined}
-          onScreen={(desk, title) => {
+          onScreen={(desk, title, personId) => {
             setBoardOpen(false);
-            setScreen({ x: desk.x, y: desk.y, title });
+            setRulesOpen(false);
+            setScreen({ x: desk.x, y: desk.y, title, personId });
           }}
           onCloseScreen={() => setScreen(null)}
           screen={screen}
           onBoard={mode !== "rehearsal" && !floorDraft && department ? () => {
             setScreen(null);
+            setRulesOpen(false);
             setBoardOpen(true);
           } : undefined}
           onCloseBoard={() => setBoardOpen(false)}
           board={boardOpen && !floorDraft && mode !== "rehearsal"}
+          onRules={mode !== "rehearsal" && !floorDraft && department ? () => {
+            setScreen(null);
+            setBoardOpen(false);
+            setRulesOpen(true);
+          } : undefined}
+          onCloseRules={() => setRulesOpen(false)}
+          rules={rulesOpen && !floorDraft && mode !== "rehearsal"}
+          rulesText={department?.rules ?? ""}
+          onSaveRules={saveRules}
           departmentId={department?.id ?? ""}
           people={(people ?? []).map((person) => ({ id: person.id, name: person.name }))}
         />
