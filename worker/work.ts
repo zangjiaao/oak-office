@@ -44,7 +44,8 @@ function track(work: Promise<unknown>) {
   inflight.add(work);
   void work.finally(() => inflight.delete(work));
 }
-const staged = new Map<string, { id: string; play: WorkBeat[]; closing: WorkLine; until: number }>();
+const staged = new Map<string, { id: string; play: WorkBeat[]; closing?: WorkLine; until: number }>();
+const reports = new Map<string, Promise<void>>();
 
 export function dropFloor(departmentId: string) {
   staged.delete(departmentId);
@@ -671,7 +672,7 @@ function askTool(
               tools: outcome.tools,
             });
             await setDesk(env.DB, worker.id, "error", "卡住");
-            await writeStaffLine(env.DB, departmentId, worker.id, `${worker.name}没做完「${label}」：${reason}`);
+            await presentReport(env, runtime, departmentId, worker, `${worker.name}没做完「${label}」：${reason}`, true);
             return;
           }
           if (thinking !== "off" && staff.state.messages.slice(heard).some(thought)) {
@@ -694,13 +695,20 @@ function askTool(
           await setDesk(env.DB, worker.id, "done", "做完");
           await remember(env.DB, worker.id, jobMemory(task, note));
           const handed = visit ? "结果已递给同事。" : "";
-          await writeStaffLine(env.DB, departmentId, worker.id, `${worker.name}做完「${label}」。${handed}\n${shown}`.trim());
+          await presentReport(
+            env,
+            runtime,
+            departmentId,
+            worker,
+            `${worker.name}做完「${label}」。${handed}\n${shown}`.trim(),
+            false,
+          );
         } catch (error) {
           const message = error instanceof Error ? error.message : "";
           const reason = /abort/i.test(message) ? "被中断了，没有写完。" : "员工这回没接上。";
           trace("派工失败", { name: worker.name, error: message || reason, stop: "thrown" });
           await setDesk(env.DB, worker.id, "error", "卡住").catch(() => {});
-          await writeStaffLine(env.DB, departmentId, worker.id, `${worker.name}没做完「${label}」：${reason}`).catch(() => {});
+          await presentReport(env, runtime, departmentId, worker, `${worker.name}没做完「${label}」：${reason}`, true).catch(() => {});
         }
       }
     },
@@ -1067,6 +1075,145 @@ function assignmentFailure(errorMessage: string | undefined, stop: string) {
   if (errorMessage) return clip(errorMessage, 120);
   if (stop === "length") return "写到字数上限，没有交卷。";
   return "没有写出文字结果。";
+}
+
+async function presentReport(
+  env: Env,
+  runtime: Extract<ReturnType<typeof openPi>, { ok: true }>,
+  departmentId: string,
+  worker: PersonRow,
+  text: string,
+  stuck: boolean,
+) {
+  const previous = reports.get(departmentId) ?? Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => stageReport(env, runtime, departmentId, worker, text, stuck));
+  reports.set(departmentId, next);
+  try {
+    await next;
+  } finally {
+    if (reports.get(departmentId) === next) reports.delete(departmentId);
+  }
+}
+
+async function stageReport(
+  env: Env,
+  runtime: Extract<ReturnType<typeof openPi>, { ok: true }>,
+  departmentId: string,
+  worker: PersonRow,
+  text: string,
+  stuck: boolean,
+) {
+  while (busy.has(departmentId)) await delay(300);
+  busy.add(departmentId);
+  let leadId = "";
+  let saved = false;
+  try {
+    const floor = await departmentById(env.DB, departmentId);
+    const people = await listPeople(env.DB, departmentId);
+    const lead = people.find((person) => person.is_lead === 1) ?? null;
+    leadId = lead?.id ?? "";
+    const staffLine: WorkLine = {
+      id: crypto.randomUUID(),
+      role: "staff",
+      person_id: worker.id,
+      text: clip(text, 1500),
+    };
+    let closing: WorkLine | undefined;
+    let raw = "";
+    if (lead && floor) {
+      await setDesk(env.DB, lead.id, "think", "在听汇报");
+      const spoken = await leadOnReport(env, runtime, floor, lead, worker, staffLine.text, stuck);
+      if (spoken) {
+        closing = { id: crypto.randomUUID(), role: "lead", person_id: null, text: spoken.text };
+        raw = JSON.stringify(replayMessage(spoken.message));
+      }
+    }
+    const play: WorkBeat[] = stuck
+      ? [{ person_id: worker.id, pose: "error", label: "卡住", hold: 1200, line: staffLine, lineAt: "start" }]
+      : [{ person_id: worker.id, pose: "report", label: "来回报", hold: 2600, line: staffLine, lineAt: "start" }];
+    play.push({ person_id: worker.id, pose: "done", label: "做完", hold: 900 });
+    if (leadId) play.push({ person_id: leadId, pose: "think", label: "在听汇报", hold: 900 });
+    const now = Date.now();
+    staged.set(departmentId, { id: staffLine.id, play, closing, until: now + 120_000 });
+    const writes = [
+      env.DB.prepare(
+        "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, 'staff', ?, ?, NULL, ?, ?)",
+      ).bind(staffLine.id, worker.id, staffLine.text, now, departmentId),
+    ];
+    if (closing) {
+      writes.push(
+        env.DB.prepare(
+          "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, 'lead', NULL, ?, ?, ?, ?)",
+        ).bind(closing.id, closing.text, raw, now + 1, departmentId),
+      );
+    }
+    await env.DB.batch(writes);
+    saved = true;
+  } catch (error) {
+    trace("汇报没接上", { name: worker.name, error: error instanceof Error ? error.message : String(error) });
+    if (!saved) await writeStaffLine(env.DB, departmentId, worker.id, text).catch(() => {});
+  } finally {
+    if (leadId) await setDesk(env.DB, leadId, "idle", "等你一句话").catch(() => {});
+    busy.delete(departmentId);
+  }
+}
+
+async function leadOnReport(
+  env: Env,
+  runtime: Extract<ReturnType<typeof openPi>, { ok: true }>,
+  floor: { name: string; rules: string },
+  lead: PersonRow,
+  worker: PersonRow,
+  report: string,
+  stuck: boolean,
+) {
+  const model = runtime.modelFor(lead.model);
+  if (!model) return null;
+  const history = await linesOf(env.DB, lead.department_id);
+  const identity = identityOf(lead);
+  const leader = new Agent({
+    streamFn: runtime.streamFn(1200),
+    getApiKey: runtime.getApiKey,
+    initialState: {
+      model,
+      systemPrompt: [
+        `你是${floor.name}主管${lead.name}。${identity.brief}${identity.dossier}`,
+        houseRules(floor.name, floor.rules),
+        promptMemory(lead.memories),
+        "一名员工刚刚把结果交给你。由你决定要不要告诉用户。",
+        "值得说：结果和用户交代的事有关、和你之前说的不一样、或者人卡住了。",
+        "不必说：用户没问过、只是内部顺手的小事、你刚才已经告诉过同样的结论。",
+        "要说就用简短中文，用你自己的话，不要派工，不要原样贴出员工全文。",
+        "不必说就只回复「沉默」，不要加别的字。",
+      ]
+        .filter((line) => line.length > 0)
+        .join("\n"),
+      thinkingLevel: thinkingFor(lead.model, lead.thinking),
+      messages: history.flatMap((line, index) => replay(line, history[index - 1])),
+      tools: [],
+    },
+  });
+  const cue = stuck ? "没有做完" : "做完了";
+  await leader.prompt(`${worker.name}${cue}。交给你的内容是：${report}`);
+  const message = [...leader.state.messages]
+    .filter((item) => item.role === "assistant")
+    .reverse()
+    .find((item) => visibleText(item));
+  if (!message || leader.state.errorMessage) return null;
+  const text = clip(visibleText(message), TEXT_MAX);
+  if (!text || silentReport(text)) return null;
+  return { text, message };
+}
+
+function silentReport(text: string) {
+  const bare = text.trim().replace(/^「|」$/g, "").replace(/[。！!]+$/g, "");
+  return bare === "沉默";
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function writeStaffLine(db: Env["DB"], departmentId: string, personId: string, text: string) {
