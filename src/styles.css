@@ -238,7 +238,12 @@ button, input, textarea {
   list-style: none;
 }
 
-.desktop ul { font-size: 15px; }
+.desktop ul {
+  font-size: 15px;
+  scrollbar-width: none;
+}
+
+.desktop ul::-webkit-scrollbar { display: none; }
 
 .desktop li button:first-child {
   flex: 1;
