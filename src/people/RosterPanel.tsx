@@ -4,7 +4,7 @@ import { DEFAULT_ROOM, ROOM_PRESETS, ROOM_STYLE_LABEL, ROOM_STYLES, sameRoom, ty
 import { rosterLabel, rosterNote, type DraftPreview } from "../office/seats";
 import type { HairStyle, Look } from "../office/types";
 import { dismissPerson, forgetMemory, hirePerson, updateDepartment, updatePerson } from "./api";
-import { staffFull, type Department } from "./department";
+import { staffFull, type Department, type DepartmentDraft } from "./department";
 import { cancelDuty, everyLabel, listDuties, type Duty } from "../work/duty";
 import {
   GENDER_LABEL,
@@ -51,7 +51,11 @@ export function RosterPanel({
   onRetry,
   onDraft,
   department,
+  floorDraft,
   onDepartment,
+  onCreateFloor,
+  onDiscardFloor,
+  onPreviewFloor,
   onRemoveFloor,
   onLook,
   onPets,
@@ -65,7 +69,11 @@ export function RosterPanel({
   onRetry: () => void;
   onDraft: (draft: DraftPreview | null) => void;
   department: Department | null;
+  floorDraft: DepartmentDraft | null;
   onDepartment: (department: Department) => void;
+  onCreateFloor: (draft: DepartmentDraft) => Promise<void>;
+  onDiscardFloor: () => void;
+  onPreviewFloor: (draft: DepartmentDraft) => void;
   onRemoveFloor: (id: string) => Promise<void>;
   onLook: (look: RoomLook | null) => void;
   onPets: (pets: PetId[] | null) => void;
@@ -251,13 +259,25 @@ export function RosterPanel({
     <aside className="chat staff">
       <header>
         <strong>编制</strong>
-        <span>{department ? `${department.floor}层 · ${department.name}` : "部门"}</span>
+        <span>
+          {floorDraft
+            ? `${floorDraft.floor}层 · 新的一层`
+            : department
+              ? `${department.floor}层 · ${department.name}`
+              : "部门"}
+        </span>
       </header>
       <div className="log">
-        {department ? (
+        {floorDraft ? <p className="hint">保存之后，这一层才出现在办公楼。</p> : null}
+        {floorDraft || department ? (
           <DepartmentForm
-            department={department}
+            key={floorDraft ? "new-floor" : department?.id}
+            department={floorDraft ? null : department}
+            draft={floorDraft}
             onDepartment={onDepartment}
+            onCreateFloor={onCreateFloor}
+            onDiscardFloor={onDiscardFloor}
+            onPreviewFloor={onPreviewFloor}
             onRemoveFloor={onRemoveFloor}
             onLook={onLook}
             onPets={onPets}
@@ -271,11 +291,11 @@ export function RosterPanel({
             </button>
           </p>
         ) : null}
-        {people === null && !loadError ? <p className="empty">在读档案。</p> : null}
-        {people && people.length === 0 && !form ? (
+        {people === null && !loadError && !floorDraft ? <p className="empty">在读档案。</p> : null}
+        {people && people.length === 0 && !form && !floorDraft ? (
           <p className="empty">还没有人。入职只留下档案，主管派活时才会进办公室。</p>
         ) : null}
-        {people && people.length > 0 ? (
+        {people && people.length > 0 && !floorDraft ? (
           <ul className="people">
             {people.map((person) => (
               <li key={person.id}>
@@ -508,7 +528,7 @@ export function RosterPanel({
               取消
             </button>
           </>
-        ) : (
+        ) : floorDraft ? null : (
           <button type="button" className="save" onClick={startHire} disabled={people === null || !roomForHire}>
             入职
           </button>
@@ -558,32 +578,42 @@ function editForm(person: PersonRow): FormState {
 
 function DepartmentForm({
   department,
+  draft,
   onDepartment,
+  onCreateFloor,
+  onDiscardFloor,
+  onPreviewFloor,
   onRemoveFloor,
   onLook,
   onPets,
 }: {
-  department: Department;
+  department: Department | null;
+  draft: DepartmentDraft | null;
   onDepartment: (department: Department) => void;
+  onCreateFloor: (draft: DepartmentDraft) => Promise<void>;
+  onDiscardFloor: () => void;
+  onPreviewFloor: (draft: DepartmentDraft) => void;
   onRemoveFloor: (id: string) => Promise<void>;
   onLook: (look: RoomLook | null) => void;
   onPets: (pets: PetId[] | null) => void;
 }) {
-  const [floor, setFloor] = useState(String(department.floor));
-  const [name, setName] = useState(department.name);
-  const [seats, setSeats] = useState(String(department.seats));
-  const [rules, setRules] = useState(department.rules);
-  const [style, setStyle] = useState<RoomStyle>(department.style ?? DEFAULT_ROOM.style);
-  const [wall, setWall] = useState(department.wall ?? DEFAULT_ROOM.wall);
-  const [ground, setGround] = useState(department.ground ?? DEFAULT_ROOM.ground);
-  const [trim, setTrim] = useState(department.trim ?? DEFAULT_ROOM.trim);
-  const [wood, setWood] = useState(department.wood ?? DEFAULT_ROOM.wood);
-  const [pets, setPets] = useState<PetId[]>(petIds(department.pets) ?? []);
+  const opening = department ?? draft ?? { floor: 1, name: "", rules: "", seats: 4, pets: "", ...DEFAULT_ROOM };
+  const [floor, setFloor] = useState(String(opening.floor));
+  const [name, setName] = useState(opening.name);
+  const [seats, setSeats] = useState(String(opening.seats));
+  const [rules, setRules] = useState(opening.rules);
+  const [style, setStyle] = useState<RoomStyle>(opening.style ?? DEFAULT_ROOM.style);
+  const [wall, setWall] = useState(opening.wall ?? DEFAULT_ROOM.wall);
+  const [ground, setGround] = useState(opening.ground ?? DEFAULT_ROOM.ground);
+  const [trim, setTrim] = useState(opening.trim ?? DEFAULT_ROOM.trim);
+  const [wood, setWood] = useState(opening.wood ?? DEFAULT_ROOM.wood);
+  const [pets, setPets] = useState<PetId[]>(petIds(opening.pets) ?? []);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
 
   useEffect(() => {
+    if (!department) return;
     setFloor(String(department.floor));
     setName(department.name);
     setSeats(String(department.seats));
@@ -596,6 +626,7 @@ function DepartmentForm({
     setPets(petIds(department.pets) ?? []);
     setError(null);
     setRemoving(false);
+    setSaving(false);
   }, [department]);
 
   useEffect(() => {
@@ -610,7 +641,28 @@ function DepartmentForm({
 
   useEffect(() => () => onPets(null), [onPets]);
 
+  useEffect(() => {
+    if (department) return;
+    const seatsNo = Number(seats);
+    onPreviewFloor({
+      floor: Number(floor),
+      name,
+      seats: Number.isInteger(seatsNo) ? seatsNo : 4,
+      rules,
+      style,
+      wall,
+      ground,
+      trim,
+      wood,
+      pets: pets.join(","),
+    });
+  }, [department, floor, name, seats, rules, style, wall, ground, trim, wood, pets, onPreviewFloor]);
+
   async function remove() {
+    if (!department) {
+      onDiscardFloor();
+      return;
+    }
     if (saving) return;
     if (!removing) {
       setRemoving(true);
@@ -623,6 +675,7 @@ function DepartmentForm({
       await onRemoveFloor(department.id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "这一层没有拆掉。");
+    } finally {
       setSaving(false);
     }
   }
@@ -632,19 +685,24 @@ function DepartmentForm({
     if (saving) return;
     setSaving(true);
     setError(null);
+    const body: DepartmentDraft = {
+      floor: Number(floor),
+      name,
+      seats: Number(seats),
+      rules,
+      style,
+      wall,
+      ground,
+      trim,
+      wood,
+      pets: pets.join(","),
+    };
     try {
-      const next = await updateDepartment(department.id, {
-        floor: Number(floor),
-        name,
-        seats: Number(seats),
-        rules,
-        style,
-        wall,
-        ground,
-        trim,
-        wood,
-        pets: pets.join(","),
-      });
+      if (!department) {
+        await onCreateFloor(body);
+        return;
+      }
+      const next = await updateDepartment(department.id, body);
       onDepartment(next);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "这一层没有写成。");
@@ -662,7 +720,12 @@ function DepartmentForm({
         </label>
         <label>
           名称
-          <input value={name} onChange={(event) => setName(event.target.value)} maxLength={16} />
+          <input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={16}
+            placeholder={department ? undefined : "比如：调研组"}
+          />
         </label>
         <label>
           工位
@@ -739,8 +802,8 @@ function DepartmentForm({
         <button type="submit" disabled={saving}>
           {saving ? "在写" : "保存这一层"}
         </button>
-        <button type="button" className="leave" onClick={() => void remove()} disabled={saving}>
-          {removing ? "确认拆掉" : "拆掉这一层"}
+        <button type="button" className="leave" onClick={() => void remove()} disabled={Boolean(department) && saving}>
+          {department ? (removing ? "确认拆掉" : "拆掉这一层") : "取消"}
         </button>
       </div>
     </form>

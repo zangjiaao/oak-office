@@ -12,7 +12,7 @@ import { nameLabel, shift, useNow } from "./office/shift";
 import { useWalk } from "./office/walk";
 import { POSE_NAME, type Pose } from "./office/types";
 import { createDepartment, deleteDepartment, listDepartments, listPeople } from "./people/api";
-import type { Department } from "./people/department";
+import type { Department, DepartmentDraft } from "./people/department";
 import { RosterPanel } from "./people/RosterPanel";
 import type { PersonRow } from "./people/record";
 import { WorkPanel } from "./work/WorkPanel";
@@ -70,6 +70,8 @@ export function App() {
   const [roomDraft, setRoomDraft] = useState<RoomLook | null>(null);
   const [petDraft, setPetDraft] = useState<PetId[] | null>(null);
   const [floor, setFloor] = useState<Record<string, FloorMark>>({});
+  const [floorDraft, setFloorDraft] = useState<DepartmentDraft | null>(null);
+  const [floorLive, setFloorLive] = useState<DepartmentDraft | null>(null);
   const [holding, setHolding] = useState<DutyHold[]>([]);
   const pickN = useRef(0);
   const playingRef = useRef(true);
@@ -140,13 +142,14 @@ export function App() {
     }),
   );
   const department = departments?.find((item) => item.id === departmentId) ?? null;
+  const draftSeats = floorLive && Number.isInteger(floorLive.seats) && floorLive.seats >= 1 && floorLive.seats <= 8 ? floorLive.seats : 4;
   const roster = rosterView(
-    people ?? [],
-    mode === "roster" ? draft : null,
+    floorDraft ? [] : (people ?? []),
+    mode === "roster" && !floorDraft ? draft : null,
     mode === "roster" ? selectedId : null,
     shownFloor,
     mode === "work",
-    department?.seats ?? 8,
+    floorDraft ? draftSeats : (department?.seats ?? 8),
   );
   const stood = useWalk(roster.actors, mode === "work");
   const actors = mode === "rehearsal" ? rehearsalActors : stood;
@@ -162,7 +165,13 @@ export function App() {
     setPlaying(true);
   }
 
+  function dropDraft() {
+    setFloorDraft(null);
+    setFloorLive(null);
+  }
+
   async function choose(id: string) {
+    dropDraft();
     localStorage.setItem(DEPARTMENT_KEY, id);
     setDepartmentId(id);
     setFloor({});
@@ -180,24 +189,29 @@ export function App() {
     }
   }
 
-  async function addFloor() {
+  function addFloor() {
+    if (floorDraft) return;
     const used = new Set((departments ?? []).map((item) => item.floor));
     let floorNo = 1;
     while (used.has(floorNo) && floorNo < 99) floorNo += 1;
-    try {
-      const created = await createDepartment({
-        floor: floorNo,
-        name: `${floorNo}层`,
-        rules: "",
-        seats: 4,
-        pets: "",
-        ...DEFAULT_ROOM,
-      });
-      setDepartments((current) => [...(current ?? []).filter((item) => item.id !== created.id), created].sort((a, b) => a.floor - b.floor));
-      await choose(created.id);
-    } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "这一层没有加上。");
-    }
+    const next: DepartmentDraft = {
+      floor: floorNo,
+      name: "",
+      rules: "",
+      seats: 4,
+      pets: "",
+      ...DEFAULT_ROOM,
+    };
+    setFloorDraft(next);
+    setFloorLive(next);
+    setSelectedId(null);
+    setDraft(null);
+  }
+
+  async function commitFloor(draftFloor: DepartmentDraft) {
+    const created = await createDepartment(draftFloor);
+    setDepartments((current) => [...(current ?? []).filter((item) => item.id !== created.id), created].sort((a, b) => a.floor - b.floor));
+    await choose(created.id);
   }
 
   async function removeFloor(id: string) {
@@ -256,7 +270,13 @@ export function App() {
             <span>
               {mode === "rehearsal"
                 ? "排练"
-                : `${department ? `${department.floor}层 ${department.name}` : "部门"} · ${mode === "roster" ? "编制" : "办公"}`}
+                : `${
+                    floorDraft
+                      ? `${floorLive?.floor ?? floorDraft.floor}层 ${floorLive?.name.trim() || "新的一层"}`
+                      : department
+                        ? `${department.floor}层 ${department.name}`
+                        : "部门"
+                  } · ${mode === "roster" ? "编制" : "办公"}`}
             </span>
           </div>
           {mode === "rehearsal" ? null : (
@@ -265,7 +285,7 @@ export function App() {
                 <button
                   key={item.id}
                   type="button"
-                  className={item.id === departmentId ? "on" : ""}
+                  className={!floorDraft && item.id === departmentId ? "on" : ""}
                   onClick={() => void choose(item.id)}
                 >
                   {item.floor} {item.name}
@@ -279,7 +299,14 @@ export function App() {
             </nav>
           )}
           <div className="modes">
-            <button type="button" className={mode === "work" ? "on" : ""} onClick={() => setMode("work")}>
+            <button
+              type="button"
+              className={mode === "work" ? "on" : ""}
+              onClick={() => {
+                dropDraft();
+                setMode("work");
+              }}
+            >
               办公
             </button>
             <button type="button" className={mode === "roster" ? "on" : ""} onClick={() => setMode("roster")}>
@@ -288,7 +315,10 @@ export function App() {
             <button
               type="button"
               className={mode === "rehearsal" ? "on" : ""}
-              onClick={() => setMode("rehearsal")}
+              onClick={() => {
+                dropDraft();
+                setMode("rehearsal");
+              }}
             >
               排练
             </button>
@@ -310,22 +340,32 @@ export function App() {
           clock={mode === "rehearsal" ? time : null}
           room={mode === "rehearsal" ? ROOM : roster.room}
           desks={mode === "rehearsal" ? rehearsalDesks() : roster.desks}
-          sign={mode === "rehearsal" ? "排练" : (department?.name ?? "部门")}
+          sign={
+            mode === "rehearsal" ? "排练" : floorDraft ? floorLive?.name.trim() || "新的一层" : (department?.name ?? "部门")
+          }
           look={
             mode === "rehearsal"
               ? DEFAULT_ROOM
               : (roomDraft ??
-                (department
+                (floorDraft
                   ? {
-                      style: department.style ?? DEFAULT_ROOM.style,
-                      wall: department.wall ?? DEFAULT_ROOM.wall,
-                      ground: department.ground ?? DEFAULT_ROOM.ground,
-                      trim: department.trim ?? DEFAULT_ROOM.trim,
-                      wood: department.wood ?? DEFAULT_ROOM.wood,
+                      style: floorDraft.style,
+                      wall: floorDraft.wall,
+                      ground: floorDraft.ground,
+                      trim: floorDraft.trim,
+                      wood: floorDraft.wood,
                     }
-                  : DEFAULT_ROOM))
+                  : department
+                    ? {
+                        style: department.style ?? DEFAULT_ROOM.style,
+                        wall: department.wall ?? DEFAULT_ROOM.wall,
+                        ground: department.ground ?? DEFAULT_ROOM.ground,
+                        trim: department.trim ?? DEFAULT_ROOM.trim,
+                        wood: department.wood ?? DEFAULT_ROOM.wood,
+                      }
+                    : DEFAULT_ROOM))
           }
-          pets={mode === "rehearsal" ? [] : (petDraft ?? petIds(department?.pets) ?? [])}
+          pets={mode === "rehearsal" ? [] : floorDraft ? (petDraft ?? []) : (petDraft ?? petIds(department?.pets) ?? [])}
           onPick={mode === "roster" ? pick : undefined}
         />
         {mode === "rehearsal" || mode === "work" ? (
@@ -376,8 +416,12 @@ export function App() {
           onPeople={setPeople}
           onRetry={() => void load()}
           onDraft={onDraft}
-          department={department}
+          department={floorDraft ? null : department}
+          floorDraft={floorDraft}
           onDepartment={saveDepartment}
+          onCreateFloor={commitFloor}
+          onDiscardFloor={dropDraft}
+          onPreviewFloor={setFloorLive}
           onRemoveFloor={(id) => removeFloor(id)}
           onLook={onLook}
           onPets={onPets}
