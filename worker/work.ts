@@ -680,7 +680,7 @@ function askTool(
           }
           const answer = [...staff.state.messages].reverse().find((message) => message.role === "assistant");
           const note = answer ? clip(visibleText(answer), 500) : "";
-          const shown = answer ? clip(visibleText(answer), 1500) : note;
+          const shown = answer ? keepLines(visibleText(answer), 1500) : note;
           trace("派工完成", {
             name: worker.name,
             label,
@@ -1118,7 +1118,7 @@ async function stageReport(
       id: crypto.randomUUID(),
       role: "staff",
       person_id: worker.id,
-      text: clip(text, 1500),
+      text: keepLines(text, 1500),
     };
     let closing: WorkLine | undefined;
     let raw = "";
@@ -1217,7 +1217,7 @@ function delay(ms: number) {
 }
 
 async function writeStaffLine(db: Env["DB"], departmentId: string, personId: string, text: string) {
-  const line = clip(text, 1500);
+  const line = keepLines(text, 1500);
   if (!line) return;
   await db
     .prepare(
@@ -1278,4 +1278,10 @@ function clip(value: string, max: number) {
   const text = value.trim().replace(/\s+/g, " ");
   if (!text) return "";
   return [...text].slice(0, max).join("");
+}
+
+function keepLines(value: string, max: number) {
+  const text = value.trim().replace(/\r\n/g, "\n");
+  if (!text) return "";
+  return [...text].slice(0, max).join("").trimEnd();
 }
