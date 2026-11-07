@@ -328,6 +328,53 @@ button, input, textarea {
   color: #6b5340;
 }
 
+.window > header .night-toggle {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 4px;
+  color: #6b5340;
+}
+
+.window > header .night-toggle:hover { background: rgba(36, 28, 22, 0.08); }
+
+.window > header .night-toggle svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.window.night {
+  background: #1a1714;
+  color: #f3ead7;
+}
+
+.window.night > header { background: #2a241c; }
+
+.window.night > header span,
+.window.night > header .night-toggle { color: #d9c7a4; }
+
+.window.night > header .night-toggle:hover { background: rgba(243, 234, 215, 0.08); }
+
+.window.night .code .ln {
+  color: #8a7564;
+  background: #1a1714;
+}
+
+.window.night .code .keyword { color: #e7a39a; }
+.window.night .code .string { color: #8fceaa; }
+.window.night .code .comment { color: #a89880; }
+.window.night .code .number { color: #e0b15a; }
+.window.night .code .tag { color: #9ec4de; }
+.window.night .code .attr { color: #d9c7a4; }
+
 .window article {
   padding: 16px 18px;
   font-size: 16px;

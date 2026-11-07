@@ -48,6 +48,7 @@ export function ScreenDesk({
   const [note, setNote] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [pending, setPending] = useState<string | null>(null);
+  const [night, setNight] = useState(previewNight);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -203,12 +204,26 @@ export function ScreenDesk({
                   })}
                 </ul>
               </aside>
-              <section className="window">
+              <section className={night ? "window night" : "window"}>
                 <header>
                   <i />
                   <i />
                   <i />
                   <span>{file ? file.split("/").pop() : "未打开文件"}</span>
+                  <button
+                    type="button"
+                    className="night-toggle"
+                    aria-label={night ? "白天" : "黑夜"}
+                    onClick={() =>
+                      setNight((value) => {
+                        const next = !value;
+                        savePreviewNight(next);
+                        return next;
+                      })
+                    }
+                  >
+                    {night ? <SunIcon /> : <MoonIcon />}
+                  </button>
                 </header>
                 <article>
                   {file ? null : <p>点左边的文件，在屏幕里看。</p>}
@@ -242,6 +257,39 @@ function TrashIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M3.2 4.2h9.6M6.2 4.2V2.8h3.6v1.4M4.6 4.2l.6 9h5.6l.6-9" />
+    </svg>
+  );
+}
+
+function previewNight() {
+  try {
+    return localStorage.getItem("oak-preview-night") === "1";
+  } catch {
+    return false;
+  }
+}
+
+function savePreviewNight(night: boolean) {
+  try {
+    localStorage.setItem("oak-preview-night", night ? "1" : "0");
+  } catch {
+    /* A private window can refuse the preference. */
+  }
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M10.2 2.2a5.2 5.2 0 1 0 3.6 8.8 4.4 4.4 0 0 1-3.6-8.8Z" />
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="2.3" />
+      <path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.5 3.5l1.1 1.1M11.4 11.4l1.1 1.1M12.5 3.5l-1.1 1.1M4.6 11.4l-1.1 1.1" />
     </svg>
   );
 }
