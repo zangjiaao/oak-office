@@ -176,6 +176,15 @@ export function roomTransform(width: number, height: number, room = ROOM) {
   return { scale, ox, oy };
 }
 
+export function monitorAt(desks: DeskSpot[], roomX: number, roomY: number) {
+  const ordered = [...desks].sort((a, b) => b.y - a.y);
+  return ordered.find((desk) => {
+    const left = desk.x - 16;
+    const top = desk.y - 40;
+    return roomX >= left && roomX <= left + 32 && roomY >= top && roomY <= top + 22;
+  });
+}
+
 export function actorAt(actors: ActorFrame[], roomX: number, roomY: number) {
   const ordered = [...actors].sort((a, b) => b.y - a.y);
   return ordered.find((actor) => {

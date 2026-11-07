@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { accessSync, constants } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import path from "node:path";
 
@@ -70,11 +70,55 @@ async function handle(request: IncomingMessage, response: import("node:http").Se
   }
   const body = (await readJson(request)) as Record<string, unknown>;
   const action = request.url ?? "/";
+  if (action === "/list") return list(response, body);
   if (action === "/read") return read(response, body);
+  if (action === "/raw") return raw(response, body);
+  if (action === "/delete") return removeFile(response, body);
   if (action === "/write") return write(response, body);
   if (action === "/edit") return edit(response, body);
   if (action === "/bash") return bash(response, body);
   send(response, 404, { ok: false, error: "没有这个操作。" });
+}
+
+async function list(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+  const folder = await locate(typeof body.path === "string" && body.path.trim() ? body.path : ".");
+  if (!folder) return send(response, 400, { ok: false, error: "只能看工作目录里的文件夹。" });
+  const info = await stat(folder).catch(() => null);
+  if (!info?.isDirectory()) return send(response, 400, { ok: false, error: "这里不是文件夹。" });
+  const names = await readdir(folder);
+  const entries: { name: string; kind: "dir" | "file"; bytes: number }[] = [];
+  for (const name of names) {
+    const child = await stat(path.join(folder, name)).catch(() => null);
+    if (!child) continue;
+    entries.push({ name, kind: child.isDirectory() ? "dir" : "file", bytes: child.isDirectory() ? 0 : child.size });
+  }
+  entries.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name, "zh") : a.kind === "dir" ? -1 : 1));
+  send(response, 200, { ok: true, entries });
+}
+
+async function raw(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+  const file = await locate(body.path);
+  if (!file) return send(response, 400, { ok: false, error: "只能拿工作目录里的文件。" });
+  const info = await stat(file).catch(() => null);
+  if (!info || info.isDirectory()) return send(response, 400, { ok: false, error: "这是文件夹。" });
+  if (info.size > 2_000_000) return send(response, 400, { ok: false, error: "文件太大，屏幕里放不下。" });
+  const data = await readFile(file);
+  const name = path.basename(file).replace(/["\r\n]/g, "");
+  response.writeHead(200, {
+    "content-type": "application/octet-stream",
+    "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+  });
+  response.end(data);
+}
+
+async function removeFile(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+  const file = await locate(body.path);
+  if (!file || file === ROOT) return send(response, 400, { ok: false, error: "只能删工作目录里的文件。" });
+  const info = await lstat(file).catch(() => null);
+  if (!info) return send(response, 404, { ok: false, error: "没有这个文件。" });
+  if (info.isDirectory()) return send(response, 400, { ok: false, error: "文件夹先留着。" });
+  await unlink(file);
+  send(response, 200, { ok: true });
 }
 
 async function read(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
