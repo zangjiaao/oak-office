@@ -108,7 +108,10 @@ export function BoardDesk({
           {
             ...box,
             backgroundColor: face,
-            backgroundImage: "linear-gradient(180deg, rgba(255,255,255,0.2), transparent 32%)",
+            backgroundImage:
+              "radial-gradient(rgba(255,255,255,0.22) 0.6px, transparent 0.7px), radial-gradient(rgba(0,0,0,0.16) 0.6px, transparent 0.7px)",
+            backgroundSize: "5px 5px, 8px 8px",
+            backgroundPosition: "0 0, 2px 3px",
             color: ink(face),
           } as CSSProperties
         }
@@ -120,13 +123,13 @@ export function BoardDesk({
           </button>
         </header>
         <div className="slate-body">
-          {error ? <p className="slip">{error}</p> : null}
+          {error ? <p className="quiet">{error}</p> : null}
           <h2>定时</h2>
           <ul>
-            {duties === null && !error ? <li className="slip quiet">在读定时。</li> : null}
-            {duties && duties.length === 0 ? <li className="slip quiet">还没有定时。</li> : null}
-            {duties?.map((duty) => (
-              <li key={duty.id} className="slip">
+            {duties === null && !error ? <li className="quiet">在读定时。</li> : null}
+            {duties && duties.length === 0 ? <li className="quiet">还没有定时。</li> : null}
+            {duties?.map((duty, index) => (
+              <li key={duty.id} className={`pin tone-${index % 3}`}>
                 <span>
                   <small>
                     {personName(people, duty.person_id)} · {everyLabel(duty.every_ms)}
@@ -139,10 +142,10 @@ export function BoardDesk({
           </ul>
           <h2>这件事</h2>
           <ul>
-            {tasks === null && !error ? <li className="slip quiet">在读板上的事。</li> : null}
-            {tasks && tasks.length === 0 ? <li className="slip quiet">还没有要记的事。</li> : null}
-            {rows.map((task) => (
-              <li key={task.id} className={task.state === "done" ? "slip done" : "slip"}>
+            {tasks === null && !error ? <li className="quiet">在读板上的事。</li> : null}
+            {tasks && tasks.length === 0 ? <li className="quiet">还没有要记的事。</li> : null}
+            {rows.map((task, index) => (
+              <li key={task.id} className={task.state === "done" ? `pin tone-${index % 3} done` : `pin tone-${index % 3}`}>
                 <span>
                   <small>
                     {stateName(task.state)} · {personName(people, task.person_id)}
@@ -173,7 +176,7 @@ export function BoardDesk({
             ))}
           </ul>
         </div>
-        <form className="slip" onSubmit={(event) => void addTask(event)}>
+        <form onSubmit={(event) => void addTask(event)}>
           <input
             value={title}
             maxLength={80}

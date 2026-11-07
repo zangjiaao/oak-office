@@ -522,24 +522,43 @@ button, input, textarea {
   list-style: none;
 }
 
-.slate li,
-.slate .slip {
+.slate li.quiet,
+.slate p.quiet {
+  margin: 6px 2px 0;
+  color: inherit;
+  opacity: 0.78;
+}
+
+.slate li.pin {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-}
-
-.slate .slip {
-  margin: 8px 0 0;
-  padding: 10px 12px 10px 14px;
-  border-radius: 2px;
-  background: #f4f7fb;
+  width: min(100%, 460px);
+  margin: 12px 0 0;
+  padding: 16px 12px 10px;
   color: #241c16;
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset, 0 8px 14px rgba(26, 23, 20, 0.16);
+  background: #f4e7a8;
+  box-shadow: 0 10px 14px rgba(26, 23, 20, 0.22);
+  transform: rotate(-1.1deg);
 }
 
-.slate .slip.quiet { color: #6b5340; }
+.slate li.pin::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  width: 9px;
+  height: 9px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #f4f7fb, #a8322a 42%, #6e1d18);
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+}
+
+.slate li.pin.tone-1 { background: #f7f1df; transform: rotate(0.9deg); }
+.slate li.pin.tone-2 { background: #d7e6ee; transform: rotate(-0.4deg); }
 
 .slate li > span:first-child {
   min-width: 0;
@@ -577,20 +596,23 @@ button, input, textarea {
 .slate input, .slate select {
   min-width: 0;
   border: 0;
-  border-radius: 4px;
-  background: #fff;
-  color: #241c16;
-  padding: 6px 8px;
+  border-bottom: 1px solid currentColor;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  padding: 6px 2px;
 }
+
+.slate input::placeholder { color: inherit; opacity: 0.55; }
 
 .slate input { flex: 1; }
 
 .slate form button {
   flex: none;
-  border: 0;
-  background: #1a1714;
-  color: #f4f7fb;
-  border-radius: 4px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  border-radius: 2px;
   padding: 6px 12px;
 }
 
