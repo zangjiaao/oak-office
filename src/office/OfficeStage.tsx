@@ -108,10 +108,19 @@ export function OfficeStage({
     if (hit && hit.id !== "draft") choose(hit.id);
   }
 
+  const box = officeBox(size.w, size.h, room);
+
   return (
     <div className={screen ? "stage into" : "stage"} ref={wrapRef}>
       <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen ? "pick" : ""} />
-      {screen && onCloseScreen ? <ScreenDesk title={screen.title} onClose={onCloseScreen} /> : null}
+      {screen && onCloseScreen ? (
+        <ScreenDesk title={screen.title} onClose={onCloseScreen} box={box} />
+      ) : null}
     </div>
   );
+}
+
+function officeBox(width: number, height: number, room: { w: number; h: number }) {
+  const { scale, ox, oy } = roomTransform(width, height, room);
+  return { left: ox, top: oy, width: room.w * scale, height: room.h * scale };
 }

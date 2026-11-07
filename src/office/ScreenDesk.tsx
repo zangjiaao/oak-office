@@ -29,7 +29,15 @@ const TEXT = new Set([
   "svg",
 ]);
 
-export function ScreenDesk({ title, onClose }: { title: string; onClose: () => void }) {
+export function ScreenDesk({
+  title,
+  onClose,
+  box,
+}: {
+  title: string;
+  onClose: () => void;
+  box: { left: number; top: number; width: number; height: number };
+}) {
   const [clock, setClock] = useState(() => deskClock());
   const [folder, setFolder] = useState("");
   const [entries, setEntries] = useState<Entry[] | null>(null);
@@ -107,7 +115,7 @@ export function ScreenDesk({ title, onClose }: { title: string; onClose: () => v
   return (
     <div className="desk-screen">
       <button type="button" className="desk-dim" aria-label="离开电脑" onClick={onClose} />
-      <div className="computer" role="dialog" aria-label={title}>
+      <div className="computer" role="dialog" aria-label={title} style={box}>
         <div className="bezel">
           <i className="camera" />
           <div className="glass">
