@@ -216,10 +216,7 @@ export async function speak(
             taskChars: [...clip(task, 100000)].length,
           });
         }
-        if (++calls > 12) {
-          trace("主管工具到顶", { tool: toolCall.name });
-          return { block: true, terminate: true, reason: "这一轮派得够多了。" };
-        }
+        calls += 1;
         return undefined;
       },
       prepareNextTurnWithContext: compactTurn(systemPrompt, model, runtime.streamFn, runtime.getApiKey()),
