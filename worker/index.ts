@@ -4,6 +4,7 @@ import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
 import { dropFloor, getWork, officeBusy, settleShift, speak } from "./work";
+import { workspaceFile, workspaceList, workspaceText } from "./workspace";
 import type { Env } from "./env";
 import type { PersonDraft } from "../src/people/record";
 
@@ -69,6 +70,17 @@ export default {
           return json(result.office);
         }
         return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
+      }
+      if (url.pathname === "/api/workspace" || url.pathname === "/api/workspace/text") {
+        if (request.method !== "GET") return new Response(null, { status: 405, headers: { allow: "GET" } });
+        const folder = url.searchParams.get("path") ?? "";
+        const result = url.pathname.endsWith("/text") ? await workspaceText(env, folder) : await workspaceList(env, folder);
+        if (!result.ok) return json({ error: result.error }, result.status);
+        return json(url.pathname.endsWith("/text") ? { text: result.text } : { entries: result.entries });
+      }
+      if (url.pathname === "/api/workspace/file") {
+        if (request.method !== "GET") return new Response(null, { status: 405, headers: { allow: "GET" } });
+        return workspaceFile(env, url.searchParams.get("path") ?? "");
       }
       if (url.pathname === "/api/duties") {
         if (request.method === "GET") {

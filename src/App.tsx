@@ -70,6 +70,7 @@ export function App() {
   const [roomDraft, setRoomDraft] = useState<RoomLook | null>(null);
   const [petDraft, setPetDraft] = useState<PetId[] | null>(null);
   const [floor, setFloor] = useState<Record<string, FloorMark>>({});
+  const [screen, setScreen] = useState<{ x: number; y: number; title: string } | null>(null);
   const [floorDraft, setFloorDraft] = useState<DepartmentDraft | null>(null);
   const [floorLive, setFloorLive] = useState<DepartmentDraft | null>(null);
   const [holding, setHolding] = useState<DutyHold[]>([]);
@@ -171,6 +172,7 @@ export function App() {
   }
 
   async function choose(id: string) {
+    setScreen(null);
     dropDraft();
     localStorage.setItem(DEPARTMENT_KEY, id);
     setDepartmentId(id);
@@ -303,19 +305,28 @@ export function App() {
               type="button"
               className={mode === "work" ? "on" : ""}
               onClick={() => {
+                setScreen(null);
                 dropDraft();
                 setMode("work");
               }}
             >
               办公
             </button>
-            <button type="button" className={mode === "roster" ? "on" : ""} onClick={() => setMode("roster")}>
+            <button
+              type="button"
+              className={mode === "roster" ? "on" : ""}
+              onClick={() => {
+                setScreen(null);
+                setMode("roster");
+              }}
+            >
               编制
             </button>
             <button
               type="button"
               className={mode === "rehearsal" ? "on" : ""}
               onClick={() => {
+                setScreen(null);
                 dropDraft();
                 setMode("rehearsal");
               }}
@@ -367,6 +378,9 @@ export function App() {
           }
           pets={mode === "rehearsal" ? [] : floorDraft ? (petDraft ?? []) : (petDraft ?? petIds(department?.pets) ?? [])}
           onPick={mode === "roster" ? pick : undefined}
+          onScreen={(desk, title) => setScreen({ x: desk.x, y: desk.y, title })}
+          onCloseScreen={() => setScreen(null)}
+          screen={screen}
         />
         {mode === "rehearsal" || mode === "work" ? (
           <footer className="poses">

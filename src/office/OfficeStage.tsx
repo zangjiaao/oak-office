@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { actorAt, drawOffice, roomTransform } from "./draw";
+import { actorAt, drawOffice, monitorAt, roomTransform } from "./draw";
+import { ScreenDesk } from "./ScreenDesk";
 import { type PetId } from "./pets";
 import { DEFAULT_ROOM, type RoomLook } from "./room";
 import { ROOM } from "./roster";
@@ -15,6 +16,9 @@ export function OfficeStage({
   look = DEFAULT_ROOM,
   pets = [],
   onPick,
+  onScreen,
+  onCloseScreen,
+  screen = null,
 }: {
   actors: ActorFrame[];
   clock: number | null;
@@ -24,17 +28,24 @@ export function OfficeStage({
   look?: RoomLook;
   pets?: readonly PetId[];
   onPick?: (id: string) => void;
+  onScreen?: (desk: DeskSpot, title: string) => void;
+  onCloseScreen?: () => void;
+  screen?: { x: number; y: number; title: string } | null;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const actorsRef = useRef(actors);
   const onPickRef = useRef(onPick);
+  const onScreenRef = useRef(onScreen);
+  const desksRef = useRef(desks);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [ambient, setAmbient] = useState(0);
   const live = clock === null;
 
   actorsRef.current = actors;
   onPickRef.current = onPick;
+  onScreenRef.current = onScreen;
+  desksRef.current = desks;
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -77,22 +88,41 @@ export function OfficeStage({
   }, [size, actors, drawn, room, desks, sign, look, pets]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
-    const choose = onPickRef.current;
+    if (screen) return;
     const canvas = canvasRef.current;
-    if (!choose || !canvas) return;
+    if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const { scale, ox, oy } = roomTransform(rect.width, rect.height, room);
-    const hit = actorAt(
-      actorsRef.current,
-      (event.clientX - rect.left - ox) / scale,
-      (event.clientY - rect.top - oy) / scale,
-    );
+    const x = (event.clientX - rect.left - ox) / scale;
+    const y = (event.clientY - rect.top - oy) / scale;
+    const desk = monitorAt(desksRef.current ?? [], x, y);
+    const open = onScreenRef.current;
+    if (desk && open) {
+      const person = actorsRef.current.find((actor) => Math.hypot(actor.x - desk.x, actor.y - desk.y) < 36);
+      open(desk, person && person.id !== "draft" ? `${person.name}的电脑` : desk.lead ? "主管的电脑" : "工位的电脑");
+      return;
+    }
+    const choose = onPickRef.current;
+    if (!choose) return;
+    const hit = actorAt(actorsRef.current, x, y);
     if (hit && hit.id !== "draft") choose(hit.id);
   }
 
+  const origin = (() => {
+    if (!screen || size.w < 2 || size.h < 2) return "50% 50%";
+    const { scale, ox, oy } = roomTransform(size.w, size.h, room);
+    return `${ox + screen.x * scale}px ${oy + (screen.y - 29) * scale}px`;
+  })();
+
   return (
-    <div className="stage" ref={wrapRef}>
-      <canvas ref={canvasRef} onClick={pick} className={onPick ? "pick" : ""} />
+    <div className={screen ? "stage into" : "stage"} ref={wrapRef}>
+      <canvas
+        ref={canvasRef}
+        onClick={pick}
+        className={onPick || onScreen ? "pick" : ""}
+        style={{ transformOrigin: origin }}
+      />
+      {screen && onCloseScreen ? <ScreenDesk title={screen.title} onClose={onCloseScreen} /> : null}
     </div>
   );
 }
