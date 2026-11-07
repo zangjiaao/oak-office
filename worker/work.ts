@@ -20,7 +20,6 @@ const HISTORY = 16;
 const SEARCH_MAX = 16;
 const STAFF_TOOL_MAX = 24;
 const STAFF_TOKENS = 8_000;
-const TURN_MS = 180_000;
 const toolUses = new Map<string, number>();
 const searchUses = new Map<string, number>();
 
@@ -235,7 +234,6 @@ export async function speak(
         ],
       },
     });
-    const timer = setTimeout(() => agent.abort(), TURN_MS);
     const stop = () => agent.abort();
     signal?.addEventListener("abort", stop, { once: true });
     const before = agent.state.messages.length;
@@ -244,7 +242,6 @@ export async function speak(
       await setDesk(env.DB, lead.id, "think", "在想");
       await agent.prompt(said);
     } finally {
-      clearTimeout(timer);
       signal?.removeEventListener("abort", stop);
     }
     if (agent.state.errorMessage || signal?.aborted) {
@@ -454,12 +451,7 @@ export async function runStaffDuty(
       jobText,
       null,
     );
-    const timer = setTimeout(() => staff.abort(), TURN_MS);
-    try {
-      await staff.prompt(`到点了。请现在完成这件事，用简短中文给出结果。不要派别人：${jobText}`);
-    } finally {
-      clearTimeout(timer);
-    }
+    await staff.prompt(`到点了。请现在完成这件事，用简短中文给出结果。不要派别人：${jobText}`);
     const answer = [...staff.state.messages].reverse().find((message) => message.role === "assistant");
     const note = answer ? clip(visibleText(answer), 500) : "";
     if (!note || staff.state.errorMessage) {
@@ -497,13 +489,11 @@ export async function runStaffDuty(
       },
     });
     await setDesk(env.DB, lead.id, "think", "在想");
-    const leadTimer = setTimeout(() => leader.abort(), 40_000);
     try {
       await leader.prompt(
         `到点了。${person.name}已经做完：${jobText}。员工交来的结果是：${note}。请用你自己的话告诉用户。`,
       );
     } finally {
-      clearTimeout(leadTimer);
       await setDesk(env.DB, lead.id, "idle", "等你一句话");
     }
     const leadAnswer = [...leader.state.messages]
@@ -662,22 +652,17 @@ function askTool(
           },
         ];
         keepCrew(worker.id, staff);
-        let timedOut = false;
-        const timer = setTimeout(() => {
-          timedOut = true;
-          staff.abort();
-        }, TURN_MS);
         const heard = staff.state.messages.length;
         try {
           await staff.prompt(task);
           let outcome = staffOutcome(staff.state.messages, heard);
-          if (!outcome.note && !staff.state.errorMessage && !timedOut) {
+          if (!outcome.note && !staff.state.errorMessage) {
             trace("员工没写出来", { name: worker.name, stop: outcome.stop, parts: outcome.parts, tools: outcome.tools });
             await staff.prompt("用文字给出结果。缺的标成不确定。不要只调用工具。");
             outcome = staffOutcome(staff.state.messages, heard);
           }
           if (!outcome.note) {
-            const reason = assignmentFailure(staff.state.errorMessage, outcome.stop, timedOut);
+            const reason = assignmentFailure(staff.state.errorMessage, outcome.stop);
             trace("派工失败", {
               name: worker.name,
               error: reason,
@@ -712,12 +697,10 @@ function askTool(
           await writeStaffLine(env.DB, departmentId, worker.id, `${worker.name}做完「${label}」。${handed}\n${shown}`.trim());
         } catch (error) {
           const message = error instanceof Error ? error.message : "";
-          const reason = timedOut || /abort/i.test(message) ? "时间到了，还没写完。" : "员工这回没接上。";
+          const reason = /abort/i.test(message) ? "被中断了，没有写完。" : "员工这回没接上。";
           trace("派工失败", { name: worker.name, error: message || reason, stop: "thrown" });
           await setDesk(env.DB, worker.id, "error", "卡住").catch(() => {});
           await writeStaffLine(env.DB, departmentId, worker.id, `${worker.name}没做完「${label}」：${reason}`).catch(() => {});
-        } finally {
-          clearTimeout(timer);
         }
       }
     },
@@ -1079,8 +1062,8 @@ async function setDesk(
     .run();
 }
 
-function assignmentFailure(errorMessage: string | undefined, stop: string, timedOut: boolean) {
-  if (timedOut || (errorMessage && /abort/i.test(errorMessage))) return "时间到了，还没写完。";
+function assignmentFailure(errorMessage: string | undefined, stop: string) {
+  if (errorMessage && /abort/i.test(errorMessage)) return "被中断了，没有写完。";
   if (errorMessage) return clip(errorMessage, 120);
   if (stop === "length") return "写到字数上限，没有交卷。";
   return "没有写出文字结果。";
@@ -1118,6 +1101,7 @@ function staffToolGate(personId: string, name: string, args: unknown) {
     return {
       used,
       query,
+      terminate: true,
       reason: "这一轮工具次数到顶了。不要再调用工具，用已经拿到的内容直接回复，缺的标成不确定。",
     };
   }
