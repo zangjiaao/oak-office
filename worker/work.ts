@@ -285,7 +285,27 @@ export async function speak(
         closingMessage = base ? { ...base, content: [{ type: "text", text: reply }] } : final;
       }
     }
-    if (!reply && calls > 0) reply = "人已经安排好了。";
+    if (!reply && calls > 0) {
+      const names = produced.flatMap((message) =>
+        message.content.flatMap((part) => (part.type === "toolCall" ? [part.name] : [])),
+      );
+      reply = names.includes("ask") ? "人已经安排好了。" : "已经记在看板上了。";
+    }
+    if (reply && !closingMessage) {
+      const base = produced.at(-1);
+      closingMessage = base
+        ? { ...base, content: [{ type: "text", text: reply }] }
+        : {
+            role: "assistant",
+            content: [{ type: "text", text: reply }],
+            api: model.api,
+            provider: model.provider,
+            model: model.id,
+            usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+            stopReason: "stop",
+            timestamp: Date.now(),
+          };
+    }
     if (!reply || !closingMessage) {
       trace("主管没有说完", { calls, jobs: jobs.length, spoken: spoken.length });
       await unwindTurn(env.DB, desks, department.id, turn.jobs);
@@ -792,7 +812,7 @@ function leadPrompt(
     "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字，最少 1。这个人已经有一条定时时，再用 schedule 就是改间隔和内容，不要另加一条。到点由系统直接让本人做，结果会写进对话，你不用再派一次。取消时用 unschedule。",
     dutyList(duties, [lead, ...staff]),
     boardLines(board, [lead, ...staff]),
-    "用户要把事情记在看板上，或你派人并要跟踪时，先用 board，action 写 add，title 写这件事，person_id 写员工 id，state 写 doing。把返回的 task_id 填进 ask 的 board_task_id。没有看板条目时 board_task_id 留空。员工做完后那条会自动划掉。你也可以用 action=state、state=done 自己划掉。",
+    "你现在可以新建看板条目。用 board，action 写 add。多件事放在同一次调用的 title 里，一行一件，不要一件调用一次。交给不同人时按人分开调用。person_id 写员工 id，state 写 doing。只派其中一件时，把返回的 task_id 填进那一次 ask 的 board_task_id。没有看板条目时 board_task_id 留空。员工做完后那条会自动划掉。你也可以用 action=state、state=done 自己划掉。",
     "不能发明员工，不能派给自己。ask 立刻返回，员工在后台做。你告诉用户已经交给谁，不要等结果，也不要把还没做完的事说成做完了。",
     "需要外界信息时用 search。要写脚本或改文件时用 read、write、edit、bash，文件都在办公室的工作目录里，path 用相对路径。",
     "姿态只能是 idle、arrive、think、read、type、run、wait、handoff、report、done、error。label 不超过 16 个字。",

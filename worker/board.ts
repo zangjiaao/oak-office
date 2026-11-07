@@ -118,19 +118,28 @@ export function boardTool(env: Env, departmentId: string) {
     name: "board",
     label: "看板",
     description:
-      "使用这一层的看板。action=add 新建，title 必填（最多 80 字），person_id 写员工 id 或留空，state 写 open、doing 或 done，用不到的字段留空。action=assign 改负责人，填 task_id 和 person_id。action=state 改状态，task_id 来自清单，state 用 open（还没做）、doing（在做）或 done（划掉）。返回里的 task_id 可填进 ask 的 board_task_id。定时不在这里改。",
+      "使用这一层的看板。action=add 新建。多件事放在同一次调用里，title 一行一件，每行最多 80 字，不要一件调用一次。person_id 写员工 id 或留空，这一次新建的都会交给这个人。state 写 open、doing 或 done。action=assign 改负责人，填 task_id 和 person_id。action=state 改状态，task_id 来自清单，state 用 open（还没做）、doing（在做）或 done（划掉）。返回里的 task_id 可填进 ask 的 board_task_id。定时不在这里改。",
     parameters: BoardArgs,
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Static<typeof BoardArgs>) => {
       const action = args.action.trim();
       const personId = args.person_id.trim() || null;
       if (action === "add") {
-        const created = await createBoardTask(env.DB, departmentId, args.title, personId);
-        if (!created.ok) return miss(created.error);
+        const titles = args.title
+          .split(/\r?\n/)
+          .map((line) => line.trim())
+          .filter((line) => line.length > 0);
+        if (!titles.length) return miss("先写这件是什么事。");
         const wanted = args.state.trim();
-        const marked = wanted && wanted !== "open" ? await setBoardState(env.DB, departmentId, created.task.id, wanted) : created;
-        if (!marked.ok) return miss(marked.error);
-        return text(`已记上 ${marked.task.id} ${stateLabel(marked.task.state)}：${marked.task.title}`);
+        const noted = [];
+        for (const title of titles) {
+          const created = await createBoardTask(env.DB, departmentId, title, personId);
+          if (!created.ok) return miss(noted.length ? `${noted.join("\n")}\n其余没记上：${created.error}` : created.error);
+          const marked = wanted && wanted !== "open" ? await setBoardState(env.DB, departmentId, created.task.id, wanted) : created;
+          if (!marked.ok) return miss(`${noted.join("\n")}\n其余没记上：${marked.error}`);
+          noted.push(`${marked.task.id} ${stateLabel(marked.task.state)}：${marked.task.title}`);
+        }
+        return text(`已记上\n${noted.join("\n")}`);
       }
       if (action === "assign") {
         const assigned = await assignBoardTask(env.DB, departmentId, args.task_id.trim(), personId);
