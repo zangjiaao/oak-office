@@ -12,11 +12,11 @@ import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
 import { departmentById } from "./department";
 import { listPeople } from "./people";
+import { compactTurn, fitHistory, listTranscript, summaryNote, type TranscriptLine } from "./context";
 import { openPi, replayMessage, visibleText } from "./pi";
 
 const POSES = ["idle", "arrive", "think", "read", "type", "run", "wait", "handoff", "report", "done", "error"] as const;
 const TEXT_MAX = 1000;
-const HISTORY = 16;
 const SEARCH_MAX = 16;
 const STAFF_TOOL_MAX = 24;
 const toolUses = new Map<string, number>();
@@ -188,9 +188,12 @@ export async function speak(
     desks = await desksOf(env.DB, department.id);
     const duties = await listDuties(env.DB, department.id);
     const board = await listBoard(env.DB, department.id);
-    const prior = await linesOf(env.DB, department.id);
     const model = runtime.modelFor(lead.model);
     if (!model) return { ok: false, error: `${lead.name}的模型不在目录里。`, status: 400 };
+    const systemPrompt = leadPrompt(lead, staff, desks, duties, board, department.name, rules);
+    const prior = withSummary(
+      await fitHistory(env.DB, department.id, systemPrompt, model, runtime.streamFn, runtime.getApiKey()),
+    );
     const userLine: WorkLine = { id: crypto.randomUUID(), role: from, person_id: null, text: said };
     await env.DB.prepare(
       "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, ?, NULL, ?, NULL, ?, ?)",
@@ -219,11 +222,12 @@ export async function speak(
         }
         return undefined;
       },
+      prepareNextTurnWithContext: compactTurn(systemPrompt, model, runtime.streamFn, runtime.getApiKey()),
       initialState: {
         model,
-        systemPrompt: leadPrompt(lead, staff, desks, duties, board, department.name, rules),
+        systemPrompt,
         thinkingLevel: thinkingFor(lead.model, lead.thinking),
-        messages: prior.flatMap((line, index) => replay(line, prior[index - 1])),
+        messages: prior,
         tools: [
           askTool(env, runtime, department.id, rules),
           markTool(env, turn),
@@ -445,6 +449,7 @@ export async function runStaffDuty(
     toolUses.set(person.id, 0);
     searchUses.set(person.id, 0);
     const steps: { pose: Pose; label: string }[] = [];
+    const dutyPrompt = staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT), [], department.name, rules);
     const staff = new Agent({
       streamFn: runtime.streamFn,
       getApiKey: runtime.getApiKey,
@@ -457,7 +462,7 @@ export async function runStaffDuty(
       },
       initialState: {
         model,
-        systemPrompt: staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT), [], department.name, rules),
+        systemPrompt: dutyPrompt,
         thinkingLevel: thinkingFor(person.model, person.thinking),
       },
     });
@@ -466,6 +471,7 @@ export async function runStaffDuty(
       rememberTool(env, person.id),
     ];
     const thinking = thinkingFor(person.model, person.thinking);
+    staff.prepareNextTurnWithContext = compactTurn(dutyPrompt, model, runtime.streamFn, runtime.getApiKey());
     await setDesk(
       env.DB,
       person.id,
@@ -491,23 +497,26 @@ export async function runStaffDuty(
     else armCrew(person.id, rest + DONE_MS + IDLE_MS);
     await remember(env.DB, person.id, jobMemory(jobText, note));
     const clock = `到点了。${person.name}做了：${jobText}`;
-    const history = await linesOf(env.DB, department.id);
     const identity = identityOf(lead);
+    const leaderPrompt = [
+      `你是${department.name}主管${lead.name}。${identity.brief}${identity.dossier}`,
+      rules,
+      promptMemory(lead.memories),
+      "员工的定时任务已经做完。用你自己的话向用户说结果。不要派工，不要加「某某回报：」前缀，也不要原样贴出员工交来的全文。",
+    ]
+      .filter((line) => line.length > 0)
+      .join("\n");
+    const history = withSummary(
+      await fitHistory(env.DB, department.id, leaderPrompt, leadModel, runtime.streamFn, runtime.getApiKey()),
+    );
     const leader = new Agent({
       streamFn: runtime.streamFn,
       getApiKey: runtime.getApiKey,
       initialState: {
         model: leadModel,
-        systemPrompt: [
-          `你是${department.name}主管${lead.name}。${identity.brief}${identity.dossier}`,
-          rules,
-          promptMemory(lead.memories),
-          "员工的定时任务已经做完。用你自己的话向用户说结果。不要派工，不要加「某某回报：」前缀，也不要原样贴出员工交来的全文。",
-        ]
-          .filter((line) => line.length > 0)
-          .join("\n"),
+        systemPrompt: leaderPrompt,
         thinkingLevel: thinkingFor(lead.model, lead.thinking),
-        messages: history.flatMap((line, index) => replay(line, history[index - 1])),
+        messages: history,
         tools: [],
       },
     });
@@ -654,6 +663,7 @@ function askTool(
         const thinking = thinkingFor(worker.model, worker.thinking);
         staff.state.model = picked;
         staff.state.thinkingLevel = thinking;
+        staff.prepareNextTurnWithContext = compactTurn(prompt, picked, runtime.streamFn, runtime.getApiKey());
         const opening = staff.state.messages[0];
         if (opening?.role === "system") {
           staff.state.messages = [{ ...opening, content: prompt }, ...staff.state.messages.slice(1)];
@@ -993,14 +1003,14 @@ function office(
 }
 
 async function linesOf(db: Env["DB"], departmentId: string) {
-  const { results } = await db
-    .prepare(
-      `SELECT id, role, person_id, text, raw, created_at FROM work_line
-       WHERE department_id = ? ORDER BY created_at DESC, id DESC LIMIT ${HISTORY}`,
-    )
-    .bind(departmentId)
-    .all<LineRow>();
-  return results.reverse();
+  return listTranscript(db, departmentId);
+}
+
+function withSummary(fitted: { summary: string | null; lines: TranscriptLine[] }): AgentMessage[] {
+  const head: AgentMessage[] = fitted.summary
+    ? [{ role: "user", content: summaryNote(fitted.summary), timestamp: Date.now() }]
+    : [];
+  return [...head, ...fitted.lines.flatMap((line, index) => replay(line, fitted.lines[index - 1]))];
 }
 
 async function floorOf(db: Env["DB"], departmentId: string) {
@@ -1206,27 +1216,30 @@ async function leadOnReport(
 ) {
   const model = runtime.modelFor(lead.model);
   if (!model) return null;
-  const history = await linesOf(env.DB, lead.department_id);
   const identity = identityOf(lead);
+  const leaderPrompt = [
+    `你是${floor.name}主管${lead.name}。${identity.brief}${identity.dossier}`,
+    houseRules(floor.name, floor.rules),
+    promptMemory(lead.memories),
+    "一名员工刚刚把结果交给你。由你决定要不要告诉用户。",
+    "值得说：结果和用户交代的事有关、和你之前说的不一样、或者人卡住了。",
+    "不必说：用户没问过、只是内部顺手的小事、你刚才已经告诉过同样的结论。",
+    "要说就用简短中文，用你自己的话，不要派工，不要原样贴出员工全文。",
+    "不必说就只回复「沉默」，不要加别的字。",
+  ]
+    .filter((line) => line.length > 0)
+    .join("\n");
+  const history = withSummary(
+    await fitHistory(env.DB, lead.department_id, leaderPrompt, model, runtime.streamFn, runtime.getApiKey()),
+  );
   const leader = new Agent({
     streamFn: runtime.streamFn,
     getApiKey: runtime.getApiKey,
     initialState: {
       model,
-      systemPrompt: [
-        `你是${floor.name}主管${lead.name}。${identity.brief}${identity.dossier}`,
-        houseRules(floor.name, floor.rules),
-        promptMemory(lead.memories),
-        "一名员工刚刚把结果交给你。由你决定要不要告诉用户。",
-        "值得说：结果和用户交代的事有关、和你之前说的不一样、或者人卡住了。",
-        "不必说：用户没问过、只是内部顺手的小事、你刚才已经告诉过同样的结论。",
-        "要说就用简短中文，用你自己的话，不要派工，不要原样贴出员工全文。",
-        "不必说就只回复「沉默」，不要加别的字。",
-      ]
-        .filter((line) => line.length > 0)
-        .join("\n"),
+      systemPrompt: leaderPrompt,
       thinkingLevel: thinkingFor(lead.model, lead.thinking),
-      messages: history.flatMap((line, index) => replay(line, history[index - 1])),
+      messages: history,
       tools: [],
     },
   });

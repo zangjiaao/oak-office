@@ -101,6 +101,7 @@ export async function removeDepartment(
     db.prepare("DELETE FROM person_memory WHERE person_id IN (SELECT id FROM people WHERE department_id = ?)").bind(id),
     db.prepare("DELETE FROM work_desk WHERE person_id IN (SELECT id FROM people WHERE department_id = ?)").bind(id),
     db.prepare("DELETE FROM work_line WHERE department_id = ?").bind(id),
+    db.prepare("DELETE FROM work_compact WHERE department_id = ?").bind(id),
     db.prepare("DELETE FROM people WHERE department_id = ?").bind(id),
     db.prepare("DELETE FROM department WHERE id = ?").bind(id),
   ]);
