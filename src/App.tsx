@@ -71,6 +71,7 @@ export function App() {
   const [petDraft, setPetDraft] = useState<PetId[] | null>(null);
   const [floor, setFloor] = useState<Record<string, FloorMark>>({});
   const [screen, setScreen] = useState<{ x: number; y: number; title: string } | null>(null);
+  const [boardOpen, setBoardOpen] = useState(false);
   const [floorDraft, setFloorDraft] = useState<DepartmentDraft | null>(null);
   const [floorLive, setFloorLive] = useState<DepartmentDraft | null>(null);
   const [holding, setHolding] = useState<DutyHold[]>([]);
@@ -173,6 +174,7 @@ export function App() {
 
   async function choose(id: string) {
     setScreen(null);
+    setBoardOpen(false);
     dropDraft();
     localStorage.setItem(DEPARTMENT_KEY, id);
     setDepartmentId(id);
@@ -306,6 +308,7 @@ export function App() {
               className={mode === "work" ? "on" : ""}
               onClick={() => {
                 setScreen(null);
+                setBoardOpen(false);
                 dropDraft();
                 setMode("work");
               }}
@@ -317,6 +320,7 @@ export function App() {
               className={mode === "roster" ? "on" : ""}
               onClick={() => {
                 setScreen(null);
+                setBoardOpen(false);
                 setMode("roster");
               }}
             >
@@ -327,6 +331,7 @@ export function App() {
               className={mode === "rehearsal" ? "on" : ""}
               onClick={() => {
                 setScreen(null);
+                setBoardOpen(false);
                 dropDraft();
                 setMode("rehearsal");
               }}
@@ -378,9 +383,20 @@ export function App() {
           }
           pets={mode === "rehearsal" ? [] : floorDraft ? (petDraft ?? []) : (petDraft ?? petIds(department?.pets) ?? [])}
           onPick={mode === "roster" ? pick : undefined}
-          onScreen={(desk, title) => setScreen({ x: desk.x, y: desk.y, title })}
+          onScreen={(desk, title) => {
+            setBoardOpen(false);
+            setScreen({ x: desk.x, y: desk.y, title });
+          }}
           onCloseScreen={() => setScreen(null)}
           screen={screen}
+          onBoard={mode !== "rehearsal" && !floorDraft && department ? () => {
+            setScreen(null);
+            setBoardOpen(true);
+          } : undefined}
+          onCloseBoard={() => setBoardOpen(false)}
+          board={boardOpen && !floorDraft && mode !== "rehearsal"}
+          departmentId={department?.id ?? ""}
+          people={(people ?? []).map((person) => ({ id: person.id, name: person.name }))}
         />
         {mode === "rehearsal" || mode === "work" ? (
           <footer className="poses">

@@ -1,3 +1,4 @@
+import { createBoardTask, listBoard, removeBoardTask, setBoardState } from "./board";
 import { createDepartment, listDepartments, readDepartment, removeDepartment, updateDepartment } from "./department";
 import { cancelDuty, listDuties, runDue } from "./duty";
 import { forget } from "./memory";
@@ -87,6 +88,44 @@ export default {
         }
         if (request.method !== "GET") return new Response(null, { status: 405, headers: { allow: "GET, DELETE" } });
         return workspaceFile(env, target);
+      }
+      if (url.pathname === "/api/board") {
+        const departmentId = url.searchParams.get("department") ?? "";
+        if (request.method === "GET") {
+          if (!UUID.test(departmentId)) return json({ error: "先选一层。" }, 400);
+          return json({ tasks: await listBoard(env.DB, departmentId) });
+        }
+        if (request.method === "POST") {
+          const record = await readRecord(request);
+          if (!record) return json({ error: "看不懂这件事。" }, 400);
+          const floorId = typeof record.departmentId === "string" ? record.departmentId : "";
+          if (!UUID.test(floorId)) return json({ error: "先选一层。" }, 400);
+          const title = typeof record.title === "string" ? record.title : "";
+          const personId = typeof record.personId === "string" && record.personId ? record.personId : null;
+          if (personId && !UUID.test(personId)) return json({ error: "这个人不在这一层。" }, 400);
+          const result = await createBoardTask(env.DB, floorId, title, personId);
+          if (!result.ok) return json({ error: result.error }, result.status);
+          return json({ task: result.task }, 201);
+        }
+        return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
+      }
+      const boardMatch = /^\/api\/board\/([^/]+)$/.exec(url.pathname);
+      if (boardMatch) {
+        const id = decodeURIComponent(boardMatch[1]);
+        if (!UUID.test(id)) return json({ error: "看板上没有这件事。" }, 404);
+        const departmentId = url.searchParams.get("department") ?? "";
+        if (!UUID.test(departmentId)) return json({ error: "先选一层。" }, 400);
+        if (request.method === "DELETE") {
+          const result = await removeBoardTask(env.DB, departmentId, id);
+          if (!result.ok) return json({ error: result.error }, result.status);
+          return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+        }
+        if (request.method !== "PATCH") return new Response(null, { status: 405, headers: { allow: "PATCH, DELETE" } });
+        const record = await readRecord(request);
+        if (!record || typeof record.state !== "string") return json({ error: "看不懂这件事。" }, 400);
+        const result = await setBoardState(env.DB, departmentId, id, record.state);
+        if (!result.ok) return json({ error: result.error }, result.status);
+        return json({ task: result.task });
       }
       if (url.pathname === "/api/duties") {
         if (request.method === "GET") {
@@ -178,6 +217,16 @@ export default {
     }
   },
 };
+
+async function readRecord(request: Request) {
+  try {
+    const body = await request.json();
+    if (!body || typeof body !== "object") return null;
+    return body as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
 
 function holdCrew(ctx?: { waitUntil(promise: Promise<unknown>): void }) {
   const until = crewUntil();

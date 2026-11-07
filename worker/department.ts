@@ -97,6 +97,7 @@ export async function removeDepartment(
   if (Number(row?.n ?? 0) <= 1) return { ok: false, error: "至少留一层。", status: 400 };
   await db.batch([
     db.prepare("DELETE FROM duty WHERE person_id IN (SELECT id FROM people WHERE department_id = ?)").bind(id),
+    db.prepare("DELETE FROM board_task WHERE department_id = ?").bind(id),
     db.prepare("DELETE FROM person_memory WHERE person_id IN (SELECT id FROM people WHERE department_id = ?)").bind(id),
     db.prepare("DELETE FROM work_desk WHERE person_id IN (SELECT id FROM people WHERE department_id = ?)").bind(id),
     db.prepare("DELETE FROM work_line WHERE department_id = ?").bind(id),

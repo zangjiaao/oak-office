@@ -58,7 +58,7 @@ function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: numbe
   rect(ctx, 40, 42, 14, 4, look.trim);
 
   rect(ctx, 168, 16, 36, 52, look.wood);
-  rect(ctx, 172, 20, 28, 44, look.style === "glass" ? shade(look.trim, 40) : "#120e0c");
+  rect(ctx, 172, 20, 28, 44, "#120e0c");
   rect(ctx, 196, 36, 4, 8, look.trim);
 
   if (look.style !== "glass") {
@@ -174,6 +174,10 @@ export function roomTransform(width: number, height: number, room = ROOM) {
   const ox = Math.floor((width - room.w * scale) / 2);
   const oy = Math.floor((height - room.h * scale) / 2);
   return { scale, ox, oy };
+}
+
+export function boardAt(roomX: number, roomY: number) {
+  return roomX >= 168 && roomX <= 204 && roomY >= 16 && roomY <= 68;
 }
 
 export function monitorAt(desks: DeskSpot[], roomX: number, roomY: number) {
