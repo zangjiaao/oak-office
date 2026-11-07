@@ -198,6 +198,8 @@ button, input, textarea {
 
 .menu-bar button { border-radius: 4px; }
 
+.menu-bar button.on { background: rgba(255, 255, 255, 0.14); }
+
 .menu-bar button:hover, .desktop aside button:hover { background: rgba(255, 255, 255, 0.08); }
 
 .desktop {
@@ -244,6 +246,36 @@ button, input, textarea {
 }
 
 .desktop ul::-webkit-scrollbar { display: none; }
+
+.desktop.term {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+.desktop.term aside,
+.desktop.term .window { display: none; }
+
+.term-view {
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 14px 16px 18px;
+  background: #14120f;
+  color: #e7dcc6;
+  font: 13px/1.5 ui-monospace, monospace;
+  white-space: pre-wrap;
+  scrollbar-width: none;
+}
+
+.term-view::-webkit-scrollbar { display: none; }
+
+.term-view p { margin: 0 0 0.7em; }
+
+.term-view .cmd { color: #e0b15a; }
+
+.term-view .run { color: #8fceaa; }
+
+.term-view .bad { color: #e7a39a; }
 
 .desktop li button:first-child {
   flex: 1;

@@ -235,7 +235,10 @@ export async function speak(
           scheduleTool(env, department.id),
           unscheduleTool(env, department.id),
           boardTool(env, department.id),
-          ...deskTools(env, turn.leadSteps, (pose, label) => setDesk(env.DB, lead.id, pose, label)),
+          ...deskTools(env, turn.leadSteps, (pose, label) => setDesk(env.DB, lead.id, pose, label), {
+            departmentId: department.id,
+            personId: lead.id,
+          }),
         ],
       },
     });
@@ -467,7 +470,10 @@ export async function runStaffDuty(
       },
     });
     staff.state.tools = [
-      ...deskTools(env, steps, (pose, label) => setDesk(env.DB, person.id, pose, label)),
+      ...deskTools(env, steps, (pose, label) => setDesk(env.DB, person.id, pose, label), {
+        departmentId: department.id,
+        personId: person.id,
+      }),
       rememberTool(env, person.id),
     ];
     const thinking = thinkingFor(person.model, person.thinking);
@@ -669,7 +675,10 @@ function askTool(
           staff.state.messages = [{ ...opening, content: prompt }, ...staff.state.messages.slice(1)];
         }
         staff.state.tools = [
-          ...deskTools(env, steps, (nextPose, nextLabel) => setDesk(env.DB, worker.id, nextPose, nextLabel)),
+          ...deskTools(env, steps, (nextPose, nextLabel) => setDesk(env.DB, worker.id, nextPose, nextLabel), {
+            departmentId,
+            personId: worker.id,
+          }),
           rememberTool(env, worker.id),
           {
             name: "handoff",

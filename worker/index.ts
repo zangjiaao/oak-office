@@ -5,6 +5,7 @@ import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
 import { dropFloor, getWork, holdInflight, officeBusy, settleShift, speak } from "./work";
+import { listShell } from "./shell";
 import { workspaceFile, workspaceList, workspaceRemove, workspaceText } from "./workspace";
 import type { Env } from "./env";
 import type { PersonDraft } from "../src/people/record";
@@ -72,6 +73,12 @@ export default {
           return json(result.office);
         }
         return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
+      }
+      if (url.pathname === "/api/shell") {
+        if (request.method !== "GET") return new Response(null, { status: 405, headers: { allow: "GET" } });
+        const personId = url.searchParams.get("person") ?? "";
+        if (!UUID.test(personId)) return json({ error: "先选一台电脑。" }, 400);
+        return json({ runs: await listShell(env, personId) });
       }
       if (url.pathname === "/api/workspace" || url.pathname === "/api/workspace/text") {
         if (request.method !== "GET") return new Response(null, { status: 405, headers: { allow: "GET" } });

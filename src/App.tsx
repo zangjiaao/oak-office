@@ -71,7 +71,7 @@ export function App() {
   const [roomDraft, setRoomDraft] = useState<RoomLook | null>(null);
   const [petDraft, setPetDraft] = useState<PetId[] | null>(null);
   const [floor, setFloor] = useState<Record<string, FloorMark>>({});
-  const [screen, setScreen] = useState<{ x: number; y: number; title: string } | null>(null);
+  const [screen, setScreen] = useState<{ x: number; y: number; title: string; personId: string | null } | null>(null);
   const [boardOpen, setBoardOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [floorDraft, setFloorDraft] = useState<DepartmentDraft | null>(null);
@@ -405,10 +405,10 @@ export function App() {
           }
           pets={mode === "rehearsal" ? [] : floorDraft ? (petDraft ?? []) : (petDraft ?? petIds(department?.pets) ?? [])}
           onPick={mode === "roster" ? pick : undefined}
-          onScreen={(desk, title) => {
+          onScreen={(desk, title, personId) => {
             setBoardOpen(false);
             setRulesOpen(false);
-            setScreen({ x: desk.x, y: desk.y, title });
+            setScreen({ x: desk.x, y: desk.y, title, personId });
           }}
           onCloseScreen={() => setScreen(null)}
           screen={screen}

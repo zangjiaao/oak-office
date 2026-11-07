@@ -38,9 +38,9 @@ export function OfficeStage({
   look?: RoomLook;
   pets?: readonly PetId[];
   onPick?: (id: string) => void;
-  onScreen?: (desk: DeskSpot, title: string) => void;
+  onScreen?: (desk: DeskSpot, title: string, personId: string | null) => void;
   onCloseScreen?: () => void;
-  screen?: { x: number; y: number; title: string } | null;
+  screen?: { x: number; y: number; title: string; personId: string | null } | null;
   onBoard?: () => void;
   onCloseBoard?: () => void;
   board?: boolean;
@@ -131,7 +131,8 @@ export function OfficeStage({
     const open = onScreenRef.current;
     if (desk && open) {
       const person = actorsRef.current.find((actor) => Math.hypot(actor.x - desk.x, actor.y - desk.y) < 36);
-      open(desk, person && person.id !== "draft" ? `${person.name}的电脑` : desk.lead ? "主管的电脑" : "工位的电脑");
+      const named = person && person.id !== "draft" ? person : null;
+      open(desk, named ? `${named.name}的电脑` : desk.lead ? "主管的电脑" : "工位的电脑", named?.id ?? null);
       return;
     }
     const choose = onPickRef.current;
@@ -146,7 +147,7 @@ export function OfficeStage({
     <div className={screen || board || rules ? "stage into" : "stage"} ref={wrapRef}>
       <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard || onRules ? "pick" : ""} />
       {screen && onCloseScreen ? (
-        <ScreenDesk title={screen.title} onClose={onCloseScreen} box={box} />
+        <ScreenDesk title={screen.title} personId={screen.personId} onClose={onCloseScreen} box={box} />
       ) : null}
       {board && onCloseBoard && departmentId ? (
         <BoardDesk departmentId={departmentId} people={people} box={boardBox(box)} face={boardFace(look)} onClose={onCloseBoard} />

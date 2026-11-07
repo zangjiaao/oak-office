@@ -2,6 +2,7 @@ import { obj, str, type Static } from "@earendil-works/pi-schema";
 import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
 import { remember } from "./memory";
+import { finishShell, startShell } from "./shell";
 
 type Step = { pose: Pose; label: string };
 type Mark = (pose: Pose, label: string) => Promise<void>;
@@ -12,13 +13,13 @@ const WriteArgs = obj({ path: str(), content: str() });
 const EditArgs = obj({ path: str(), old: str(), new: str() });
 const BashArgs = obj({ command: str() });
 
-export function deskTools(env: Env, steps: Step[], mark: Mark) {
+export function deskTools(env: Env, steps: Step[], mark: Mark, who: { departmentId: string; personId: string }) {
   return [
     searchTool(env, steps, mark),
     readTool(env, steps, mark),
     writeTool(env, steps, mark),
     editTool(env, steps, mark),
-    bashTool(env, steps, mark),
+    bashTool(env, steps, mark, who),
   ];
 }
 
@@ -94,8 +95,29 @@ function editTool(env: Env, steps: Step[], mark: Mark) {
   return fileTool(env, steps, mark, "type", "在改脚本", "替换文件里唯一的一段原文。old 必须只出现一次。", EditArgs, "/edit");
 }
 
-function bashTool(env: Env, steps: Step[], mark: Mark) {
-  return fileTool(env, steps, mark, "run", "在跑脚本", "在工作目录里执行 bash。用来运行刚写的脚本。", BashArgs, "/bash");
+function bashTool(env: Env, steps: Step[], mark: Mark, who: { departmentId: string; personId: string }) {
+  return {
+    name: "bash",
+    label: "在跑脚本",
+    description: "在工作目录里执行 bash。用来运行刚写的脚本。",
+    parameters: BashArgs,
+    executionMode: "sequential" as const,
+    execute: async (_id: string, args: Static<typeof BashArgs>) => {
+      const command = args.command.trim();
+      if (!command) return miss("没有命令。", "bash");
+      const id = crypto.randomUUID();
+      const recorded = await startShell(env.DB, { id, departmentId: who.departmentId, personId: who.personId, command }).then(
+        () => true,
+        () => false,
+      );
+      await note(steps, mark, "run", "在跑脚本");
+      const result = await officeHost(env, "/bash", { command, id });
+      if (recorded) await finishShell(env.DB, id, result.ok ? result.text : result.error, result.ok ? result.exitCode : null).catch(() => {});
+      if (!result.ok) return miss(result.error || "工作目录没接上。", "bash");
+      const exit = result.exitCode === null ? "" : `\n退出码 ${result.exitCode}`;
+      return text(`${result.text}${exit}`.trim() || "完成。");
+    },
+  };
 }
 
 function fileTool(
@@ -139,9 +161,8 @@ async function officeHost(env: Env, action: string, body: Record<string, string>
       body: JSON.stringify(body),
     });
     const payload = (await response.json()) as { ok?: boolean; text?: string; error?: string; exitCode?: number };
-    if (!response.ok || payload.ok === false) return { ok: false as const, error: payload.error || "工作目录没接上。" };
-    const exit = payload.exitCode === undefined ? "" : `\n退出码 ${payload.exitCode}`;
-    return { ok: true as const, text: `${payload.text ?? ""}${exit}`.trim() };
+    if (!response.ok || payload.ok === false) return { ok: false as const, error: payload.error || "工作目录没接上。", exitCode: null };
+    return { ok: true as const, text: payload.text ?? "", exitCode: typeof payload.exitCode === "number" ? payload.exitCode : null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     return { ok: false as const, error: message ? `脚本工作区没连上。${message}` : "脚本工作区没连上。" };
