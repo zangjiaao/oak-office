@@ -379,7 +379,10 @@ button, input, textarea {
   padding: 16px 18px;
   font-size: 16px;
   line-height: 1.55;
+  scrollbar-width: none;
 }
+
+.window article::-webkit-scrollbar { display: none; }
 
 .window pre {
   white-space: pre-wrap;
