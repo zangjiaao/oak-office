@@ -64,6 +64,18 @@ export async function createBoardTask(db: Env["DB"], departmentId: string, title
   return { ok: true as const, task };
 }
 
+export async function editBoardTask(db: Env["DB"], departmentId: string, id: string, title: string, personId: string | null) {
+  const text = title.trim().replace(/\s+/g, " ");
+  if (!text) return fail("先写这件是什么事。", 400);
+  if ([...text].length > TITLE_MAX) return fail("这件事太长。", 400);
+  const existing = await ownedTask(db, departmentId, id);
+  if (!existing) return fail("看板上没有这件事。", 404);
+  if (personId && !(await personOnFloor(db, departmentId, personId))) return fail("这个人不在这一层。", 400);
+  const now = Date.now();
+  await db.prepare("UPDATE board_task SET title = ?, person_id = ?, updated_at = ? WHERE id = ?").bind(text, personId, now, id).run();
+  return { ok: true as const, task: { ...existing, title: text, person_id: personId, updated_at: now } };
+}
+
 export async function setBoardState(db: Env["DB"], departmentId: string, id: string, state: string) {
   if (!isState(state)) return fail("状态用还没做、在做或划掉。", 400);
   const existing = await ownedTask(db, departmentId, id);

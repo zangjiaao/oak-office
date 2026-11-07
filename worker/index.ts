@@ -1,4 +1,4 @@
-import { createBoardTask, listBoard, removeBoardTask, setBoardState } from "./board";
+import { createBoardTask, editBoardTask, listBoard, removeBoardTask } from "./board";
 import { createDepartment, listDepartments, readDepartment, removeDepartment, updateDepartment } from "./department";
 import { cancelDuty, listDuties, runDue } from "./duty";
 import { forget } from "./memory";
@@ -122,8 +122,10 @@ export default {
         }
         if (request.method !== "PATCH") return new Response(null, { status: 405, headers: { allow: "PATCH, DELETE" } });
         const record = await readRecord(request);
-        if (!record || typeof record.state !== "string") return json({ error: "看不懂这件事。" }, 400);
-        const result = await setBoardState(env.DB, departmentId, id, record.state);
+        if (!record || typeof record.title !== "string") return json({ error: "看不懂这件事。" }, 400);
+        const personId = typeof record.personId === "string" && record.personId ? record.personId : null;
+        if (personId && !UUID.test(personId)) return json({ error: "这个人不在这一层。" }, 400);
+        const result = await editBoardTask(env.DB, departmentId, id, record.title, personId);
         if (!result.ok) return json({ error: result.error }, result.status);
         return json({ task: result.task });
       }

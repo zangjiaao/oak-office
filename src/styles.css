@@ -577,6 +577,24 @@ button, input, textarea {
 
 .slate li.pin.tone-1 { background: #f7f1df; transform: rotate(0.9deg); }
 .slate li.pin.tone-2 { background: #d7e6ee; transform: rotate(-0.4deg); }
+.slate li.pin.editing { width: 196px; height: auto; min-height: 128px; transform: none; z-index: 1; }
+
+.slate li.pin form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+}
+
+.slate li.pin input,
+.slate li.pin select {
+  flex: none;
+  width: 100%;
+  color: #241c16;
+  border-bottom-color: #8a7564;
+}
 
 .slate li > span:first-child {
   min-width: 0;
@@ -637,7 +655,7 @@ button, input, textarea {
 
 .slate input { flex: 1; }
 
-.slate form button {
+.slate > form button {
   flex: none;
   border: 1px solid currentColor;
   background: transparent;

@@ -29,6 +29,9 @@ export function BoardDesk({
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [owner, setOwner] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftOwner, setDraftOwner] = useState("");
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -75,11 +78,21 @@ export function BoardDesk({
     }
   }
 
-  async function mark(id: string, state: Task["state"]) {
+  function beginEdit(task: Task) {
+    setError(null);
+    setEditing(task.id);
+    setDraftTitle(task.title);
+    setDraftOwner(task.person_id ?? "");
+  }
+
+  async function saveEdit(event: React.FormEvent) {
+    event.preventDefault();
+    if (!editing) return;
     setError(null);
     try {
-      const task = await patchTask(departmentId, id, state);
-      setTasks((current) => (current ?? []).map((item) => (item.id === id ? task : item)));
+      const task = await patchTask(departmentId, editing, draftTitle, draftOwner);
+      setTasks((current) => (current ?? []).map((item) => (item.id === task.id ? task : item)));
+      setEditing(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "这件事没改成。");
     }
@@ -132,33 +145,54 @@ export function BoardDesk({
           {rows.length > 0 ? (
             <ul>
               {rows.map((task, index) => (
-                <li key={task.id} className={task.state === "done" ? `pin tone-${index % 3} done` : `pin tone-${index % 3}`}>
-                  <span>
-                    <small>
-                      {stateName(task.state)} · {personName(people, task.person_id)}
-                    </small>
-                    <b>{task.title}</b>
-                  </span>
-                  <span className="slate-actions">
-                    {task.state !== "doing" ? (
-                      <button type="button" aria-label="在做" onClick={() => void mark(task.id, "doing")}>
-                        <PlayIcon />
-                      </button>
-                    ) : null}
-                    {task.state !== "open" ? (
-                      <button type="button" aria-label="还没做" onClick={() => void mark(task.id, "open")}>
-                        <UndoIcon />
-                      </button>
-                    ) : null}
-                    {task.state !== "done" ? (
-                      <button type="button" aria-label="划掉" onClick={() => void mark(task.id, "done")}>
-                        <CheckIcon />
-                      </button>
-                    ) : null}
-                    <button type="button" aria-label="去掉" onClick={() => void remove(task.id)}>
-                      <TrashIcon />
-                    </button>
-                  </span>
+                <li
+                  key={task.id}
+                  className={`pin tone-${index % 3}${task.state === "done" ? " done" : ""}${editing === task.id ? " editing" : ""}`}
+                >
+                  {editing === task.id ? (
+                    <form onSubmit={(event) => void saveEdit(event)}>
+                      <small>{stateName(task.state)}</small>
+                      <input
+                        value={draftTitle}
+                        maxLength={80}
+                        aria-label="改这件事"
+                        onChange={(event) => setDraftTitle(event.target.value)}
+                      />
+                      <select aria-label="负责人" value={draftOwner} onChange={(event) => setDraftOwner(event.target.value)}>
+                        <option value="">不指定</option>
+                        {people.map((person) => (
+                          <option key={person.id} value={person.id}>
+                            {person.name}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="slate-actions">
+                        <button type="submit" aria-label="改好">
+                          <CheckIcon />
+                        </button>
+                        <button type="button" aria-label="取消" onClick={() => setEditing(null)}>
+                          <CloseIcon />
+                        </button>
+                      </span>
+                    </form>
+                  ) : (
+                    <>
+                      <span>
+                        <small>
+                          {stateName(task.state)} · {personName(people, task.person_id)}
+                        </small>
+                        <b>{task.title}</b>
+                      </span>
+                      <span className="slate-actions">
+                        <button type="button" aria-label="编辑" onClick={() => beginEdit(task)}>
+                          <PencilIcon />
+                        </button>
+                        <button type="button" aria-label="去掉" onClick={() => void remove(task.id)}>
+                          <TrashIcon />
+                        </button>
+                      </span>
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
@@ -195,18 +229,11 @@ function CloseIcon() {
   );
 }
 
-function PlayIcon() {
+function PencilIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M5.2 3.6v8.8L12.4 8Z" />
-    </svg>
-  );
-}
-
-function UndoIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M4 7.2h6.2a2.6 2.6 0 1 1 0 5.2H8.4M4 7.2 6.4 4.8M4 7.2l2.4 2.4" />
+      <path d="M9.2 2.6 13.4 6.8 5.2 15H1.2v-4Z" />
+      <path d="M8 3.8 12.2 8" />
     </svg>
   );
 }
@@ -266,11 +293,11 @@ async function createTask(departmentId: string, title: string, personId: string)
   return body.task;
 }
 
-async function patchTask(departmentId: string, id: string, state: Task["state"]) {
+async function patchTask(departmentId: string, id: string, title: string, personId: string) {
   const response = await fetch(`/api/board/${id}?department=${encodeURIComponent(departmentId)}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ state }),
+    body: JSON.stringify({ title, personId }),
   });
   if (!response.ok) throw new Error(await errorText(response));
   const body = (await response.json()) as { task: Task };
