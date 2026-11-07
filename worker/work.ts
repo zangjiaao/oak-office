@@ -17,10 +17,6 @@ import { openPi, replayMessage, visibleText } from "./pi";
 
 const POSES = ["idle", "arrive", "think", "read", "type", "run", "wait", "handoff", "report", "done", "error"] as const;
 const TEXT_MAX = 1000;
-const SEARCH_MAX = 16;
-const STAFF_TOOL_MAX = 24;
-const toolUses = new Map<string, number>();
-const searchUses = new Map<string, number>();
 
 function trace(event: string, detail?: Record<string, unknown>) {
   const extra = detail ? ` ${JSON.stringify(detail)}` : "";
@@ -446,20 +442,12 @@ export async function runStaffDuty(
     const leadModel = runtime.modelFor(lead.model);
     if (!leadModel) return { ok: false, error: `${lead.name}的模型不在目录里。` };
     releaseCrew(person.id);
-    toolUses.set(person.id, 0);
-    searchUses.set(person.id, 0);
     const steps: { pose: Pose; label: string }[] = [];
     const dutyPrompt = staffPrompt(person, await recentNotes(env.DB, person.id, NOTES_IN_PROMPT), [], department.name, rules);
     const staff = new Agent({
       streamFn: runtime.streamFn,
       getApiKey: runtime.getApiKey,
       toolExecution: "parallel",
-      beforeToolCall: async ({ toolCall, args }) => {
-        const gate = staffToolGate(person.id, toolCall.name, args);
-        if (!gate) return undefined;
-        trace("员工工具到顶", { name: person.name, tool: toolCall.name, ...gate });
-        return { block: true, reason: gate.reason };
-      },
       initialState: {
         model,
         systemPrompt: dutyPrompt,
@@ -623,8 +611,6 @@ function askTool(
       });
       await setDesk(env.DB, person.id, pose, label, task, null);
       assigned.add(person.id);
-      toolUses.set(person.id, 0);
-      searchUses.set(person.id, 0);
       const work = finishAssignment().finally(() => {
         assigned.delete(person.id);
         releaseCrew(person.id);
@@ -652,10 +638,7 @@ function askTool(
               if (toolCall.name === "handoff") {
                 trace("准备递交", { from: worker.name, person: field(args, "person_id") });
               }
-              const gate = staffToolGate(worker.id, toolCall.name, args);
-              if (!gate) return undefined;
-              trace("员工工具到顶", { name: worker.name, tool: toolCall.name, ...gate });
-              return { block: true, reason: gate.reason };
+              return undefined;
             },
             initialState: {
               model: picked,
@@ -1291,29 +1274,6 @@ function staffOutcome(messages: AgentMessage[], from: number) {
     parts,
     stop: answer?.stopReason ?? "none",
     tools: fresh.filter((message) => message.role === "toolResult").length,
-  };
-}
-
-function staffToolGate(personId: string, name: string, args: unknown) {
-  const used = (toolUses.get(personId) ?? 0) + 1;
-  toolUses.set(personId, used);
-  const query = name === "search" ? clip(field(args, "query"), 120) : undefined;
-  if (used > STAFF_TOOL_MAX) {
-    return {
-      used,
-      query,
-      reason: "这一轮工具次数到顶了。不要再调用工具，用已经拿到的内容直接回复，缺的标成不确定。",
-    };
-  }
-  if (name !== "search") return undefined;
-  const searches = (searchUses.get(personId) ?? 0) + 1;
-  searchUses.set(personId, searches);
-  if (searches <= SEARCH_MAX) return undefined;
-  return {
-    used,
-    searches,
-    query,
-    reason: "搜索次数到顶了。把已经查到的写进文件并回复，缺的标成不确定。",
   };
 }
 
