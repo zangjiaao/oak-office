@@ -340,6 +340,47 @@ button, input, textarea {
   font-size: 14px;
 }
 
+.window article:has(.code) { padding: 8px 0 12px; }
+
+.window .code {
+  width: max-content;
+  min-width: 100%;
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+
+.window .code .row {
+  display: flex;
+  min-height: 1.55em;
+}
+
+.window .code .ln {
+  position: sticky;
+  left: 0;
+  flex: none;
+  box-sizing: border-box;
+  width: calc(var(--ln) + 18px);
+  padding-right: 12px;
+  text-align: right;
+  color: #b5a48c;
+  background: #fffaf2;
+  user-select: none;
+}
+
+.window .code code {
+  padding-right: 16px;
+  white-space: pre;
+  font: inherit;
+}
+
+.window .code .keyword { color: #a8322a; }
+.window .code .string { color: #2f6b45; }
+.window .code .comment { color: #8a7564; }
+.window .code .number { color: #8a5a12; }
+.window .code .tag { color: #1f4d6b; }
+.window .code .attr { color: #6b4428; }
+
 .chin {
   display: grid;
   place-items: center;

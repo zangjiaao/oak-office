@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CodeView } from "./CodeView";
 import { Markdown } from "../work/MarkdownView";
 
 type Entry = { name: string; kind: "dir" | "file"; bytes: number };
@@ -212,8 +213,8 @@ export function ScreenDesk({
                 <article>
                   {file ? null : <p>点左边的文件，在屏幕里看。</p>}
                   {note ? <p>{note}</p> : null}
-                  {text !== null && (file?.endsWith(".md") || file?.endsWith(".markdown")) ? <Markdown text={text} /> : null}
-                  {text !== null && file && !file.endsWith(".md") && !file.endsWith(".markdown") ? <pre>{text}</pre> : null}
+                  {text !== null && markdown(file) ? <Markdown text={text} /> : null}
+                  {text !== null && file && !markdown(file) ? <CodeView text={text} ext={extension(file)} /> : null}
                   {file && text === null && !note ? <p>在打开。</p> : null}
                 </article>
               </section>
@@ -247,6 +248,14 @@ function TrashIcon() {
 
 function deskClock() {
   return new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function markdown(file: string | null) {
+  return file?.endsWith(".md") || file?.endsWith(".markdown") || false;
+}
+
+function extension(file: string) {
+  return file.split(".").pop()?.toLowerCase() ?? "";
 }
 
 function joinPath(folder: string, name: string) {
