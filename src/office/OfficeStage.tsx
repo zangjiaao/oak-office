@@ -108,20 +108,9 @@ export function OfficeStage({
     if (hit && hit.id !== "draft") choose(hit.id);
   }
 
-  const origin = (() => {
-    if (!screen || size.w < 2 || size.h < 2) return "50% 50%";
-    const { scale, ox, oy } = roomTransform(size.w, size.h, room);
-    return `${ox + screen.x * scale}px ${oy + (screen.y - 29) * scale}px`;
-  })();
-
   return (
     <div className={screen ? "stage into" : "stage"} ref={wrapRef}>
-      <canvas
-        ref={canvasRef}
-        onClick={pick}
-        className={onPick || onScreen ? "pick" : ""}
-        style={{ transformOrigin: origin }}
-      />
+      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen ? "pick" : ""} />
       {screen && onCloseScreen ? <ScreenDesk title={screen.title} onClose={onCloseScreen} /> : null}
     </div>
   );

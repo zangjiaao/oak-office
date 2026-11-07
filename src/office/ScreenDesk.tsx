@@ -30,6 +30,7 @@ const TEXT = new Set([
 ]);
 
 export function ScreenDesk({ title, onClose }: { title: string; onClose: () => void }) {
+  const [clock, setClock] = useState(() => deskClock());
   const [folder, setFolder] = useState("");
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +43,11 @@ export function ScreenDesk({ title, onClose }: { title: string; onClose: () => v
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const timer = setInterval(() => setClock(deskClock()), 1000);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      clearInterval(timer);
+    };
   }, [onClose]);
 
   useEffect(() => {
@@ -100,57 +105,88 @@ export function ScreenDesk({ title, onClose }: { title: string; onClose: () => v
   const crumbs = folder ? folder.split("/") : [];
 
   return (
-    <div className="monitor" role="dialog" aria-label={title}>
-      <header>
-        <strong>{title}</strong>
-        <button type="button" onClick={onClose}>
-          离开电脑
-        </button>
-      </header>
-      <p className="crumbs">
-        <button type="button" onClick={() => setFolder("")}>
-          工作区
-        </button>
-        {crumbs.map((part, index) => {
-          const path = crumbs.slice(0, index + 1).join("/");
-          return (
-            <button key={path} type="button" onClick={() => setFolder(path)}>
-              {part}
-            </button>
-          );
-        })}
-      </p>
-      <div className="monitor-body">
-        <ul>
-          {error ? <li className="file-error">{error}</li> : null}
-          {entries === null && !error ? <li>在读工作区。</li> : null}
-          {entries && entries.length === 0 ? <li>工作区还是空的。</li> : null}
-          {entries?.map((entry) => (
-            <li key={entry.name}>
-              <button
-                type="button"
-                onClick={() => (entry.kind === "dir" ? setFolder(joinPath(folder, entry.name)) : void openFile(entry.name))}
-              >
-                {entry.kind === "dir" ? `${entry.name}/` : entry.name}
+    <div className="desk-screen">
+      <button type="button" className="desk-dim" aria-label="离开电脑" onClick={onClose} />
+      <div className="computer" role="dialog" aria-label={title}>
+        <div className="bezel">
+          <i className="camera" />
+          <div className="glass">
+            <header className="menu-bar">
+              <strong>{title}</strong>
+              <span>工作区</span>
+              <time>{clock}</time>
+              <button type="button" onClick={onClose}>
+                关机
               </button>
-              {entry.kind === "file" ? (
-                <button type="button" onClick={() => void download(entry.name)}>
-                  下载
-                </button>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-        <article>
-          {file ? <h2>{file.split("/").pop()}</h2> : <p>点一个文件，在屏幕里看。</p>}
-          {note ? <p>{note}</p> : null}
-          {text !== null && file?.endsWith(".md") ? <Markdown text={text} /> : null}
-          {text !== null && file && !file.endsWith(".md") ? <pre>{text}</pre> : null}
-          {file && text === null && !note ? <p>在打开。</p> : null}
-        </article>
+            </header>
+            <div className="desktop">
+              <aside>
+                <p className="crumbs">
+                  <button type="button" onClick={() => setFolder("")}>
+                    工作区
+                  </button>
+                  {crumbs.map((part, index) => {
+                    const path = crumbs.slice(0, index + 1).join("/");
+                    return (
+                      <button key={path} type="button" onClick={() => setFolder(path)}>
+                        {part}
+                      </button>
+                    );
+                  })}
+                </p>
+                <ul>
+                  {error ? <li>{error}</li> : null}
+                  {entries === null && !error ? <li>在读工作区。</li> : null}
+                  {entries && entries.length === 0 ? <li>工作区还是空的。</li> : null}
+                  {entries?.map((entry) => {
+                    const path = joinPath(folder, entry.name);
+                    return (
+                      <li key={entry.name} className={file === path ? "on" : ""}>
+                        <button
+                          type="button"
+                          onClick={() => (entry.kind === "dir" ? setFolder(path) : void openFile(entry.name))}
+                        >
+                          {entry.kind === "dir" ? `${entry.name}/` : entry.name}
+                        </button>
+                        {entry.kind === "file" ? (
+                          <button type="button" onClick={() => void download(entry.name)}>
+                            下载
+                          </button>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </aside>
+              <section className="window">
+                <header>
+                  <i />
+                  <i />
+                  <i />
+                  <span>{file ? file.split("/").pop() : "未打开文件"}</span>
+                </header>
+                <article>
+                  {file ? null : <p>点左边的文件，在屏幕里看。</p>}
+                  {note ? <p>{note}</p> : null}
+                  {text !== null && (file?.endsWith(".md") || file?.endsWith(".markdown")) ? <Markdown text={text} /> : null}
+                  {text !== null && file && !file.endsWith(".md") && !file.endsWith(".markdown") ? <pre>{text}</pre> : null}
+                  {file && text === null && !note ? <p>在打开。</p> : null}
+                </article>
+              </section>
+            </div>
+          </div>
+        </div>
+        <div className="chin">
+          <i />
+        </div>
+        <div className="stand" />
       </div>
     </div>
   );
+}
+
+function deskClock() {
+  return new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
 }
 
 function joinPath(folder: string, name: string) {
