@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { actorAt, boardAt, drawOffice, monitorAt, roomTransform } from "./draw";
+import { actorAt, boardAt, boardFace, drawOffice, monitorAt, roomTransform } from "./draw";
 import { BoardDesk } from "./BoardDesk";
 import { ScreenDesk } from "./ScreenDesk";
 import { type PetId } from "./pets";
@@ -108,7 +108,7 @@ export function OfficeStage({
     const { scale, ox, oy } = roomTransform(rect.width, rect.height, room);
     const x = (event.clientX - rect.left - ox) / scale;
     const y = (event.clientY - rect.top - oy) / scale;
-    if (boardAt(x, y) && onBoardRef.current) {
+    if (boardAt(x, y, look.style) && onBoardRef.current) {
       onBoardRef.current();
       return;
     }
@@ -134,7 +134,7 @@ export function OfficeStage({
         <ScreenDesk title={screen.title} onClose={onCloseScreen} box={box} />
       ) : null}
       {board && onCloseBoard && departmentId ? (
-        <BoardDesk departmentId={departmentId} people={people} box={box} onClose={onCloseBoard} />
+        <BoardDesk departmentId={departmentId} people={people} box={boardBox(box)} face={boardFace(look)} onClose={onCloseBoard} />
       ) : null}
     </div>
   );
@@ -143,4 +143,24 @@ export function OfficeStage({
 function officeBox(width: number, height: number, room: { w: number; h: number }) {
   const { scale, ox, oy } = roomTransform(width, height, room);
   return { left: ox, top: oy, width: room.w * scale, height: room.h * scale };
+}
+
+function boardBox(office: { left: number; top: number; width: number; height: number }) {
+  const aspect = 52 / 36;
+  const maxW = office.width * 0.76;
+  const maxH = office.height * 0.58;
+  let width = maxW;
+  let height = width / aspect;
+  if (height > maxH) {
+    height = maxH;
+    width = height * aspect;
+  }
+  width = Math.round(width);
+  height = Math.round(height);
+  return {
+    left: Math.round(office.left + (office.width - width) / 2),
+    top: Math.round(office.top + (office.height - height) / 2),
+    width,
+    height,
+  };
 }

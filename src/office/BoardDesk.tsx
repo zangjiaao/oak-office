@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { everyLabel, listDuties, type Duty } from "../work/duty";
 
 type Task = {
@@ -15,11 +15,13 @@ export function BoardDesk({
   departmentId,
   people,
   box,
+  face,
   onClose,
 }: {
   departmentId: string;
   people: { id: string; name: string }[];
   box: { left: number; top: number; width: number; height: number };
+  face: string;
   onClose: () => void;
 }) {
   const [duties, setDuties] = useState<Duty[] | null>(null);
@@ -98,7 +100,7 @@ export function BoardDesk({
   return (
     <div className="desk-screen">
       <button type="button" className="desk-dim" aria-label="离开看板" onClick={onClose} />
-      <section className="slate" role="dialog" aria-label="看板" style={box}>
+      <section className="slate" role="dialog" aria-label="看板" style={{ ...box, background: face, color: ink(face) } as CSSProperties}>
         <header>
           <strong>看板</strong>
           <button type="button" onClick={onClose}>
@@ -174,6 +176,12 @@ export function BoardDesk({
       </section>
     </div>
   );
+}
+
+function ink(hex: string) {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const bright = ((n >> 16) & 255) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114;
+  return bright > 150000 ? "#1a1714" : "#f4f7fb";
 }
 
 function personName(people: { id: string; name: string }[], id: string | null) {
