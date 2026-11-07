@@ -104,77 +104,65 @@ export function BoardDesk({
         className="slate"
         role="dialog"
         aria-label="看板"
-        style={
-          {
-            ...box,
-            backgroundColor: face,
-            backgroundImage:
-              "radial-gradient(rgba(255,255,255,0.22) 0.6px, transparent 0.7px), radial-gradient(rgba(0,0,0,0.16) 0.6px, transparent 0.7px)",
-            backgroundSize: "5px 5px, 8px 8px",
-            backgroundPosition: "0 0, 2px 3px",
-            color: ink(face),
-          } as CSSProperties
-        }
+        style={{ ...box, backgroundColor: face, color: ink(face) } as CSSProperties}
       >
         <header>
           <strong>看板</strong>
-          <button type="button" onClick={onClose}>
-            关上
+          <button type="button" aria-label="关上" onClick={onClose}>
+            <CloseIcon />
           </button>
         </header>
         <div className="slate-body">
           {error ? <p className="quiet">{error}</p> : null}
-          <h2>定时</h2>
-          <ul>
-            {duties === null && !error ? <li className="quiet">在读定时。</li> : null}
-            {duties && duties.length === 0 ? <li className="quiet">还没有定时。</li> : null}
-            {duties?.map((duty, index) => (
-              <li key={duty.id} className={`pin tone-${index % 3}`}>
-                <span>
-                  <small>
-                    {personName(people, duty.person_id)} · {everyLabel(duty.every_ms)}
-                  </small>
-                  <b>{duty.task}</b>
-                </span>
-                <em>{duty.next_at <= now ? "在做" : nextLabel(duty.next_at)}</em>
-              </li>
-            ))}
-          </ul>
-          <h2>这件事</h2>
-          <ul>
-            {tasks === null && !error ? <li className="quiet">在读板上的事。</li> : null}
-            {tasks && tasks.length === 0 ? <li className="quiet">还没有要记的事。</li> : null}
-            {rows.map((task, index) => (
-              <li key={task.id} className={task.state === "done" ? `pin tone-${index % 3} done` : `pin tone-${index % 3}`}>
-                <span>
-                  <small>
-                    {stateName(task.state)} · {personName(people, task.person_id)}
-                  </small>
-                  <b>{task.title}</b>
-                </span>
-                <span className="slate-actions">
-                  {task.state !== "doing" ? (
-                    <button type="button" onClick={() => void mark(task.id, "doing")}>
-                      在做
+          {duties && duties.length > 0 ? (
+            <ul>
+              {duties.map((duty, index) => (
+                <li key={duty.id} className={`pin tone-${index % 3}`}>
+                  <span>
+                    <small>
+                      {personName(people, duty.person_id)} · {everyLabel(duty.every_ms)}
+                    </small>
+                    <b>{duty.task}</b>
+                  </span>
+                  <em>{duty.next_at <= now ? "在做" : nextLabel(duty.next_at)}</em>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {rows.length > 0 ? (
+            <ul>
+              {rows.map((task, index) => (
+                <li key={task.id} className={task.state === "done" ? `pin tone-${index % 3} done` : `pin tone-${index % 3}`}>
+                  <span>
+                    <small>
+                      {stateName(task.state)} · {personName(people, task.person_id)}
+                    </small>
+                    <b>{task.title}</b>
+                  </span>
+                  <span className="slate-actions">
+                    {task.state !== "doing" ? (
+                      <button type="button" aria-label="在做" onClick={() => void mark(task.id, "doing")}>
+                        <PlayIcon />
+                      </button>
+                    ) : null}
+                    {task.state !== "open" ? (
+                      <button type="button" aria-label="还没做" onClick={() => void mark(task.id, "open")}>
+                        <UndoIcon />
+                      </button>
+                    ) : null}
+                    {task.state !== "done" ? (
+                      <button type="button" aria-label="划掉" onClick={() => void mark(task.id, "done")}>
+                        <CheckIcon />
+                      </button>
+                    ) : null}
+                    <button type="button" aria-label="去掉" onClick={() => void remove(task.id)}>
+                      <TrashIcon />
                     </button>
-                  ) : null}
-                  {task.state !== "open" ? (
-                    <button type="button" onClick={() => void mark(task.id, "open")}>
-                      还没做
-                    </button>
-                  ) : null}
-                  {task.state !== "done" ? (
-                    <button type="button" onClick={() => void mark(task.id, "done")}>
-                      划掉
-                    </button>
-                  ) : null}
-                  <button type="button" onClick={() => void remove(task.id)}>
-                    去掉
-                  </button>
-                </span>
-              </li>
-            ))}
-          </ul>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
         <form onSubmit={(event) => void addTask(event)}>
           <input
@@ -196,6 +184,46 @@ export function BoardDesk({
         </form>
       </section>
     </div>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4 4l8 8M12 4l-8 8" />
+    </svg>
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M5.2 3.6v8.8L12.4 8Z" />
+    </svg>
+  );
+}
+
+function UndoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M4 7.2h6.2a2.6 2.6 0 1 1 0 5.2H8.4M4 7.2 6.4 4.8M4 7.2l2.4 2.4" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3.4 8.2 6.6 11.4 12.6 4.6" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3.2 4.2h9.6M6.2 4.2V2.8h3.6v1.4M4.6 4.2l.6 9h5.6l.6-9" />
+    </svg>
   );
 }
 
