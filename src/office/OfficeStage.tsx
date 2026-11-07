@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { actorAt, drawOffice, monitorAt, roomTransform } from "./draw";
+import { actorAt, boardAt, boardFace, drawOffice, monitorAt, roomTransform } from "./draw";
+import { BoardDesk } from "./BoardDesk";
 import { ScreenDesk } from "./ScreenDesk";
 import { type PetId } from "./pets";
 import { DEFAULT_ROOM, type RoomLook } from "./room";
@@ -19,6 +20,11 @@ export function OfficeStage({
   onScreen,
   onCloseScreen,
   screen = null,
+  onBoard,
+  onCloseBoard,
+  board = false,
+  departmentId = "",
+  people = [],
 }: {
   actors: ActorFrame[];
   clock: number | null;
@@ -31,12 +37,18 @@ export function OfficeStage({
   onScreen?: (desk: DeskSpot, title: string) => void;
   onCloseScreen?: () => void;
   screen?: { x: number; y: number; title: string } | null;
+  onBoard?: () => void;
+  onCloseBoard?: () => void;
+  board?: boolean;
+  departmentId?: string;
+  people?: { id: string; name: string }[];
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const actorsRef = useRef(actors);
   const onPickRef = useRef(onPick);
   const onScreenRef = useRef(onScreen);
+  const onBoardRef = useRef(onBoard);
   const desksRef = useRef(desks);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [ambient, setAmbient] = useState(0);
@@ -45,6 +57,7 @@ export function OfficeStage({
   actorsRef.current = actors;
   onPickRef.current = onPick;
   onScreenRef.current = onScreen;
+  onBoardRef.current = onBoard;
   desksRef.current = desks;
 
   useEffect(() => {
@@ -88,13 +101,17 @@ export function OfficeStage({
   }, [size, actors, drawn, room, desks, sign, look, pets]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
-    if (screen) return;
+    if (screen || board) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const { scale, ox, oy } = roomTransform(rect.width, rect.height, room);
     const x = (event.clientX - rect.left - ox) / scale;
     const y = (event.clientY - rect.top - oy) / scale;
+    if (boardAt(x, y, look.style) && onBoardRef.current) {
+      onBoardRef.current();
+      return;
+    }
     const desk = monitorAt(desksRef.current ?? [], x, y);
     const open = onScreenRef.current;
     if (desk && open) {
@@ -111,10 +128,13 @@ export function OfficeStage({
   const box = officeBox(size.w, size.h, room);
 
   return (
-    <div className={screen ? "stage into" : "stage"} ref={wrapRef}>
-      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen ? "pick" : ""} />
+    <div className={screen || board ? "stage into" : "stage"} ref={wrapRef}>
+      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard ? "pick" : ""} />
       {screen && onCloseScreen ? (
         <ScreenDesk title={screen.title} onClose={onCloseScreen} box={box} />
+      ) : null}
+      {board && onCloseBoard && departmentId ? (
+        <BoardDesk departmentId={departmentId} people={people} box={boardBox(box)} face={boardFace(look)} onClose={onCloseBoard} />
       ) : null}
     </div>
   );
@@ -123,4 +143,24 @@ export function OfficeStage({
 function officeBox(width: number, height: number, room: { w: number; h: number }) {
   const { scale, ox, oy } = roomTransform(width, height, room);
   return { left: ox, top: oy, width: room.w * scale, height: room.h * scale };
+}
+
+function boardBox(office: { left: number; top: number; width: number; height: number }) {
+  const aspect = 52 / 36;
+  const maxW = office.width * 0.94;
+  const maxH = office.height * 0.86;
+  let width = maxW;
+  let height = width / aspect;
+  if (height > maxH) {
+    height = maxH;
+    width = height * aspect;
+  }
+  width = Math.round(width);
+  height = Math.round(height);
+  return {
+    left: Math.round(office.left + (office.width - width) / 2),
+    top: Math.round(office.top + (office.height - height) / 2),
+    width,
+    height,
+  };
 }

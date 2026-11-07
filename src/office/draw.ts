@@ -176,6 +176,17 @@ export function roomTransform(width: number, height: number, room = ROOM) {
   return { scale, ox, oy };
 }
 
+const BOARD = { x: 300, y: 16, w: 52, h: 36 };
+
+export function boardAt(roomX: number, roomY: number, style: RoomLook["style"]) {
+  if (style === "glass") return false;
+  return roomX >= BOARD.x && roomX <= BOARD.x + BOARD.w && roomY >= BOARD.y && roomY <= BOARD.y + BOARD.h;
+}
+
+export function boardFace(look: RoomLook) {
+  return look.style === "brick" ? look.wood : look.trim;
+}
+
 export function monitorAt(desks: DeskSpot[], roomX: number, roomY: number) {
   const ordered = [...desks].sort((a, b) => b.y - a.y);
   return ordered.find((desk) => {

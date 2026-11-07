@@ -194,6 +194,7 @@ export async function dismissPerson(
     if (!existing) return null;
     await db.batch([
       db.prepare("DELETE FROM duty WHERE person_id = ?").bind(id),
+      db.prepare("UPDATE board_task SET person_id = NULL WHERE person_id = ?").bind(id),
       db.prepare("DELETE FROM person_memory WHERE person_id = ?").bind(id),
       db.prepare("DELETE FROM work_desk WHERE person_id = ?").bind(id),
       db.prepare("DELETE FROM people WHERE id = ?").bind(id),

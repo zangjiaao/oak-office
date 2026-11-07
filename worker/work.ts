@@ -4,6 +4,7 @@ import { identityOf, thinkingFor, type PersonRow } from "../src/people/record";
 import { DONE_MS, IDLE_MS, onSite, stillWorking } from "../src/office/shift";
 import { armCrew, disarmCrew, keepCrew, liveCrew, releaseCrew, unarmedCrew } from "./crew";
 import { jobMemory, promptMemory, recentNotes, remember, NOTES_IN_PROMPT } from "./memory";
+import { boardLines, boardTool, listBoard, type BoardTask } from "./board";
 import { listDuties, scheduleTool, unscheduleTool } from "./duty";
 import { dutyHoldLabel, everyLabel, type Duty } from "../src/work/duty";
 import { deskTools, rememberTool } from "./tools";
@@ -170,6 +171,7 @@ export async function speak(
     const rules = houseRules(department.name, department.rules);
     desks = await desksOf(env.DB, department.id);
     const duties = await listDuties(env.DB, department.id);
+    const board = await listBoard(env.DB, department.id);
     const prior = await linesOf(env.DB, department.id);
     const model = runtime.modelFor(lead.model);
     if (!model) return { ok: false, error: `${lead.name}的模型不在目录里。`, status: 400 };
@@ -203,7 +205,7 @@ export async function speak(
       },
       initialState: {
         model,
-        systemPrompt: leadPrompt(lead, staff, desks, duties, department.name, rules),
+        systemPrompt: leadPrompt(lead, staff, desks, duties, board, department.name, rules),
         thinkingLevel: thinkingFor(lead.model, lead.thinking),
         messages: prior.flatMap((line, index) => replay(line, prior[index - 1])),
         tools: [
@@ -212,6 +214,7 @@ export async function speak(
           rememberTool(env, lead.id),
           scheduleTool(env, department.id),
           unscheduleTool(env, department.id),
+          boardTool(env, department.id),
           ...deskTools(env, turn.leadSteps, (pose, label) => setDesk(env.DB, lead.id, pose, label)),
         ],
       },
@@ -724,7 +727,15 @@ function houseRules(name: string, rules: string) {
   return `${name}的规章制度。主管安排和员工办事都要遵守。用户当场说的顺序优先。\n${text}`;
 }
 
-function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], duties: Duty[], departmentName: string, rules: string) {
+function leadPrompt(
+  lead: PersonRow,
+  staff: PersonRow[],
+  desks: DeskRow[],
+  duties: Duty[],
+  board: BoardTask[],
+  departmentName: string,
+  rules: string,
+) {
   const identity = identityOf(lead);
   const roster = staff
     .map((person) => {
@@ -746,6 +757,7 @@ function leadPrompt(lead: PersonRow, staff: PersonRow[], desks: DeskRow[], dutie
     "以后还用得上的事实用 remember 记一句。档案和最近的对话不用再记。",
     "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字，最少 1。这个人已经有一条定时时，再用 schedule 就是改间隔和内容，不要另加一条。到点由系统直接让本人做，结果会写进对话，你不用再派一次。取消时用 unschedule。",
     dutyList(duties, [lead, ...staff]),
+    boardLines(board, [lead, ...staff]),
     "不能发明员工，不能派给自己。问完之后用 mark 标成回报或卡住。全部做完后，再单独说一句总结，不要和安排写在同一句里。",
     "需要外界信息时用 search。要写脚本或改文件时用 read、write、edit、bash，文件都在办公室的工作目录里，path 用相对路径。",
     "姿态只能是 idle、arrive、think、read、type、run、wait、handoff、report、done、error。label 不超过 16 个字。",
