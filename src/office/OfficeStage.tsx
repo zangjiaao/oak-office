@@ -147,8 +147,8 @@ function officeBox(width: number, height: number, room: { w: number; h: number }
 
 function boardBox(office: { left: number; top: number; width: number; height: number }) {
   const aspect = 52 / 36;
-  const maxW = office.width * 0.76;
-  const maxH = office.height * 0.58;
+  const maxW = office.width * 0.94;
+  const maxH = office.height * 0.86;
   let width = maxW;
   let height = width / aspect;
   if (height > maxH) {
