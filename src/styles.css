@@ -241,8 +241,10 @@ button, input, textarea {
 .desktop ul { font-size: 15px; }
 
 .desktop li button:first-child {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -250,17 +252,41 @@ button, input, textarea {
 .desktop li {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 6px;
   border-radius: 6px;
 }
 
 .desktop li.on { background: rgba(198, 161, 91, 0.28); }
 
-.desktop li button + button {
+.file-actions {
+  display: flex;
   flex: none;
+  margin-left: auto;
+}
+
+.file-actions button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 4px;
   color: #d9c7a4;
-  font-size: 12px;
+}
+
+.file-actions button.armed {
+  color: #f4d2c8;
+  background: rgba(168, 50, 42, 0.55);
+}
+
+.file-actions svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .window {

@@ -183,14 +183,19 @@ export function ScreenDesk({
                           {entry.kind === "dir" ? `${entry.name}/` : entry.name}
                         </button>
                         {entry.kind === "file" ? (
-                          <>
-                            <button type="button" onClick={() => void download(entry.name)}>
-                              下载
+                          <span className="file-actions">
+                            <button type="button" aria-label="下载" onClick={() => void download(entry.name)}>
+                              <DownloadIcon />
                             </button>
-                            <button type="button" onClick={() => void remove(entry.name)}>
-                              {pending === path ? "确认删除" : "删除"}
+                            <button
+                              type="button"
+                              className={pending === path ? "armed" : ""}
+                              aria-label={pending === path ? "确认删除" : "删除"}
+                              onClick={() => void remove(entry.name)}
+                            >
+                              <TrashIcon />
                             </button>
-                          </>
+                          </span>
                         ) : null}
                       </li>
                     );
@@ -221,6 +226,22 @@ export function ScreenDesk({
         <div className="stand" />
       </div>
     </div>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 2.5v7M5.2 7.2 8 10l2.8-2.8M3.2 13h9.6" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M3.2 4.2h9.6M6.2 4.2V2.8h3.6v1.4M4.6 4.2l.6 9h5.6l.6-9" />
+    </svg>
   );
 }
 
