@@ -16,8 +16,11 @@ export type BoardTask = {
   updated_at: number;
 };
 
-const MarkArgs = obj({
+const BoardArgs = obj({
+  action: str(),
+  title: str(),
   task_id: str(),
+  person_id: str(),
   state: str(),
 });
 
@@ -92,26 +95,54 @@ export async function removeBoardTask(db: Env["DB"], departmentId: string, id: s
   return { ok: true as const };
 }
 
+export async function assignBoardTask(db: Env["DB"], departmentId: string, id: string, personId: string | null) {
+  const existing = await ownedTask(db, departmentId, id);
+  if (!existing) return fail("看板上没有这件事。", 404);
+  if (personId && !(await personOnFloor(db, departmentId, personId))) return fail("这个人不在这一层。", 400);
+  const now = Date.now();
+  await db.prepare("UPDATE board_task SET person_id = ?, updated_at = ? WHERE id = ?").bind(personId, now, id).run();
+  return { ok: true as const, task: { ...existing, person_id: personId, updated_at: now } };
+}
+
 export function boardLines(tasks: BoardTask[], people: { id: string; name: string }[]) {
-  if (!tasks.length) return "看板上还没有一次性任务。划掉用 board。";
+  if (!tasks.length) return "看板上还没有一次性任务。新建、指定人或划掉都用 board。";
   const lines = tasks.map((task) => {
     const who = task.person_id ? (people.find((person) => person.id === task.person_id)?.name ?? "已离开") : "不指定";
     return `- ${task.id} ${stateLabel(task.state)} ${who} ${task.title}`;
   });
-  return `看板上的一次性任务。改状态用 board，state 写 open、doing 或 done。定时不在这里改。\n${lines.join("\n")}`;
+  return `看板上的一次性任务。用 board 新建、改负责人或划掉。定时不在这里改。\n${lines.join("\n")}`;
 }
 
 export function boardTool(env: Env, departmentId: string) {
   return {
     name: "board",
     label: "看板",
-    description: "改看板上的一件一次性任务。task_id 来自看板清单。state 用 open（还没做）、doing（在做）或 done（划掉）。定时不在这里改。",
-    parameters: MarkArgs,
+    description:
+      "使用这一层的看板。action=add 新建，title 必填（最多 80 字），person_id 写员工 id 或留空，state 写 open、doing 或 done，用不到的字段留空。action=assign 改负责人，填 task_id 和 person_id。action=state 改状态，task_id 来自清单，state 用 open（还没做）、doing（在做）或 done（划掉）。返回里的 task_id 可填进 ask 的 board_task_id。定时不在这里改。",
+    parameters: BoardArgs,
     executionMode: "sequential" as const,
-    execute: async (_id: string, args: Static<typeof MarkArgs>) => {
-      const result = await setBoardState(env.DB, departmentId, args.task_id.trim(), args.state.trim());
-      if (!result.ok) return miss(result.error);
-      return text(`已标成${stateLabel(result.task.state)}：${result.task.title}`);
+    execute: async (_id: string, args: Static<typeof BoardArgs>) => {
+      const action = args.action.trim();
+      const personId = args.person_id.trim() || null;
+      if (action === "add") {
+        const created = await createBoardTask(env.DB, departmentId, args.title, personId);
+        if (!created.ok) return miss(created.error);
+        const wanted = args.state.trim();
+        const marked = wanted && wanted !== "open" ? await setBoardState(env.DB, departmentId, created.task.id, wanted) : created;
+        if (!marked.ok) return miss(marked.error);
+        return text(`已记上 ${marked.task.id} ${stateLabel(marked.task.state)}：${marked.task.title}`);
+      }
+      if (action === "assign") {
+        const assigned = await assignBoardTask(env.DB, departmentId, args.task_id.trim(), personId);
+        if (!assigned.ok) return miss(assigned.error);
+        return text(`已交给${personId ? "这个人" : "不指定"}：${assigned.task.title}`);
+      }
+      if (action === "state") {
+        const result = await setBoardState(env.DB, departmentId, args.task_id.trim(), args.state.trim());
+        if (!result.ok) return miss(result.error);
+        return text(`已标成${stateLabel(result.task.state)}：${result.task.title}`);
+      }
+      return miss("action 用 add、assign 或 state。");
     },
   };
 }

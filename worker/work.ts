@@ -4,7 +4,7 @@ import { identityOf, thinkingFor, type PersonRow } from "../src/people/record";
 import { DONE_MS, IDLE_MS, onSite, stillWorking } from "../src/office/shift";
 import { armCrew, disarmCrew, keepCrew, liveCrew, releaseCrew, unarmedCrew } from "./crew";
 import { jobMemory, promptMemory, recentNotes, remember, NOTES_IN_PROMPT } from "./memory";
-import { boardLines, boardTool, listBoard, type BoardTask } from "./board";
+import { assignBoardTask, boardLines, boardTool, listBoard, setBoardState, type BoardTask } from "./board";
 import { listDuties, scheduleTool, unscheduleTool } from "./duty";
 import { dutyHoldLabel, everyLabel, type Duty } from "../src/work/duty";
 import { deskTools, rememberTool } from "./tools";
@@ -61,6 +61,7 @@ const AskArgs = obj({
   pose: oneOf(POSES),
   label: str(),
   task: str(),
+  board_task_id: str(),
 });
 
 const MarkArgs = obj({
@@ -555,7 +556,8 @@ function askTool(
   return {
     name: "ask",
     label: "派给员工",
-    description: "把一件事交给已经入职的员工，然后立刻返回。员工在后台做，做完或卡住会写进对话。person_id 必须是员工的 id。不能派给主管自己，也不能派给花名册以外的人。",
+    description:
+      "把一件事交给已经入职的员工，然后立刻返回。员工在后台做，做完或卡住会写进对话。person_id 必须是员工的 id。不能派给主管自己，也不能派给花名册以外的人。board_task_id 填看板上的 task_id，做完会自动划掉；没有对应便签就留空。",
     parameters: AskArgs,
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Ask) => {
@@ -567,6 +569,13 @@ function askTool(
       const task = clip(args.task, TEXT_MAX);
       const pose = workingPose(args.pose);
       if (!label || !task) return fail("派工要写清事情和状态。");
+      const boardId = args.board_task_id.trim();
+      if (boardId) {
+        const claimed = await setBoardState(env.DB, departmentId, boardId, "doing");
+        if (!claimed.ok) return fail(claimed.error);
+        const owner = await assignBoardTask(env.DB, departmentId, boardId, person.id);
+        if (!owner.ok) return fail(owner.error);
+      }
       const model = runtime.modelFor(person.model);
       if (!model) return fail(`${person.name}的模型不在目录里。`);
       const worker = person;
@@ -694,6 +703,10 @@ function askTool(
             .run();
           await setDesk(env.DB, worker.id, "done", "做完");
           await remember(env.DB, worker.id, jobMemory(task, note));
+          if (boardId) {
+            const struck = await setBoardState(env.DB, departmentId, boardId, "done");
+            if (!struck.ok) trace("看板没划掉", { id: boardId, error: struck.error });
+          }
           const handed = visit ? "结果已递给同事。" : "";
           await presentReport(
             env,
@@ -779,6 +792,7 @@ function leadPrompt(
     "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字，最少 1。这个人已经有一条定时时，再用 schedule 就是改间隔和内容，不要另加一条。到点由系统直接让本人做，结果会写进对话，你不用再派一次。取消时用 unschedule。",
     dutyList(duties, [lead, ...staff]),
     boardLines(board, [lead, ...staff]),
+    "用户要把事情记在看板上，或你派人并要跟踪时，先用 board，action 写 add，title 写这件事，person_id 写员工 id，state 写 doing。把返回的 task_id 填进 ask 的 board_task_id。没有看板条目时 board_task_id 留空。员工做完后那条会自动划掉。你也可以用 action=state、state=done 自己划掉。",
     "不能发明员工，不能派给自己。ask 立刻返回，员工在后台做。你告诉用户已经交给谁，不要等结果，也不要把还没做完的事说成做完了。",
     "需要外界信息时用 search。要写脚本或改文件时用 read、write、edit、bash，文件都在办公室的工作目录里，path 用相对路径。",
     "姿态只能是 idle、arrive、think、read、type、run、wait、handoff、report、done、error。label 不超过 16 个字。",
