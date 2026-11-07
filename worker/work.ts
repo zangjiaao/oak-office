@@ -20,6 +20,7 @@ const HISTORY = 16;
 const SEARCH_MAX = 16;
 const STAFF_TOOL_MAX = 24;
 const STAFF_TOKENS = 8_000;
+const LEAD_TOKENS = 8_000;
 const toolUses = new Map<string, number>();
 const searchUses = new Map<string, number>();
 
@@ -201,7 +202,7 @@ export async function speak(
     turn = { jobs: new Map(), leadSteps: [] };
     let calls = 0;
     const agent = new Agent({
-      streamFn: runtime.streamFn(1200),
+      streamFn: runtime.streamFn(LEAD_TOKENS),
       getApiKey: runtime.getApiKey,
       toolExecution: "sequential",
       beforeToolCall: async ({ toolCall, args }) => {
@@ -260,6 +261,8 @@ export async function speak(
       turn.leadSteps.unshift({ pose: "think", label: "在想" });
     }
     const spoken = produced.map((message) => visibleText(message)).filter((text) => text.length > 0);
+    const cutOff = [...produced].reverse().find((message) => message.stopReason === "length");
+    if (cutOff) trace("主管说到一半", { chars: [...visibleText(cutOff)].length });
     const final = [...produced].reverse().find((message) => visibleText(message));
     const jobs = [...turn.jobs.values()];
     const fresh = agent.state.messages.slice(before);
@@ -493,7 +496,7 @@ export async function runStaffDuty(
     const history = await linesOf(env.DB, department.id);
     const identity = identityOf(lead);
     const leader = new Agent({
-      streamFn: runtime.streamFn(1200),
+      streamFn: runtime.streamFn(LEAD_TOKENS),
       getApiKey: runtime.getApiKey,
       initialState: {
         model: leadModel,
@@ -1208,7 +1211,7 @@ async function leadOnReport(
   const history = await linesOf(env.DB, lead.department_id);
   const identity = identityOf(lead);
   const leader = new Agent({
-    streamFn: runtime.streamFn(1200),
+    streamFn: runtime.streamFn(LEAD_TOKENS),
     getApiKey: runtime.getApiKey,
     initialState: {
       model,
