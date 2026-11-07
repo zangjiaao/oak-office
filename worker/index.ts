@@ -4,7 +4,7 @@ import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
 import { dropFloor, getWork, officeBusy, settleShift, speak } from "./work";
-import { workspaceFile, workspaceList, workspaceText } from "./workspace";
+import { workspaceFile, workspaceList, workspaceRemove, workspaceText } from "./workspace";
 import type { Env } from "./env";
 import type { PersonDraft } from "../src/people/record";
 
@@ -79,8 +79,14 @@ export default {
         return json(url.pathname.endsWith("/text") ? { text: result.text } : { entries: result.entries });
       }
       if (url.pathname === "/api/workspace/file") {
-        if (request.method !== "GET") return new Response(null, { status: 405, headers: { allow: "GET" } });
-        return workspaceFile(env, url.searchParams.get("path") ?? "");
+        const target = url.searchParams.get("path") ?? "";
+        if (request.method === "DELETE") {
+          const result = await workspaceRemove(env, target);
+          if (!result.ok) return json({ error: result.error }, result.status);
+          return json({ ok: true });
+        }
+        if (request.method !== "GET") return new Response(null, { status: 405, headers: { allow: "GET, DELETE" } });
+        return workspaceFile(env, target);
       }
       if (url.pathname === "/api/duties") {
         if (request.method === "GET") {

@@ -45,6 +45,8 @@ export function ScreenDesk({
   const [file, setFile] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const [pending, setPending] = useState<string | null>(null);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -62,6 +64,7 @@ export function ScreenDesk({
     let gone = false;
     setEntries(null);
     setError(null);
+    setPending(null);
     void listFiles(folder)
       .then((rows) => {
         if (!gone) setEntries(rows);
@@ -72,7 +75,7 @@ export function ScreenDesk({
     return () => {
       gone = true;
     };
-  }, [folder]);
+  }, [folder, reload]);
 
   async function openFile(name: string) {
     const path = joinPath(folder, name);
@@ -107,6 +110,29 @@ export function ScreenDesk({
       URL.revokeObjectURL(url);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "文件没下载下来。");
+    }
+  }
+
+  async function remove(name: string) {
+    const path = joinPath(folder, name);
+    if (pending !== path) {
+      setPending(path);
+      return;
+    }
+    setPending(null);
+    setError(null);
+    try {
+      const response = await fetch(`/api/workspace/file?path=${encodeURIComponent(path)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(await errorText(response));
+      if (file === path) {
+        setFile(null);
+        setText(null);
+        setNote(null);
+      }
+      setReload((value) => value + 1);
+    } catch (caught) {
+      setPending(null);
+      setError(caught instanceof Error ? caught.message : "文件没删掉。");
     }
   }
 
@@ -157,9 +183,14 @@ export function ScreenDesk({
                           {entry.kind === "dir" ? `${entry.name}/` : entry.name}
                         </button>
                         {entry.kind === "file" ? (
-                          <button type="button" onClick={() => void download(entry.name)}>
-                            下载
-                          </button>
+                          <>
+                            <button type="button" onClick={() => void download(entry.name)}>
+                              下载
+                            </button>
+                            <button type="button" onClick={() => void remove(entry.name)}>
+                              {pending === path ? "确认删除" : "删除"}
+                            </button>
+                          </>
                         ) : null}
                       </li>
                     );

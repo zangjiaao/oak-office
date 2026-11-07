@@ -257,7 +257,11 @@ button, input, textarea {
 
 .desktop li.on { background: rgba(198, 161, 91, 0.28); }
 
-.desktop li button:last-child { color: #d9c7a4; font-size: 12px; }
+.desktop li button + button {
+  flex: none;
+  color: #d9c7a4;
+  font-size: 12px;
+}
 
 .window {
   min-height: 0;

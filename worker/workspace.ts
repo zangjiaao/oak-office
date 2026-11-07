@@ -14,6 +14,12 @@ export async function workspaceText(env: Env, file: string) {
   return ask(env, "/read", { path });
 }
 
+export async function workspaceRemove(env: Env, file: string) {
+  const path = safePath(file);
+  if (!path) return { ok: false as const, error: "只能删工作目录里的文件。", status: 400 };
+  return ask(env, "/delete", { path });
+}
+
 export async function workspaceFile(env: Env, file: string) {
   const path = safePath(file);
   if (!path) return Response.json({ error: "只能拿工作目录里的文件。" }, { status: 400 });

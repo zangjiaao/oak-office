@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { accessSync, constants } from "node:fs";
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import path from "node:path";
 
@@ -73,6 +73,7 @@ async function handle(request: IncomingMessage, response: import("node:http").Se
   if (action === "/list") return list(response, body);
   if (action === "/read") return read(response, body);
   if (action === "/raw") return raw(response, body);
+  if (action === "/delete") return removeFile(response, body);
   if (action === "/write") return write(response, body);
   if (action === "/edit") return edit(response, body);
   if (action === "/bash") return bash(response, body);
@@ -108,6 +109,16 @@ async function raw(response: import("node:http").ServerResponse, body: Record<st
     "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
   });
   response.end(data);
+}
+
+async function removeFile(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+  const file = await locate(body.path);
+  if (!file || file === ROOT) return send(response, 400, { ok: false, error: "只能删工作目录里的文件。" });
+  const info = await lstat(file).catch(() => null);
+  if (!info) return send(response, 404, { ok: false, error: "没有这个文件。" });
+  if (info.isDirectory()) return send(response, 400, { ok: false, error: "文件夹先留着。" });
+  await unlink(file);
+  send(response, 200, { ok: true });
 }
 
 async function read(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
