@@ -4,7 +4,7 @@ import { cancelDuty, listDuties, runDue } from "./duty";
 import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
-import { dropFloor, getWork, officeBusy, settleShift, speak } from "./work";
+import { dropFloor, getWork, holdInflight, officeBusy, settleShift, speak } from "./work";
 import { workspaceFile, workspaceList, workspaceRemove, workspaceText } from "./workspace";
 import type { Env } from "./env";
 import type { PersonDraft } from "../src/people/record";
@@ -66,8 +66,9 @@ export default {
             return json({ error: "先选一层。" }, 400);
           }
           const result = await speak(env, record.text, request.signal, "user", record.departmentId);
-          if (!result.ok) return json({ error: result.error }, result.status);
           holdCrew(ctx);
+          holdInflight(ctx);
+          if (!result.ok) return json({ error: result.error }, result.status);
           return json(result.office);
         }
         return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
