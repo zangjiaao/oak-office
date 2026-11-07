@@ -15,6 +15,7 @@ import { createDepartment, deleteDepartment, listDepartments, listPeople, update
 import type { Department, DepartmentDraft } from "./people/department";
 import { RosterPanel } from "./people/RosterPanel";
 import type { PersonRow } from "./people/record";
+import { useTabStatus } from "./work/tabStatus";
 import { WorkPanel } from "./work/WorkPanel";
 import type { DutyHold, FloorMark } from "./work/api";
 
@@ -157,6 +158,7 @@ export function App() {
   const stood = useWalk(roster.actors, mode === "work");
   const actors = mode === "rehearsal" ? rehearsalActors : stood;
   const poses = activePoses(time);
+  useTabStatus(mode === "work", Object.values(shownFloor));
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight });

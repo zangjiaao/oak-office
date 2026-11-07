@@ -59,7 +59,7 @@ export function WorkPanel({
     const timer = setInterval(() => {
       ticks += 1;
       if (playingRef.current) return;
-      if (!sendingRef.current && ticks % 5 !== 0) return;
+      if (!sendingRef.current && document.visibilityState === "visible" && ticks % 5 !== 0) return;
       if (!departmentId) return;
       void loadWork(departmentId)
         .then((office) => {
