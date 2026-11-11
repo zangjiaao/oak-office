@@ -1,8 +1,10 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { accessSync, constants } from "node:fs";
 import { lstat, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import path from "node:path";
+import { bashSeconds, hideSecrets } from "./bash-guard.ts";
+import { resolveReadPath } from "./read-path.ts";
 
 const liveBash = new Map<string, { output: string; done: boolean; exitCode: number | null }>();
 
@@ -125,9 +127,14 @@ async function removeFile(response: import("node:http").ServerResponse, body: Re
 }
 
 async function read(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
-  const file = await locate(body.path);
-  if (!file) return send(response, 400, { ok: false, error: "只能读工作目录里的文件。" });
-  const text = await readFile(file, "utf8").catch(() => "");
+  const placed = await resolveReadPath(ROOT, body.path);
+  if (!placed.ok) return send(response, placed.status, { ok: false, error: placed.error });
+  if (placed.kind === "skill") {
+    const info = await stat(placed.file).catch(() => null);
+    if (!info) return send(response, 404, { ok: false, error: "没有这个文件。" });
+    if (info.isDirectory()) return send(response, 400, { ok: false, error: "这是文件夹。" });
+  }
+  const text = await readFile(placed.file, "utf8").catch(() => "");
   send(response, 200, { ok: true, text: clip(text, 12000) });
 }
 
@@ -189,30 +196,41 @@ function applyEdits(content: string, edits: { old: string; new: string }[]) {
 async function bash(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
   const command = typeof body.command === "string" ? body.command.trim() : "";
   if (!command) return send(response, 400, { ok: false, error: "没有命令。" });
+  const seconds = bashSeconds(body.timeout);
+  if (seconds === null) return send(response, 400, { ok: false, error: "超时用整数秒，最少 1，最多 600。" });
   const id = typeof body.id === "string" ? body.id : "";
   if (id) rememberBash(id, "", false, null);
   await mkdir(ROOT, { recursive: true });
-  const timeout = Math.min(30, Math.max(1, Number(body.timeout) || 20)) * 1000;
+  const timeout = seconds * 1000;
   const child = spawn(bashBin(), ["-lc", command], {
     cwd: ROOT,
     env: cleanEnv(),
+    detached: process.platform !== "win32",
   });
   let output = "";
   let settled = false;
+  let timedOut = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const finish = (body: unknown) => {
     if (settled) return;
     settled = true;
     clearTimeout(timer);
+    if (response.writableEnded || response.destroyed) return;
     send(response, 200, body);
   };
   const take = (chunk: Buffer) => {
     if (output.length < 8000) output += chunk.toString("utf8");
-    if (id) rememberBash(id, output, false, null);
+    if (id) rememberBash(id, hideSecrets(output), false, null);
   };
+  response.on("close", () => {
+    if (!settled) killChild(child);
+  });
   child.stdout?.on("data", take);
   child.stderr?.on("data", take);
-  timer = setTimeout(() => child.kill("SIGKILL"), timeout);
+  timer = setTimeout(() => {
+    timedOut = true;
+    killChild(child);
+  }, timeout);
   child.on("error", (error: NodeJS.ErrnoException) => {
     const missing = error.code === "ENOENT";
     finish({
@@ -222,8 +240,10 @@ async function bash(response: import("node:http").ServerResponse, body: Record<s
   });
   child.on("close", (code) => {
     const exitCode = code ?? 1;
-    if (id) rememberBash(id, output, true, exitCode);
-    finish({ ok: true, text: clip(output, 6000), exitCode });
+    const note = timedOut ? `\n已到 ${seconds} 秒，命令被停掉。` : "";
+    const shown = `${hideSecrets(output)}${note}`;
+    if (id) rememberBash(id, shown, true, exitCode);
+    finish({ ok: true, text: clip(shown, 6000), exitCode });
   });
 }
 
@@ -242,6 +262,19 @@ function rememberBash(id: string, output: string, done: boolean, exitCode: numbe
     if (!oldest || oldest === id) return;
     liveBash.delete(oldest);
   }
+}
+
+function killChild(child: ChildProcess) {
+  const pid = child.pid;
+  if (pid && process.platform !== "win32") {
+    try {
+      process.kill(-pid, "SIGKILL");
+      return;
+    } catch {
+      /* The process group is already gone. */
+    }
+  }
+  child.kill("SIGKILL");
 }
 
 function bashBin() {

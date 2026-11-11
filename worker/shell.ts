@@ -1,3 +1,4 @@
+import { BASH_MAX_SECONDS, hideSecrets } from "./bash-guard";
 import type { Env } from "./env";
 
 const KEEP = 40;
@@ -29,7 +30,7 @@ export async function startShell(db: Env["DB"], run: { id: string; departmentId:
       `INSERT INTO shell_run (id, department_id, person_id, command, output, exit_code, started_at, finished_at)
        VALUES (?, ?, ?, ?, '', NULL, ?, NULL)`,
     )
-    .bind(run.id, run.departmentId, run.personId, clip(run.command.trim(), COMMAND_MAX), now)
+    .bind(run.id, run.departmentId, run.personId, clip(hideSecrets(run.command.trim()), COMMAND_MAX), now)
     .run();
   await db
     .prepare(
@@ -44,7 +45,7 @@ export async function startShell(db: Env["DB"], run: { id: string; departmentId:
 export async function finishShell(db: Env["DB"], id: string, output: string, exitCode: number | null) {
   await db
     .prepare("UPDATE shell_run SET output = ?, exit_code = ?, finished_at = ? WHERE id = ? AND finished_at IS NULL")
-    .bind(clip(output, OUTPUT_MAX), exitCode, Date.now(), id)
+    .bind(clip(hideSecrets(output), OUTPUT_MAX), exitCode, Date.now(), id)
     .run();
 }
 
@@ -70,13 +71,20 @@ export async function listShell(env: Env, personId: string): Promise<ShellRun[]>
           finishedAt = Date.now();
           await finishShell(env.DB, row.id, output, exitCode);
         }
-      } else if (Date.now() - row.started_at > 45_000) {
+      } else if (Date.now() - row.started_at > (BASH_MAX_SECONDS + 15) * 1000) {
         finishedAt = Date.now();
         if (!output) output = "脚本中断了，没有输出。";
         await finishShell(env.DB, row.id, output, null);
       }
     }
-    runs.push({ id: row.id, command: row.command, output, exitCode, startedAt: row.started_at, finishedAt });
+    runs.push({
+      id: row.id,
+      command: hideSecrets(row.command),
+      output: hideSecrets(output),
+      exitCode,
+      startedAt: row.started_at,
+      finishedAt,
+    });
   }
   return runs;
 }
