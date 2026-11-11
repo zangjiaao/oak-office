@@ -199,7 +199,31 @@ async function oneSummary(model: Model<any>, streamFn: StreamFn, apiKey: string,
 
 function spokenLine(line: TranscriptLine) {
   const who = line.role === "lead" ? "主管" : line.role === "staff" ? "员工" : line.role === "clock" ? "定时" : "用户";
-  return `[${who}] ${line.text}`;
+  return `[${who}] ${line.text}${toolHint(line.raw)}`;
+}
+
+function toolHint(raw: string | null) {
+  if (!raw) return "";
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const messages = Array.isArray(parsed) ? parsed : [parsed];
+    const names = [
+      ...new Set(
+        messages.flatMap((message) => {
+          if (!message || typeof message !== "object") return [];
+          const record = message as { role?: string; toolName?: string; content?: { type?: string; name?: string }[] };
+          if (record.role === "toolResult" && record.toolName) return [record.toolName];
+          if (record.role === "assistant" && Array.isArray(record.content)) {
+            return record.content.flatMap((part) => (part.type === "toolCall" && part.name ? [part.name] : []));
+          }
+          return [];
+        }),
+      ),
+    ];
+    return names.length ? `（用过 ${names.join("、")}）` : "";
+  } catch {
+    return "";
+  }
 }
 
 function spokenMessage(message: AgentMessage) {
