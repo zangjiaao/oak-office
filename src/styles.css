@@ -907,7 +907,13 @@ button, input, textarea {
 
 .log .user .md code { background: rgba(243, 234, 215, 0.16); }
 
-.log .md a { color: inherit; }
+.log .bubble,
+.log .md,
+.log .md a {
+  overflow-wrap: anywhere;
+}
+
+.log .md a { color: inherit; text-decoration: underline; }
 
 .chat form { border-top: 1px solid #e0d2b8; }
 

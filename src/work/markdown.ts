@@ -80,6 +80,18 @@ function pushFlow(blocks: Block[], source: string) {
   }
 }
 
+export function shortUrl(href: string) {
+  try {
+    const url = new URL(href);
+    const path = url.pathname === "/" ? "" : url.pathname.replace(/\/$/, "");
+    const place = `${url.host}${path}`;
+    if (place.length > 42) return `${place.slice(0, 42)}…`;
+    return url.search || url.hash ? `${place}…` : place;
+  } catch {
+    return href.length > 48 ? `${href.slice(0, 42)}…` : href;
+  }
+}
+
 function special(line: string) {
   return /^(#{1,3})\s+/.test(line) || /^>\s?/.test(line) || /^[-*]\s+/.test(line) || /^\d+\.\s+/.test(line);
 }
@@ -135,8 +147,20 @@ function readInline(source: string, depth: number): Inline[] {
       const link = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/.exec(source.slice(i));
       if (link) {
         flush();
-        nodes.push({ kind: "link", text: link[1], href: link[2] });
+        const href = link[2];
+        const label = link[1] === href || /^https?:\/\//.test(link[1]) ? shortUrl(href) : link[1];
+        nodes.push({ kind: "link", text: label, href });
         i += link[0].length - 1;
+        continue;
+      }
+    }
+    if (source.startsWith("https://", i) || source.startsWith("http://", i)) {
+      const found = /^(https?:\/\/[^\s<>)\]]+)/.exec(source.slice(i));
+      if (found) {
+        const href = found[1].replace(/[.,;:!?，。；：！？、]+$/u, "");
+        flush();
+        nodes.push({ kind: "link", text: shortUrl(href), href });
+        i += href.length - 1;
         continue;
       }
     }
