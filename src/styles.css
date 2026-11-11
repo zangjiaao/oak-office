@@ -977,6 +977,8 @@ button, input, textarea {
   cursor: pointer;
 }
 
+.chat > form button.stop { background: #6b3a32; }
+
 .chat > form button:disabled { opacity: 0.55; cursor: default; }
 
 .roster {

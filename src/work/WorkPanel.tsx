@@ -31,6 +31,8 @@ export function WorkPanel({
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
   const playingRef = useRef(false);
+  const stopRef = useRef<AbortController | null>(null);
+  const skipPlayRef = useRef(false);
   const floorRef = useRef(floor);
   const playedRef = useRef(new Set<string>());
   floorRef.current = floor;
@@ -105,10 +107,21 @@ export function WorkPanel({
     }
     showFloor(listening);
     const started = Date.now();
+    const controller = new AbortController();
+    stopRef.current = controller;
+    skipPlayRef.current = false;
     try {
-      const office = await sayWork(departmentId, said);
+      const office = await sayWork(departmentId, said, controller.signal);
+      if (controller.signal.aborted) {
+        await settleAfterStop(departmentId, said);
+        return;
+      }
       await playBeats(office, floorRef.current, Date.now() - started);
     } catch (caught) {
+      if (aborted(caught) || controller.signal.aborted) {
+        await settleAfterStop(departmentId, said);
+        return;
+      }
       setText(said);
       setError(caught instanceof Error ? caught.message : "主管这回没接上。");
       try {
@@ -123,8 +136,30 @@ export function WorkPanel({
         showFloor(previousFloor);
       }
     } finally {
+      stopRef.current = null;
+      skipPlayRef.current = false;
       sendingRef.current = false;
       setSending(false);
+    }
+  }
+
+  function interrupt() {
+    skipPlayRef.current = true;
+    stopRef.current?.abort();
+  }
+
+  async function settleAfterStop(floorId: string, said: string) {
+    setError(null);
+    try {
+      const office = await loadWork(floorId);
+      const kept = office.lines.some((line) => line.role === "user" && line.text === said);
+      if (!kept) setText(said);
+      setLead(office.lead);
+      setLines(office.lines);
+      showFloor(office.floor);
+      onHolding(office.holding ?? []);
+    } catch {
+      setText(said);
     }
   }
 
@@ -179,13 +214,18 @@ export function WorkPanel({
           ...(step.visit ? { visit: step.visit } : {}),
         });
         showFloor([...playing.values()]);
+        if (skipPlayRef.current) break;
         const hold = index === 0 && (step.label === "在听" || step.label === "在想") ? Math.max(0, step.hold - credit) : step.hold;
         credit = 0;
         if (step.line && step.lineAt === "start") setLines((current) => [...(current ?? []), step.line!]);
-        if (hold > 0) await wait(hold);
+        if (hold > 0) await wait(hold, () => skipPlayRef.current);
+        if (skipPlayRef.current) break;
         if (step.line && step.lineAt !== "start") setLines((current) => [...(current ?? []), step.line!]);
       }
-      if (office.closing) {
+      if (skipPlayRef.current) {
+        setLines(office.lines);
+        showFloor(office.floor);
+      } else if (office.closing) {
         await wait(700);
         setLines((current) => [...(current ?? []), office.closing!]);
       }
@@ -242,9 +282,15 @@ export function WorkPanel({
             maxLength={1000}
           />
         </div>
-        <button type="submit" disabled={!lead || sending || text.trim() === ""}>
-          发送
-        </button>
+        {sending ? (
+          <button type="button" className="stop" onClick={interrupt}>
+            中断
+          </button>
+        ) : (
+          <button type="submit" disabled={!lead || text.trim() === ""}>
+            发送
+          </button>
+        )}
       </form>
     </aside>
   );
@@ -266,8 +312,20 @@ function liveDuringSend(current: FloorMark[], incoming: FloorMark[], now = Date.
   });
 }
 
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function aborted(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function wait(ms: number, skip: () => boolean = () => false) {
+  return new Promise<void>((resolve) => {
+    const start = Date.now();
+    const timer = setInterval(() => {
+      if (skip() || Date.now() - start >= ms) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 50);
+  });
 }
 
 function fitComposer(field: HTMLTextAreaElement) {
