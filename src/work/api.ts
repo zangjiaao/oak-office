@@ -35,23 +35,37 @@ export async function loadWork(departmentId: string): Promise<WorkOffice> {
   return (await send(`/api/work?department=${encodeURIComponent(departmentId)}`)) as WorkOffice;
 }
 
-export async function sayWork(departmentId: string, text: string): Promise<WorkOffice> {
-  return (await send("/api/work", { departmentId, text })) as WorkOffice;
+export async function sayWork(departmentId: string, text: string, signal?: AbortSignal): Promise<WorkOffice> {
+  return (await send("/api/work", { departmentId, text }, signal)) as WorkOffice;
 }
 
-async function send(path: string, body?: { departmentId: string; text: string }) {
+export async function stopWork(departmentId: string) {
+  await fetch("/api/work/stop", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ departmentId }),
+  }).catch(() => undefined);
+}
+
+async function send(path: string, body?: { departmentId: string; text: string }, signal?: AbortSignal) {
   let response: Response;
   try {
     response = await fetch(path, {
       method: body === undefined ? "GET" : "POST",
       headers: body === undefined ? undefined : { "content-type": "application/json" },
       body: body === undefined ? undefined : JSON.stringify(body),
+      signal,
     });
-  } catch {
+  } catch (error) {
+    if (aborted(error)) throw error;
     throw new Error("主管这回没接上。");
   }
   if (!response.ok) throw new Error(await errorMessage(response));
   return response.json() as Promise<unknown>;
+}
+
+function aborted(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 async function errorMessage(response: Response) {

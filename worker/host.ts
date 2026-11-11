@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage } from "node:http";
 import path from "node:path";
 import { bashSeconds, hideSecrets } from "./bash-guard.ts";
 import { resolveReadPath } from "./read-path.ts";
+import { listInstalledSkills } from "./skill-scan.ts";
 
 const liveBash = new Map<string, { output: string; done: boolean; exitCode: number | null }>();
 
@@ -82,7 +83,12 @@ async function handle(request: IncomingMessage, response: import("node:http").Se
   if (action === "/edit") return edit(response, body);
   if (action === "/bash") return bash(response, body);
   if (action === "/bash-log") return bashLog(response, body);
+  if (action === "/skills") return skills(response);
   send(response, 404, { ok: false, error: "没有这个操作。" });
+}
+
+async function skills(response: import("node:http").ServerResponse) {
+  send(response, 200, { ok: true, skills: await listInstalledSkills() });
 }
 
 async function list(response: import("node:http").ServerResponse, body: Record<string, unknown>) {

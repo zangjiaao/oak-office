@@ -4,7 +4,7 @@ import { cancelDuty, listDuties, runDue } from "./duty";
 import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
-import { dropFloor, getWork, holdInflight, officeBusy, settleShift, speak } from "./work";
+import { dropFloor, getWork, holdInflight, officeBusy, settleShift, speak, stopFloor } from "./work";
 import { listShell } from "./shell";
 import { workspaceFile, workspaceList, workspaceRemove, workspaceText } from "./workspace";
 import type { Env } from "./env";
@@ -47,6 +47,13 @@ export default {
         }
         if (request.method !== "PATCH") return new Response(null, { status: 405, headers: { allow: "PATCH, DELETE" } });
         return writeDepartment(request, (draft) => updateDepartment(env.DB, id, draft));
+      }
+      if (url.pathname === "/api/work/stop") {
+        if (request.method !== "POST") return new Response(null, { status: 405, headers: { allow: "POST" } });
+        const record = await readRecord(request);
+        const departmentId = record && typeof record.departmentId === "string" ? record.departmentId : "";
+        if (!UUID.test(departmentId)) return json({ error: "先选一层。" }, 400);
+        return json({ ok: true, stopped: stopFloor(departmentId) });
       }
       if (url.pathname === "/api/work") {
         const departmentId = url.searchParams.get("department") ?? "";

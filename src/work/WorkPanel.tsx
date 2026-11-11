@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { onSite } from "../office/shift";
 import type { PersonRow } from "../people/record";
-import { loadWork, sayWork, type DutyHold, type FloorMark, type WorkLine, type WorkOffice } from "./api";
+import { loadWork, sayWork, stopWork, type DutyHold, type FloorMark, type WorkLine, type WorkOffice } from "./api";
 import { Markdown } from "./MarkdownView";
 
 export function WorkPanel({
@@ -31,6 +31,9 @@ export function WorkPanel({
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
   const playingRef = useRef(false);
+  const stopRef = useRef<AbortController | null>(null);
+  const skipPlayRef = useRef(false);
+  const watchUntilRef = useRef(0);
   const floorRef = useRef(floor);
   const playedRef = useRef(new Set<string>());
   floorRef.current = floor;
@@ -59,7 +62,9 @@ export function WorkPanel({
     const timer = setInterval(() => {
       ticks += 1;
       if (playingRef.current) return;
-      if (!sendingRef.current && document.visibilityState === "visible" && ticks % 5 !== 0) return;
+      const floorBusy = floorRef.current.some((mark) => mark.pose !== "idle" && mark.pose !== "arrive" && mark.pose !== "done");
+      const watching = Date.now() < watchUntilRef.current;
+      if (!sendingRef.current && !floorBusy && !watching && document.visibilityState === "visible" && ticks % 5 !== 0) return;
       if (!departmentId) return;
       void loadWork(departmentId)
         .then((office) => {
@@ -105,10 +110,27 @@ export function WorkPanel({
     }
     showFloor(listening);
     const started = Date.now();
+    const controller = new AbortController();
+    stopRef.current = controller;
+    skipPlayRef.current = false;
     try {
-      const office = await sayWork(departmentId, said);
-      await playBeats(office, floorRef.current, Date.now() - started);
+      const office = await sayWork(departmentId, said, controller.signal);
+      if (controller.signal.aborted) {
+        await settleAfterStop(departmentId, said);
+        return;
+      }
+      if (office.play?.length) await playBeats(office, floorRef.current, Date.now() - started);
+      else {
+        setLead(office.lead);
+        setLines(office.lines);
+        showFloor(office.floor);
+        onHolding(office.holding ?? []);
+      }
     } catch (caught) {
+      if (aborted(caught) || controller.signal.aborted) {
+        await settleAfterStop(departmentId, said);
+        return;
+      }
       setText(said);
       setError(caught instanceof Error ? caught.message : "主管这回没接上。");
       try {
@@ -123,8 +145,32 @@ export function WorkPanel({
         showFloor(previousFloor);
       }
     } finally {
+      stopRef.current = null;
+      skipPlayRef.current = false;
       sendingRef.current = false;
       setSending(false);
+    }
+  }
+
+  function interrupt() {
+    skipPlayRef.current = true;
+    watchUntilRef.current = Date.now() + 8_000;
+    if (departmentId) void stopWork(departmentId);
+    stopRef.current?.abort();
+  }
+
+  async function settleAfterStop(floorId: string, said: string) {
+    setError(null);
+    try {
+      const office = await loadWork(floorId);
+      const kept = office.lines.some((line) => line.role === "user" && line.text === said);
+      if (!kept) setText(said);
+      setLead(office.lead);
+      setLines(office.lines);
+      showFloor(office.floor);
+      onHolding(office.holding ?? []);
+    } catch {
+      setText(said);
     }
   }
 
@@ -139,6 +185,8 @@ export function WorkPanel({
     if (sendingRef.current) {
       onHolding(office.holding ?? []);
       showFloor(liveDuringSend(floorRef.current, office.floor));
+      setLead(office.lead);
+      setLines((current) => mergeArrived(current, office.lines));
       return;
     }
     const fresh = Boolean(office.playId && office.play?.length && !playedRef.current.has(office.playId));
@@ -179,13 +227,18 @@ export function WorkPanel({
           ...(step.visit ? { visit: step.visit } : {}),
         });
         showFloor([...playing.values()]);
+        if (skipPlayRef.current) break;
         const hold = index === 0 && (step.label === "在听" || step.label === "在想") ? Math.max(0, step.hold - credit) : step.hold;
         credit = 0;
         if (step.line && step.lineAt === "start") setLines((current) => [...(current ?? []), step.line!]);
-        if (hold > 0) await wait(hold);
+        if (hold > 0) await wait(hold, () => skipPlayRef.current);
+        if (skipPlayRef.current) break;
         if (step.line && step.lineAt !== "start") setLines((current) => [...(current ?? []), step.line!]);
       }
-      if (office.closing) {
+      if (skipPlayRef.current) {
+        setLines(office.lines);
+        showFloor(office.floor);
+      } else if (office.closing) {
         await wait(700);
         setLines((current) => [...(current ?? []), office.closing!]);
       }
@@ -242,12 +295,29 @@ export function WorkPanel({
             maxLength={1000}
           />
         </div>
-        <button type="submit" disabled={!lead || sending || text.trim() === ""}>
-          发送
-        </button>
+        {sending ? (
+          <button type="button" className="stop" onClick={interrupt}>
+            中断
+          </button>
+        ) : (
+          <button type="submit" disabled={!lead || text.trim() === ""}>
+            发送
+          </button>
+        )}
       </form>
     </aside>
   );
+}
+
+function mergeArrived(current: WorkLine[] | null, incoming: WorkLine[]) {
+  if (!current) return incoming;
+  const pending = current.find((line) => line.id === "pending-user");
+  const incomingHasUser = pending ? incoming.some((line) => line.role === "user" && line.text === pending.text) : false;
+  const base = pending && incomingHasUser ? current.filter((line) => line.id !== "pending-user") : current;
+  const known = new Set(base.map((line) => line.id));
+  const arrived = incoming.filter((line) => !known.has(line.id));
+  if (arrived.length === 0 && base === current) return current;
+  return [...base, ...arrived];
 }
 
 function leadActivity(label: string | undefined) {
@@ -266,8 +336,20 @@ function liveDuringSend(current: FloorMark[], incoming: FloorMark[], now = Date.
   });
 }
 
-function wait(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function aborted(error: unknown) {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+function wait(ms: number, skip: () => boolean = () => false) {
+  return new Promise<void>((resolve) => {
+    const start = Date.now();
+    const timer = setInterval(() => {
+      if (skip() || Date.now() - start >= ms) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 50);
+  });
 }
 
 function fitComposer(field: HTMLTextAreaElement) {
