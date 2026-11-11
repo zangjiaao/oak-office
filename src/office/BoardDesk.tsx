@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { everyLabel, listDuties, type Duty } from "../work/duty";
+import { dutyWhen, listDuties, type Duty } from "../work/duty";
 
 type Task = {
   id: string;
@@ -133,7 +133,7 @@ export function BoardDesk({
                 <li key={duty.id} className={`pin tone-${index % 3}`}>
                   <span>
                     <small>
-                      {personName(people, duty.person_id)} · {everyLabel(duty.every_ms)}
+                      {personName(people, duty.person_id)} · {dutyWhen(duty)}
                     </small>
                     <b>{duty.task}</b>
                   </span>

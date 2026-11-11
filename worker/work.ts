@@ -6,7 +6,7 @@ import { armCrew, disarmCrew, keepCrew, liveCrew, releaseCrew, unarmedCrew } fro
 import { jobMemory, promptMemory, recentNotes, remember, NOTES_IN_PROMPT } from "./memory";
 import { assignBoardTask, boardLines, boardTool, listBoard, setBoardState, type BoardTask } from "./board";
 import { listDuties, scheduleTool, unscheduleTool } from "./duty";
-import { dutyHoldLabel, everyLabel, type Duty } from "../src/work/duty";
+import { dutyHoldLabel, dutyWhen, type Duty } from "../src/work/duty";
 import { deskTools, rememberTool } from "./tools";
 import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
@@ -809,7 +809,7 @@ function leadPrompt(
     "你只和用户说话，用简短中文。要派人时，先单独说一句安排谁做什么，再调用 ask，用他们的 id。",
     "用户或制度说明了办事顺序时，把这一步写进派工：做完交给哪位同事，并带上对方的 id。员工会自己递交。你不用等他们做完。没有顺序时不要替他们安排递交。",
     "以后还用得上的事实用 remember 记一句。档案和最近的对话不用再记。",
-    "用户要周期工作时用 schedule。person_id 可以是你自己或员工。every_minutes 只写数字，最少 1。这个人已经有一条定时时，再用 schedule 就是改间隔和内容，不要另加一条。到点由系统直接让本人做，结果会写进对话，你不用再派一次。取消时用 unschedule。",
+    "用户要周期工作时用 schedule。person_id 可以是你自己或员工。每天固定钟点用 at，写成 09:00，按北京时间，不要同时写 every_minutes。间隔才写 every_minutes，只写数字，最少 1。这个人已经有一条定时、或任务文字相同，就是改原来那条，不要另加一条。钟点任务等到下一个该钟点，不会从排上的那一刻起漂。间隔任务第一次在大约半分钟后。到点由系统直接让本人做，结果会写进对话，你不用再派一次。取消时用 unschedule。",
     dutyList(duties, [lead, ...staff]),
     boardLines(board, [lead, ...staff]),
     "你现在可以新建看板条目。用 board，一次调用处理一批，不要一件调用一次。action=add 时 title 一行一件。交给不同人时按人分开。改状态用 action=state，task_id 一行一条，写成「任务id done」。只派其中一件时，把返回的 task_id 填进那一次 ask 的 board_task_id。没有看板条目时 board_task_id 留空。员工做完后那条会自动划掉。",
@@ -852,7 +852,7 @@ function dutyList(duties: Duty[], people: { id: string; name: string }[]) {
   return duties
     .map((duty) => {
       const name = people.find((person) => person.id === duty.person_id)?.name ?? "已离职";
-      return `- ${duty.id} ${name} ${everyLabel(duty.every_ms)}：${duty.task}`;
+      return `- ${duty.id} ${name} ${dutyWhen(duty)}：${duty.task}`;
     })
     .join("\n");
 }

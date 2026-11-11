@@ -5,7 +5,7 @@ import { rosterLabel, rosterNote, type DraftPreview } from "../office/seats";
 import type { HairStyle, Look } from "../office/types";
 import { dismissPerson, forgetMemory, hirePerson, updateDepartment, updatePerson } from "./api";
 import { staffFull, type Department, type DepartmentDraft } from "./department";
-import { cancelDuty, everyLabel, listDuties, type Duty } from "../work/duty";
+import { cancelDuty, dutyWhen, listDuties, type Duty } from "../work/duty";
 import {
   GENDER_LABEL,
   GENDERS,
@@ -478,7 +478,7 @@ export function RosterPanel({
                     {dutiesHere.map((duty) => (
                       <li key={duty.id}>
                         <p>
-                          {everyLabel(duty.every_ms)}：{duty.task}
+                          {dutyWhen(duty)}：{duty.task}
                         </p>
                         <button type="button" onClick={() => void dropDuty(duty.id)} disabled={saving}>
                           取消定时

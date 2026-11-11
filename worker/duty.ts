@@ -1,5 +1,17 @@
-import { obj, str, type Static } from "@earendil-works/pi-schema";
-import { DUTY_MAX_MINUTES, DUTY_MIN_MINUTES, everyLabel, nextDueAt, reviseTarget, type Duty } from "../src/work/duty";
+import { obj, opt, str, type Static } from "@earendil-works/pi-schema";
+import {
+  DUTY_DAY_MS,
+  DUTY_MAX_MINUTES,
+  DUTY_MIN_MINUTES,
+  clockLabel,
+  clockStamp,
+  everyLabel,
+  nextDailyAt,
+  nextDueAt,
+  parseClock,
+  reviseTarget,
+  type Duty,
+} from "../src/work/duty";
 import { disarmCrew } from "./crew";
 import type { Env } from "./env";
 
@@ -9,7 +21,8 @@ const TASK_MAX = 500;
 const ScheduleArgs = obj({
   person_id: str(),
   task: str(),
-  every_minutes: str(),
+  every_minutes: opt(str()),
+  at: opt(str()),
 });
 
 const CancelArgs = obj({
@@ -22,7 +35,7 @@ export async function listDuties(db: Env["DB"], departmentId?: string) {
   const scoped = departmentId
     ? await db
         .prepare(
-          `SELECT duty.id, duty.person_id, duty.task, duty.every_ms, duty.next_at, duty.created_at
+          `SELECT duty.id, duty.person_id, duty.task, duty.every_ms, duty.at_minutes, duty.next_at, duty.created_at
            FROM duty JOIN people ON people.id = duty.person_id
            WHERE people.department_id = ?
            ORDER BY duty.next_at ASC, duty.id ASC`,
@@ -30,7 +43,7 @@ export async function listDuties(db: Env["DB"], departmentId?: string) {
         .bind(departmentId)
         .all<StoredDuty>()
     : await db
-        .prepare("SELECT id, person_id, task, every_ms, next_at, created_at FROM duty ORDER BY next_at ASC, id ASC")
+        .prepare("SELECT id, person_id, task, every_ms, at_minutes, next_at, created_at FROM duty ORDER BY next_at ASC, id ASC")
         .all<StoredDuty>();
   return scoped.results;
 }
@@ -40,12 +53,18 @@ export function scheduleTool(env: Env, departmentId: string) {
     name: "schedule",
     label: "定时",
     description:
-      `安排或修改一件周期工作。person_id 是主管自己或员工的 id。task 必须写清到点要完成的全部内容，因为到点会单独开一轮、不带着当前聊天。every_minutes 是间隔分钟，最少 ${DUTY_MIN_MINUTES}，最多 ${DUTY_MAX_MINUTES}。这个人只有一条定时、或任务文字相同，就是改原来那条的间隔和内容。到点由本人直接做。第一次在大约半分钟后。`,
+      `安排或修改一件周期工作。person_id 是主管自己或员工的 id。task 必须写清到点要完成的全部内容，因为到点会单独开一轮、不带着当前聊天。每天固定钟点用 at，写成 09:00，按北京时间，不要同时填 every_minutes。间隔才填 every_minutes，单位分钟，最少 ${DUTY_MIN_MINUTES}，最多 ${DUTY_MAX_MINUTES}。这个人只有一条定时、或任务文字相同，就是改原来那条。钟点任务等到下一个该钟点。间隔任务第一次在大约半分钟后。到点由本人直接做。`,
     parameters: ScheduleArgs,
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Static<typeof ScheduleArgs>) => {
-      const every = Number(args.every_minutes.trim());
-      if (!Number.isInteger(every) || every < DUTY_MIN_MINUTES || every > DUTY_MAX_MINUTES) {
+      const everyRaw = args.every_minutes?.trim() ?? "";
+      const atRaw = args.at?.trim() ?? "";
+      if (everyRaw && atRaw) return miss("钟点和间隔只写一个。");
+      if (!everyRaw && !atRaw) return miss("要写间隔分钟，或每天的钟点，例如 09:00。");
+      const atMinutes = atRaw ? parseClock(atRaw) : null;
+      if (atRaw && atMinutes === null) return miss("钟点写成 09:00，按北京时间。");
+      const every = everyRaw ? Number(everyRaw) : null;
+      if (every !== null && (!Number.isInteger(every) || every < DUTY_MIN_MINUTES || every > DUTY_MAX_MINUTES)) {
         return miss(`间隔用分钟，最少 ${DUTY_MIN_MINUTES}，最多 ${DUTY_MAX_MINUTES}。`);
       }
       const task = args.task.trim().replace(/\s+/g, " ");
@@ -62,30 +81,31 @@ export function scheduleTool(env: Env, departmentId: string) {
         existing.filter((duty) => duty.person_id === person.id),
         taskText,
       );
+      const slot = clockSlot(now, atMinutes, every);
       if (prior) {
-        const nextAt = prior.next_at <= now ? now : now + every * 60_000;
-        await env.DB.prepare("UPDATE duty SET task = ?, every_ms = ?, next_at = ? WHERE id = ?")
-          .bind(taskText, every * 60_000, nextAt, prior.id)
+        await env.DB.prepare("UPDATE duty SET task = ?, every_ms = ?, at_minutes = ?, next_at = ? WHERE id = ?")
+          .bind(taskText, slot.everyMs, slot.atMinutes, slot.nextAt, prior.id)
           .run();
         disarmCrew(person.id);
-        return text(`已改成。${person.name}${everyLabel(every * 60_000)}做一次：${taskText}。编号 ${prior.id}。`);
+        return text(`已改成。${person.name}${slot.label}做一次：${taskText}。${slot.when}编号 ${prior.id}。`);
       }
       if (existing.length >= DUTY_LIMIT) return miss("定时已经够多了。先取消一个。");
       const duty: StoredDuty = {
         id: crypto.randomUUID(),
         person_id: person.id,
         task: taskText,
-        every_ms: every * 60_000,
-        next_at: now,
+        every_ms: slot.everyMs,
+        at_minutes: slot.atMinutes,
+        next_at: slot.nextAt,
         created_at: now,
       };
       await env.DB.prepare(
-        "INSERT INTO duty (id, person_id, task, every_ms, next_at, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO duty (id, person_id, task, every_ms, at_minutes, next_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-        .bind(duty.id, duty.person_id, duty.task, duty.every_ms, duty.next_at, duty.created_at)
+        .bind(duty.id, duty.person_id, duty.task, duty.every_ms, duty.at_minutes, duty.next_at, duty.created_at)
         .run();
       disarmCrew(person.id);
-      return text(`已排上。${person.name}${everyLabel(duty.every_ms)}做一次：${duty.task}。编号 ${duty.id}。`);
+      return text(`已排上。${person.name}${slot.label}做一次：${duty.task}。${slot.when}编号 ${duty.id}。`);
     },
   };
 }
@@ -128,7 +148,7 @@ export async function runDue(env: Env): Promise<{ ran: number }> {
     const { speak, officeBusy, runStaffDuty, personWorking } = await import("./work");
     const now = Date.now();
     const dueRows = await env.DB.prepare(
-      "SELECT id, person_id, task, every_ms, next_at, created_at FROM duty WHERE next_at <= ? ORDER BY next_at ASC, id ASC LIMIT 8",
+      "SELECT id, person_id, task, every_ms, at_minutes, next_at, created_at FROM duty WHERE next_at <= ? ORDER BY next_at ASC, id ASC LIMIT 8",
     )
       .bind(now)
       .all<StoredDuty>();
@@ -158,7 +178,13 @@ export async function runDue(env: Env): Promise<{ ran: number }> {
             person.department_id,
           )
         : await runStaffDuty(env, person.id, due.task);
-    const next = nextDueAt(Date.now(), due.every_ms, result.ok);
+    const finished = Date.now();
+    const next =
+      typeof due.at_minutes === "number"
+        ? result.ok
+          ? nextDailyAt(finished, due.at_minutes)
+          : finished + 60_000
+        : nextDueAt(finished, due.every_ms, result.ok);
     await env.DB.prepare("UPDATE duty SET next_at = ? WHERE id = ?").bind(next, due.id).run();
     if (result.ok) failedDuty.delete(due.id);
     else await reportFailure(env, due.id, person.name, person.department_id, result.error);
@@ -181,6 +207,15 @@ async function reportFailure(env: Env, id: string, name: string, departmentId: s
 }
 
 let ticking = false;
+
+function clockSlot(now: number, atMinutes: number | null, every: number | null) {
+  if (atMinutes !== null) {
+    const nextAt = nextDailyAt(now, atMinutes);
+    return { everyMs: DUTY_DAY_MS, atMinutes, nextAt, label: clockLabel(atMinutes), when: `下一次 ${clockStamp(nextAt)}。` };
+  }
+  const everyMs = (every ?? DUTY_MIN_MINUTES) * 60_000;
+  return { everyMs, atMinutes: null, nextAt: now, label: everyLabel(everyMs), when: "" };
+}
 
 function text(value: string) {
   return { content: [{ type: "text" as const, text: value }], details: {} };
