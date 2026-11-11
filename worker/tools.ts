@@ -96,7 +96,7 @@ function readTool(env: Env, steps: Step[], mark: Mark) {
     mark,
     "read",
     "在看文件",
-    "读取工作目录里的文件，path 用相对路径。也可以读 ~/.agents/skills 里已安装的技能，path 写成 ~/.agents/skills/技能名/SKILL.md。",
+    "读取文件内容。看文件用 read，不要用 cat 或 sed。工作目录用相对路径。已安装技能写成 ~/.agents/skills/技能名/SKILL.md。技能里要求执行的命令，读完后用 bash 自己跑。",
     ReadArgs,
     "/read",
   );
@@ -127,7 +127,7 @@ function bashTool(env: Env, steps: Step[], mark: Mark, who: { departmentId: stri
   return {
     name: "bash",
     label: "在跑脚本",
-    description: `在工作目录里执行 bash。用来运行刚写的脚本，或用 curl --fail --silent --show-error --max-redirs 0 读取一个 https 页面。timeout 是整数秒，不写就是 20，最长 ${BASH_MAX_SECONDS}。访问令牌和刷新令牌会从输出里拿掉。`,
+    description: `在这台机器的工作目录里执行 bash，返回标准输出和标准错误。可以跑 node、curl、已安装技能里的 CLI，也可以 ls。timeout 是整数秒，不写就是 20，最长 ${BASH_MAX_SECONDS}。访问令牌和刷新令牌会从输出里拿掉。`,
     parameters: BashArgs,
     executionMode: "sequential" as const,
     execute: async (_id: string, args: Static<typeof BashArgs>, signal?: AbortSignal) => {
