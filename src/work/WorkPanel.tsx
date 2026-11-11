@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { onSite } from "../office/shift";
 import type { PersonRow } from "../people/record";
-import { loadWork, sayWork, type DutyHold, type FloorMark, type WorkLine, type WorkOffice } from "./api";
+import { loadWork, sayWork, stopWork, type DutyHold, type FloorMark, type WorkLine, type WorkOffice } from "./api";
 import { Markdown } from "./MarkdownView";
 
 export function WorkPanel({
@@ -33,6 +33,7 @@ export function WorkPanel({
   const playingRef = useRef(false);
   const stopRef = useRef<AbortController | null>(null);
   const skipPlayRef = useRef(false);
+  const watchUntilRef = useRef(0);
   const floorRef = useRef(floor);
   const playedRef = useRef(new Set<string>());
   floorRef.current = floor;
@@ -61,7 +62,9 @@ export function WorkPanel({
     const timer = setInterval(() => {
       ticks += 1;
       if (playingRef.current) return;
-      if (!sendingRef.current && document.visibilityState === "visible" && ticks % 5 !== 0) return;
+      const floorBusy = floorRef.current.some((mark) => mark.pose !== "idle" && mark.pose !== "arrive" && mark.pose !== "done");
+      const watching = Date.now() < watchUntilRef.current;
+      if (!sendingRef.current && !floorBusy && !watching && document.visibilityState === "visible" && ticks % 5 !== 0) return;
       if (!departmentId) return;
       void loadWork(departmentId)
         .then((office) => {
@@ -116,7 +119,13 @@ export function WorkPanel({
         await settleAfterStop(departmentId, said);
         return;
       }
-      await playBeats(office, floorRef.current, Date.now() - started);
+      if (office.play?.length) await playBeats(office, floorRef.current, Date.now() - started);
+      else {
+        setLead(office.lead);
+        setLines(office.lines);
+        showFloor(office.floor);
+        onHolding(office.holding ?? []);
+      }
     } catch (caught) {
       if (aborted(caught) || controller.signal.aborted) {
         await settleAfterStop(departmentId, said);
@@ -145,6 +154,8 @@ export function WorkPanel({
 
   function interrupt() {
     skipPlayRef.current = true;
+    watchUntilRef.current = Date.now() + 8_000;
+    if (departmentId) void stopWork(departmentId);
     stopRef.current?.abort();
   }
 
@@ -174,6 +185,8 @@ export function WorkPanel({
     if (sendingRef.current) {
       onHolding(office.holding ?? []);
       showFloor(liveDuringSend(floorRef.current, office.floor));
+      setLead(office.lead);
+      setLines((current) => mergeArrived(current, office.lines));
       return;
     }
     const fresh = Boolean(office.playId && office.play?.length && !playedRef.current.has(office.playId));
@@ -294,6 +307,17 @@ export function WorkPanel({
       </form>
     </aside>
   );
+}
+
+function mergeArrived(current: WorkLine[] | null, incoming: WorkLine[]) {
+  if (!current) return incoming;
+  const pending = current.find((line) => line.id === "pending-user");
+  const incomingHasUser = pending ? incoming.some((line) => line.role === "user" && line.text === pending.text) : false;
+  const base = pending && incomingHasUser ? current.filter((line) => line.id !== "pending-user") : current;
+  const known = new Set(base.map((line) => line.id));
+  const arrived = incoming.filter((line) => !known.has(line.id));
+  if (arrived.length === 0 && base === current) return current;
+  return [...base, ...arrived];
 }
 
 function leadActivity(label: string | undefined) {

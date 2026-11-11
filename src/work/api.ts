@@ -39,6 +39,14 @@ export async function sayWork(departmentId: string, text: string, signal?: Abort
   return (await send("/api/work", { departmentId, text }, signal)) as WorkOffice;
 }
 
+export async function stopWork(departmentId: string) {
+  await fetch("/api/work/stop", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ departmentId }),
+  }).catch(() => undefined);
+}
+
 async function send(path: string, body?: { departmentId: string; text: string }, signal?: AbortSignal) {
   let response: Response;
   try {
