@@ -1,4 +1,5 @@
-import { arr, obj, str, type Static } from "@earendil-works/pi-schema";
+import { arr, obj, opt, str, type Static } from "@earendil-works/pi-schema";
+import { BASH_MAX_SECONDS, bashSeconds, hideSecrets } from "./bash-guard";
 import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
 import { remember } from "./memory";
@@ -14,7 +15,10 @@ const EditArgs = obj({
   path: str(),
   edits: arr(obj({ old: str(), new: str() })),
 });
-const BashArgs = obj({ command: str() });
+const BashArgs = obj({
+  command: str(),
+  timeout: opt(str()),
+});
 
 export function deskTools(env: Env, steps: Step[], mark: Mark, who: { departmentId: string; personId: string }) {
   return [
@@ -86,7 +90,16 @@ function searchTool(env: Env, steps: Step[], mark: Mark) {
 }
 
 function readTool(env: Env, steps: Step[], mark: Mark) {
-  return fileTool(env, steps, mark, "read", "在看文件", "读取工作目录里的文件。path 相对工作目录。", ReadArgs, "/read");
+  return fileTool(
+    env,
+    steps,
+    mark,
+    "read",
+    "在看文件",
+    "读取工作目录里的文件，path 用相对路径。也可以读 ~/.agents/skills 里已安装的技能，path 写成 ~/.agents/skills/技能名/SKILL.md。",
+    ReadArgs,
+    "/read",
+  );
 }
 
 function writeTool(env: Env, steps: Step[], mark: Mark) {
@@ -114,23 +127,25 @@ function bashTool(env: Env, steps: Step[], mark: Mark, who: { departmentId: stri
   return {
     name: "bash",
     label: "在跑脚本",
-    description: "在工作目录里执行 bash。用来运行刚写的脚本。",
+    description: `在工作目录里执行 bash。用来运行刚写的脚本，或用 curl --fail --silent --show-error --max-redirs 0 读取一个 https 页面。timeout 是整数秒，不写就是 20，最长 ${BASH_MAX_SECONDS}。访问令牌和刷新令牌会从输出里拿掉。`,
     parameters: BashArgs,
     executionMode: "sequential" as const,
-    execute: async (_id: string, args: Static<typeof BashArgs>) => {
+    execute: async (_id: string, args: Static<typeof BashArgs>, signal?: AbortSignal) => {
       const command = args.command.trim();
       if (!command) return miss("没有命令。", "bash");
+      const seconds = bashSeconds(args.timeout);
+      if (seconds === null) return miss(`超时用整数秒，最少 1，最多 ${BASH_MAX_SECONDS}。`, "bash");
       const id = crypto.randomUUID();
       const recorded = await startShell(env.DB, { id, departmentId: who.departmentId, personId: who.personId, command }).then(
         () => true,
         () => false,
       );
       await note(steps, mark, "run", "在跑脚本");
-      const result = await officeHost(env, "/bash", { command, id });
+      const result = await officeHost(env, "/bash", { command, id, timeout: seconds }, signal);
       if (recorded) await finishShell(env.DB, id, result.ok ? result.text : result.error, result.ok ? result.exitCode : null).catch(() => {});
       if (!result.ok) return miss(result.error || "工作目录没接上。", "bash");
       const exit = result.exitCode === null ? "" : `\n退出码 ${result.exitCode}`;
-      return text(`${result.text}${exit}`.trim() || "完成。");
+      return text(hideSecrets(`${result.text}${exit}`.trim() || "完成。"));
     },
   };
 }
@@ -165,7 +180,7 @@ async function note(steps: Step[], mark: Mark, pose: Pose, label: string) {
   await mark(pose, label);
 }
 
-async function officeHost(env: Env, action: string, body: Record<string, unknown>) {
+async function officeHost(env: Env, action: string, body: Record<string, unknown>, signal?: AbortSignal) {
   const host = env.OFFICE_HOST?.trim();
   const token = env.OFFICE_HOST_TOKEN?.trim();
   if (!host || !token) return { ok: false as const, error: "脚本工作区还没打开。在 .dev.vars 里写 OFFICE_HOST_TOKEN。" };
@@ -174,6 +189,7 @@ async function officeHost(env: Env, action: string, body: Record<string, unknown
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
+      signal,
     });
     const payload = (await response.json()) as { ok?: boolean; text?: string; error?: string; exitCode?: number };
     if (!response.ok || payload.ok === false) return { ok: false as const, error: payload.error || "工作目录没接上。", exitCode: null };
