@@ -19,6 +19,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: oak-office-host-keys
     steps:
       - name: Update the office machine
         env:
