@@ -30,7 +30,7 @@
         {
           "binding": "DB",
           "database_name": "oak-office",
-          "database_id": "00000000-0000-4000-8000-000000000001",
+          "database_id": "e9144046-92a1-4861-a1d6-3c8fc085ecf9",
           "migrations_dir": "migrations"
         }
       ]
