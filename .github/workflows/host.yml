@@ -1,0 +1,62 @@
+name: Publish host
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - worker/host.ts
+      - worker/access.ts
+      - worker/bash-guard.ts
+      - worker/read-path.ts
+      - worker/skill-scan.ts
+      - scripts/install-host.mjs
+      - .github/workflows/host.yml
+
+concurrency:
+  group: publish-host
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: oak-office-host-keys
+    steps:
+      - name: Update the office machine
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          SSH_USER: ${{ secrets.VPS_USER }}
+          KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          SSH_PORT: ${{ secrets.VPS_PORT }}
+          APP_DIR: ${{ secrets.VPS_APP_DIR }}
+        run: |
+          set -euo pipefail
+          if [ -z "${HOST}" ] || [ -z "${SSH_USER}" ] || [ -z "${KEY}" ] || [ -z "${KNOWN_HOSTS}" ]; then
+            echo "Set VPS_HOST, VPS_USER, VPS_SSH_KEY, and VPS_KNOWN_HOSTS before this job can update the machine."
+            exit 1
+          fi
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/oak_office
+          chmod 600 ~/.ssh/oak_office
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          dir="${APP_DIR:-/opt/oak-office}"
+          port="${SSH_PORT:-22}"
+          quoted=$(printf '%q' "$dir")
+          ssh -i ~/.ssh/oak_office \
+            -p "$port" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
+            "${SSH_USER}@${HOST}" \
+            "APP_DIR=${quoted} bash -s" <<'EOF'
+          set -euo pipefail
+          cd "${APP_DIR:-/opt/oak-office}"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+          if [ "$(id -u)" -eq 0 ]; then
+            systemctl restart oak-office-host
+          else
+            sudo -n systemctl restart oak-office-host
+          fi
+          EOF
