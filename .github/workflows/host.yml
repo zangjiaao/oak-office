@@ -26,6 +26,7 @@ jobs:
           SSH_USER: ${{ secrets.VPS_USER }}
           KEY: ${{ secrets.VPS_SSH_KEY }}
           KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+          SSH_PORT: ${{ secrets.VPS_PORT }}
           APP_DIR: ${{ secrets.VPS_APP_DIR }}
         run: |
           set -euo pipefail
@@ -38,8 +39,10 @@ jobs:
           chmod 600 ~/.ssh/oak_office
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           dir="${APP_DIR:-/opt/oak-office}"
+          port="${SSH_PORT:-22}"
           quoted=$(printf '%q' "$dir")
           ssh -i ~/.ssh/oak_office \
+            -p "$port" \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$HOME/.ssh/known_hosts" \
