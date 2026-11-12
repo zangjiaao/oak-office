@@ -1,0 +1,6 @@
+# VPS。复制为仓库目录里的 .dev.vars，然后执行 npm run host:install
+OFFICE_HOST_TOKEN=
+OFFICE_APP=https://office.oak-studio.org
+CF_ACCESS_CLIENT_ID=
+CF_ACCESS_CLIENT_SECRET=
+OFFICE_WORKSPACE=workspace
