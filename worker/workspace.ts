@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { officeJson, officePost } from "./office-client";
 
 export type WorkspaceEntry = { name: string; kind: "dir" | "file"; bytes: number };
 
@@ -23,25 +24,17 @@ export async function workspaceRemove(env: Env, file: string) {
 export async function workspaceFile(env: Env, file: string) {
   const path = safePath(file);
   if (!path) return Response.json({ error: "只能拿工作目录里的文件。" }, { status: 400 });
-  const host = env.OFFICE_HOST?.trim();
-  const token = env.OFFICE_HOST_TOKEN?.trim();
-  if (!host || !token) {
-    return Response.json({ error: "脚本工作区还没打开。在 .dev.vars 里写 OFFICE_HOST_TOKEN。" }, { status: 503 });
-  }
-  let response: Response;
-  try {
-    response = await fetch(`${host}/raw`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify({ path }),
-    });
-  } catch {
-    return Response.json({ error: "脚本工作区没连上。" }, { status: 503 });
-  }
+  const posted = await officePost(env, "/raw", { path });
+  if (!posted.ok) return Response.json({ error: posted.error }, { status: posted.status });
+  const response = posted.response;
   const type = response.headers.get("content-type") ?? "";
-  if (type.includes("json")) {
-    const payload = (await response.json().catch(() => null)) as { error?: string } | null;
-    return Response.json({ error: payload?.error || "没拿到文件。" }, { status: response.ok ? 502 : response.status });
+  if (type.includes("json") || !response.ok || !type.includes("octet-stream")) {
+    const payload = type.includes("json") ? ((await response.json().catch(() => null)) as { error?: string } | null) : null;
+    const denied = response.status === 401 || response.status === 403 || (response.status >= 300 && response.status < 400);
+    return Response.json(
+      { error: payload?.error || (denied ? "脚本工作区被入口拦住了。" : "没拿到文件。") },
+      { status: response.ok ? 502 : response.status || 502 },
+    );
   }
   return new Response(response.body, {
     status: response.status,
@@ -54,25 +47,9 @@ export async function workspaceFile(env: Env, file: string) {
 }
 
 async function ask(env: Env, action: string, body: Record<string, string>) {
-  const host = env.OFFICE_HOST?.trim();
-  const token = env.OFFICE_HOST_TOKEN?.trim();
-  if (!host || !token) {
-    return { ok: false as const, error: "脚本工作区还没打开。在 .dev.vars 里写 OFFICE_HOST_TOKEN。", status: 503 };
-  }
-  try {
-    const response = await fetch(`${host}${action}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
-    });
-    const payload = (await response.json()) as { ok?: boolean; error?: string; text?: string; entries?: WorkspaceEntry[] };
-    if (!response.ok || payload.ok === false) {
-      return { ok: false as const, error: payload.error || "工作目录没接上。", status: response.status || 502 };
-    }
-    return { ok: true as const, text: payload.text ?? "", entries: payload.entries ?? [], status: 200 };
-  } catch {
-    return { ok: false as const, error: "脚本工作区没连上。", status: 503 };
-  }
+  const result = await officeJson<{ ok?: boolean; error?: string; text?: string; entries?: WorkspaceEntry[] }>(env, action, body);
+  if (!result.ok) return result;
+  return { ok: true as const, text: result.payload.text ?? "", entries: result.payload.entries ?? [], status: 200 };
 }
 
 function safePath(input: string) {

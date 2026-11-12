@@ -3,6 +3,7 @@ import { accessSync, constants } from "node:fs";
 import { lstat, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import path from "node:path";
+import { accessHeaders } from "./access.ts";
 import { bashSeconds, hideSecrets } from "./bash-guard.ts";
 import { resolveReadPath } from "./read-path.ts";
 import { listInstalledSkills } from "./skill-scan.ts";
@@ -10,9 +11,11 @@ import { listInstalledSkills } from "./skill-scan.ts";
 const liveBash = new Map<string, { output: string; done: boolean; exitCode: number | null }>();
 
 const PORT = Number(process.env.OFFICE_HOST_PORT || 8788);
-const ROOT = path.resolve("workspace");
+const ROOT = path.resolve((await devVar("OFFICE_WORKSPACE")) || "workspace");
 const TOKEN = await tokenFromDevVars();
 const APP = await devVar("OFFICE_APP");
+const ACCESS_ID = await devVar("CF_ACCESS_CLIENT_ID");
+const ACCESS_SECRET = await devVar("CF_ACCESS_CLIENT_SECRET");
 
 const server = createServer((request, response) => {
   void handle(request, response).catch((error) => {
@@ -34,7 +37,11 @@ server.listen(PORT, "127.0.0.1", () => {
       try {
         const response = await fetch(`${target}/api/duties/tick`, {
           method: "POST",
-          headers: { authorization: `Bearer ${TOKEN}` },
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            ...accessHeaders(ACCESS_ID, ACCESS_SECRET),
+          },
+          redirect: "manual",
         });
         if (response.ok) {
           preferred = target;
@@ -74,7 +81,7 @@ async function handle(request: IncomingMessage, response: import("node:http").Se
     return;
   }
   const body = (await readJson(request)) as Record<string, unknown>;
-  const action = request.url ?? "/";
+  const action = actionOf(request.url);
   if (action === "/list") return list(response, body);
   if (action === "/read") return read(response, body);
   if (action === "/raw") return raw(response, body);
@@ -316,7 +323,15 @@ function cleanEnv() {
   delete env.DEEPSEEK_API_KEY;
   delete env.TAVILY_API_KEY;
   delete env.OFFICE_HOST_TOKEN;
+  delete env.CF_ACCESS_CLIENT_ID;
+  delete env.CF_ACCESS_CLIENT_SECRET;
   return env;
+}
+
+function actionOf(url: string | undefined) {
+  const path = (url ?? "/").split("?")[0] || "/";
+  if (path.length > 1 && path.endsWith("/")) return path.slice(0, -1);
+  return path;
 }
 
 function clip(text: string, max: number) {
