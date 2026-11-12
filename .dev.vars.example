@@ -1,12 +1,5 @@
-# VPS：把这份文件放在仓库目录，填好下面的口令后执行 npm run host:install
+# 本地开发。复制为 .dev.vars
 DEEPSEEK_API_KEY=
-AI_MODEL=deepseek-flash
 TAVILY_API_KEY=
 OFFICE_HOST=http://127.0.0.1:8788
 OFFICE_HOST_TOKEN=
-# Tunnel in front of the VPS host. Leave blank when OFFICE_HOST is localhost.
-# CF_ACCESS_CLIENT_ID=
-# CF_ACCESS_CLIENT_SECRET=
-# Host calls this office to run duties. On the VPS, use the Access-protected URL.
-# OFFICE_APP=http://127.0.0.1:5173
-# OFFICE_WORKSPACE=workspace
