@@ -18,6 +18,10 @@ import { skillCatalog } from "./skill-catalog";
 
 const POSES = ["idle", "arrive", "think", "read", "type", "run", "wait", "handoff", "report", "done", "error"] as const;
 const TEXT_MAX = 1000;
+/** Same cap as a pi-coding-agent tool result: 2000 lines or 50KB, then a truncation notice. */
+const HANDOFF_MAX_LINES = 2000;
+const HANDOFF_MAX_BYTES = 50 * 1024;
+const HANDOFF_NOTICE_RESERVE = 256;
 
 function trace(event: string, detail?: Record<string, unknown>) {
   const extra = detail ? ` ${JSON.stringify(detail)}` : "";
@@ -617,20 +621,21 @@ export async function runStaffDuty(
     staff.finishTurn = stopWhenUserActs;
     await staff.prompt(`到点了。请现在完成这件事，用简短中文给出结果。不要派别人：${jobText}`);
     const answer = [...staff.state.messages].reverse().find((message) => message.role === "assistant");
-    const note = answer ? clip(visibleText(answer), 500) : "";
-    if (!note || staff.state.errorMessage) {
+    const full = answer ? visibleText(answer) : "";
+    const handed = handoffText(full);
+    if (!handed || staff.state.errorMessage) {
       releaseCrew(person.id);
       await setDesk(env.DB, person.id, "error", "卡住");
-      return { ok: false, error: note || "员工这回没接上。" };
+      return { ok: false, error: clip(handed, 240) || "员工这回没接上。" };
     }
     keepCrew(person.id, staff);
     const duties = await listDuties(env.DB, department.id);
     const rest = Date.now();
     await setDesk(env.DB, person.id, "done", "做完", undefined, undefined, rest);
-    await env.DB.prepare("UPDATE work_desk SET note = ? WHERE person_id = ?").bind(note, person.id).run();
+    await env.DB.prepare("UPDATE work_desk SET note = ? WHERE person_id = ?").bind(clip(full, 500), person.id).run();
     if (duties.some((duty) => duty.person_id === person.id)) disarmCrew(person.id);
     else armCrew(person.id, rest + DONE_MS + IDLE_MS);
-    await remember(env.DB, person.id, jobMemory(jobText, note));
+    await remember(env.DB, person.id, jobMemory(jobText, full));
     const clock = `到点了。${person.name}做了：${jobText}`;
     const identity = identityOf(lead);
     const leaderPrompt = [
@@ -658,7 +663,7 @@ export async function runStaffDuty(
     await setDesk(env.DB, lead.id, "think", "在想");
     try {
       await leader.prompt(
-        `到点了。${person.name}已经做完：${jobText}。员工交来的结果是：${note}。请用你自己的话告诉用户。`,
+        `到点了。${person.name}已经做完：${jobText}。\n员工交来的结果是：\n${handed}\n请用你自己的话告诉用户。`,
       );
     } finally {
       await setDesk(env.DB, lead.id, "idle", "等你一句话");
@@ -863,8 +868,8 @@ function askTool(
             steps.unshift({ pose: "think", label: "在想" });
           }
           const answer = [...staff.state.messages].reverse().find((message) => message.role === "assistant");
-          const note = answer ? clip(visibleText(answer), 500) : "";
-          const shown = answer ? keepLines(visibleText(answer), 1500) : note;
+          const full = answer ? visibleText(answer) : "";
+          const report = handoffText(full);
           trace("派工完成", {
             name: worker.name,
             label,
@@ -874,21 +879,21 @@ function askTool(
             handed: Boolean(visit),
           });
           await env.DB.prepare("UPDATE work_desk SET note = ?, updated_at = ? WHERE person_id = ?")
-            .bind(note, Date.now(), worker.id)
+            .bind(clip(full, 500), Date.now(), worker.id)
             .run();
           await setDesk(env.DB, worker.id, "done", "做完");
-          await remember(env.DB, worker.id, jobMemory(task, note));
+          await remember(env.DB, worker.id, jobMemory(task, full));
           if (boardId) {
             const struck = await setBoardState(env.DB, departmentId, boardId, "done");
             if (!struck.ok) trace("看板没划掉", { id: boardId, error: struck.error });
           }
-          const handed = visit ? "结果已递给同事。" : "";
+          const passed = visit ? "结果已递给同事。" : "";
           await presentReport(
             env,
             runtime,
             departmentId,
             worker,
-            `${worker.name}做完「${label}」。${handed}\n${shown}`.trim(),
+            `${worker.name}做完「${label}」。${passed}\n${report}`.trim(),
             false,
           );
         } catch (error) {
@@ -1381,7 +1386,7 @@ async function stageReport(
       id: crypto.randomUUID(),
       role: "staff",
       person_id: worker.id,
-      text: keepLines(text, 1500),
+      text: text.trim(),
     };
     let closing: WorkLine | undefined;
     let raw = "";
@@ -1463,7 +1468,7 @@ async function leadOnReport(
   });
   leader.finishTurn = stopWhenUserActs;
   const cue = stuck ? "没有做完" : "做完了";
-  await leader.prompt(`${worker.name}${cue}。交给你的内容是：${report}`);
+  await leader.prompt(`${worker.name}${cue}。交给你的内容是：\n${report}`);
   const message = [...leader.state.messages]
     .filter((item) => item.role === "assistant")
     .reverse()
@@ -1484,7 +1489,7 @@ function delay(ms: number) {
 }
 
 async function writeStaffLine(db: Env["DB"], departmentId: string, personId: string, text: string) {
-  const line = keepLines(text, 1500);
+  const line = text.trim();
   if (!line) return;
   await db
     .prepare(
@@ -1497,7 +1502,7 @@ async function writeStaffLine(db: Env["DB"], departmentId: string, personId: str
 function staffOutcome(messages: AgentMessage[], from: number) {
   const fresh = messages.slice(from);
   const answer = [...fresh].reverse().find((message) => message.role === "assistant");
-  const note = answer ? clip(visibleText(answer), 500) : "";
+  const note = answer ? visibleText(answer).trim() : "";
   const parts = answer ? answer.content.map((part) => part.type) : [];
   return {
     note,
@@ -1523,8 +1528,37 @@ function clip(value: string, max: number) {
   return [...text].slice(0, max).join("");
 }
 
-function keepLines(value: string, max: number) {
-  const text = value.trim().replace(/\r\n/g, "\n");
+function handoffText(value: string) {
+  const text = value.replace(/\r\n/g, "\n").trim();
   if (!text) return "";
-  return [...text].slice(0, max).join("").trimEnd();
+  const totalBytes = utf8Length(text);
+  const lines = text.split("\n");
+  if (lines.length <= HANDOFF_MAX_LINES && totalBytes <= HANDOFF_MAX_BYTES) return text;
+  const maxLines = HANDOFF_MAX_LINES - 2;
+  const maxBytes = HANDOFF_MAX_BYTES - HANDOFF_NOTICE_RESERVE;
+  const kept: string[] = [];
+  let used = 0;
+  for (const line of lines) {
+    if (kept.length >= maxLines) break;
+    const lineBytes = utf8Length(line) + (kept.length > 0 ? 1 : 0);
+    if (used + lineBytes > maxBytes) break;
+    kept.push(line);
+    used += lineBytes;
+  }
+  const body = (kept.join("\n") || utf8Prefix(lines[0] ?? text, maxBytes)).trimEnd();
+  const omitted = totalBytes - (body ? utf8Length(body) : 0);
+  const notice = `[输出被截断：省略了 ${omitted} 字节。]`;
+  return body ? `${body}\n\n${notice}` : notice;
+}
+
+function utf8Prefix(value: string, maxBytes: number) {
+  const bytes = new TextEncoder().encode(value);
+  if (bytes.length <= maxBytes) return value;
+  let end = maxBytes;
+  while (end > 0 && (bytes[end] & 0b1100_0000) === 0b1000_0000) end -= 1;
+  return new TextDecoder().decode(bytes.slice(0, end));
+}
+
+function utf8Length(value: string) {
+  return new TextEncoder().encode(value).length;
 }
