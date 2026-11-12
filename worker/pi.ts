@@ -2,6 +2,7 @@ import type { AgentMessage, StreamFn } from "@earendil-works/pi-agent-core";
 import { createModels, type AssistantMessage } from "@earendil-works/pi-ai";
 import { deepseekProvider } from "@earendil-works/pi-ai/providers/deepseek";
 import { hideSecrets } from "./bash-guard";
+import { stripSpoken } from "./dsml";
 import type { Env } from "./env";
 
 const MISSING_KEY = "聊天模型尚未配置。在 .dev.vars 里写上 DEEPSEEK_API_KEY。";
@@ -42,9 +43,9 @@ export function openPi(env: Env) {
 }
 
 export function visibleText(message: AssistantMessage) {
-  return message.content
-    .flatMap((part) => (part.type === "text" && part.text.trim() ? [part.text.trim()] : []))
-    .join("\n");
+  return stripSpoken(
+    message.content.flatMap((part) => (part.type === "text" && part.text.trim() ? [part.text.trim()] : [])).join("\n"),
+  );
 }
 
 export function replayMessage(message: AssistantMessage): AssistantMessage {

@@ -142,7 +142,7 @@ function bashTool(env: Env, steps: Step[], mark: Mark, who: { departmentId: stri
         () => false,
       );
       await note(steps, mark, "run", "在跑脚本");
-      const result = await officeHost(env, "/bash", { command, id, timeout: seconds }, signal);
+      const result = await officeHost(env, "/bash", { command, id, timeout: seconds }, signal, (seconds + 15) * 1000);
       if (recorded) await finishShell(env.DB, id, result.ok ? result.text : result.error, result.ok ? result.exitCode : null).catch(() => {});
       if (!result.ok) return miss(result.error || "工作目录没接上。", "bash");
       const exit = result.exitCode === null ? "" : `\n退出码 ${result.exitCode}`;
@@ -181,8 +181,14 @@ async function note(steps: Step[], mark: Mark, pose: Pose, label: string) {
   await mark(pose, label);
 }
 
-async function officeHost(env: Env, action: string, body: Record<string, unknown>, signal?: AbortSignal) {
-  const result = await officeJson<{ ok?: boolean; text?: string; error?: string; exitCode?: number }>(env, action, body, signal);
+async function officeHost(env: Env, action: string, body: Record<string, unknown>, signal?: AbortSignal, timeoutMs?: number) {
+  const result = await officeJson<{ ok?: boolean; text?: string; error?: string; exitCode?: number }>(
+    env,
+    action,
+    body,
+    signal,
+    timeoutMs,
+  );
   if (!result.ok) return { ok: false as const, error: result.error, exitCode: null as number | null };
   return {
     ok: true as const,
