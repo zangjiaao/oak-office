@@ -1,4 +1,5 @@
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import { obj, oneOf, str, type Static } from "@earendil-works/pi-schema";
 import { identityOf, thinkingFor, type PersonRow } from "../src/people/record";
 import { DONE_MS, IDLE_MS, onSite, stillWorking } from "../src/office/shift";
@@ -13,6 +14,8 @@ import type { Env } from "./env";
 import { departmentById } from "./department";
 import { listPeople } from "./people";
 import { compactTurn, fitHistory, listTranscript, summaryNote, type TranscriptLine } from "./context";
+import { hideSecrets } from "./bash-guard";
+import { quietDsml, stripSpoken } from "./dsml";
 import { openPi, replayMessage, turnTrace, visibleText } from "./pi";
 import { skillCatalog } from "./skill-catalog";
 
@@ -30,6 +33,7 @@ function trace(event: string, detail?: Record<string, unknown>) {
 const busy = new Set<string>();
 const assigned = new Set<string>();
 const inflight = new Set<Promise<unknown>>();
+const BEAT_MS = 20_000;
 
 type FloorGate = {
   controller: AbortController;
@@ -104,6 +108,43 @@ function track(work: Promise<unknown>) {
   inflight.add(work);
   void work.finally(() => inflight.delete(work));
 }
+
+/** Log the current step. Nothing here is written into the chat. */
+function followPerson(agent: Agent, name: string) {
+  let step = "在等模型";
+  let since = Date.now();
+  const beat = setInterval(() => {
+    const mins = Math.max(1, Math.round((Date.now() - since) / 60_000));
+    trace("仍在这一步", { name, step, mins });
+  }, BEAT_MS);
+  const unsubscribe = agent.subscribe((event) => {
+    if (event.type === "message_end" && event.message.role === "assistant") {
+      const dropped = quietDsml(event.message);
+      if (dropped.length) trace("正文里的工具标记已去掉", { name, tools: dropped });
+    }
+    if (event.type === "tool_execution_start") {
+      step = stepDetail(event.toolName, event.args);
+      since = Date.now();
+      trace("开始一步", { name, tool: event.toolName, detail: step });
+    }
+    if (event.type === "tool_execution_end") {
+      trace("做完一步", { name, tool: event.toolName, error: event.isError, ms: event.durationMs });
+      step = "在等模型";
+      since = Date.now();
+    }
+  });
+  return () => {
+    clearInterval(beat);
+    unsubscribe();
+  };
+}
+
+function stepDetail(tool: string, args: unknown) {
+  const body = field(args, "command") || field(args, "path") || field(args, "query") || field(args, "label") || field(args, "text");
+  const clean = clip(hideSecrets(body), 160);
+  return clean ? `${tool} ${clean}` : tool;
+}
+
 const staged = new Map<string, { id: string; play: WorkBeat[]; closing?: WorkLine; until: number }>();
 const reports = new Map<string, Promise<void>>();
 
@@ -305,6 +346,7 @@ export async function speak(
         ],
       },
     });
+    const stopFollow = followPerson(agent, lead.name);
     const detach = bindAgent(department.id, agent);
     const fromClient = () => gate.abort();
     if (signal?.aborted) fromClient();
@@ -341,6 +383,7 @@ export async function speak(
       }
     } finally {
       unsubscribe();
+      stopFollow();
       detach();
       signal?.removeEventListener("abort", fromClient);
     }
@@ -619,7 +662,12 @@ export async function runStaffDuty(
       null,
     );
     staff.finishTurn = stopWhenUserActs;
-    await staff.prompt(`到点了。请现在完成这件事，用简短中文给出结果。不要派别人：${jobText}`);
+    const stopStaff = followPerson(staff, person.name);
+    try {
+      await staff.prompt(`到点了。请现在完成这件事，用简短中文给出结果。不要派别人：${jobText}`);
+    } finally {
+      stopStaff();
+    }
     const answer = [...staff.state.messages].reverse().find((message) => message.role === "assistant");
     const full = answer ? visibleText(answer) : "";
     const handed = handoffText(full);
@@ -661,11 +709,13 @@ export async function runStaffDuty(
       },
     });
     await setDesk(env.DB, lead.id, "think", "在想");
+    const stopLead = followPerson(leader, lead.name);
     try {
       await leader.prompt(
         `到点了。${person.name}已经做完：${jobText}。\n员工交来的结果是：\n${handed}\n请用你自己的话告诉用户。`,
       );
     } finally {
+      stopLead();
       await setDesk(env.DB, lead.id, "idle", "等你一句话");
     }
     const leadAnswer = [...leader.state.messages]
@@ -835,6 +885,7 @@ function askTool(
         staff.finishTurn = stopWhenUserActs;
         const detach = bindAgent(departmentId, staff);
         const heard = staff.state.messages.length;
+        const stopFollow = followPerson(staff, worker.name);
         try {
           if (floorAborted(departmentId)) {
             await setDesk(env.DB, worker.id, "idle", "停了");
@@ -903,6 +954,7 @@ function askTool(
           await setDesk(env.DB, worker.id, "error", "卡住").catch(() => {});
           await presentReport(env, runtime, departmentId, worker, `${worker.name}没做完「${label}」：${reason}`, true).catch(() => {});
         } finally {
+          stopFollow();
           detach();
         }
       }
@@ -1103,6 +1155,7 @@ function replayItem(value: unknown): AgentMessage[] {
   if (!value || typeof value !== "object" || !("role" in value)) return [];
   const role = (value as { role?: string }).role;
   if (role !== "assistant" && role !== "toolResult" && role !== "user") return [];
+  if (role === "assistant" && Array.isArray((value as { content?: unknown }).content)) quietDsml(value as AssistantMessage);
   return [value as AgentMessage];
 }
 
@@ -1214,12 +1267,11 @@ function office(
   const lead = people.find((person) => person.is_lead === 1);
   return {
     lead: lead ? { id: lead.id, name: lead.name } : null,
-    lines: lines.map((line) => ({
-      id: line.id,
-      role: line.role,
-      person_id: line.person_id,
-      text: line.text,
-    })),
+    lines: lines.flatMap((line) => {
+      const text = stripSpoken(line.text);
+      if (!text) return [];
+      return [{ id: line.id, role: line.role, person_id: line.person_id, text }];
+    }),
     floor,
     holding,
   };
@@ -1468,7 +1520,12 @@ async function leadOnReport(
   });
   leader.finishTurn = stopWhenUserActs;
   const cue = stuck ? "没有做完" : "做完了";
-  await leader.prompt(`${worker.name}${cue}。交给你的内容是：\n${report}`);
+  const stopFollow = followPerson(leader, lead.name);
+  try {
+    await leader.prompt(`${worker.name}${cue}。交给你的内容是：\n${report}`);
+  } finally {
+    stopFollow();
+  }
   const message = [...leader.state.messages]
     .filter((item) => item.role === "assistant")
     .reverse()

@@ -7,10 +7,11 @@
   "scripts": {
     "dev": "CI=1 wrangler d1 migrations apply oak-office --local && node scripts/dev.mjs",
     "db:migrate": "CI=1 wrangler d1 migrations apply oak-office --local",
+    "db:migrate:remote": "CI=1 wrangler d1 migrations apply oak-office --remote --env production",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "deploy": "npm run build && wrangler deploy",
+    "deploy": "npm run build && npm run db:migrate:remote && wrangler deploy",
     "host": "node --experimental-strip-types worker/host.ts",
     "host:install": "node scripts/install-host.mjs"
   },
