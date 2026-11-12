@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CodeView } from "./CodeView";
 import { Markdown } from "../work/MarkdownView";
 
@@ -64,6 +64,7 @@ export function ScreenDesk({
   const [shellError, setShellError] = useState<string | null>(null);
   const termRef = useRef<HTMLDivElement>(null);
   const panePick = useRef(false);
+  const followTail = useRef(true);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -122,11 +123,19 @@ export function ScreenDesk({
     };
   }, [personId]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
+    if (pane === "term") followTail.current = true;
+  }, [pane]);
+
+  useLayoutEffect(() => {
     const node = termRef.current;
-    if (!node || pane !== "term") return;
-    const nearBottom = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
-    if (nearBottom) node.scrollTop = node.scrollHeight;
+    if (!node || pane !== "term" || !followTail.current) return;
+    const pin = () => {
+      if (followTail.current) node.scrollTop = node.scrollHeight;
+    };
+    pin();
+    const frame = requestAnimationFrame(pin);
+    return () => cancelAnimationFrame(frame);
   }, [runs, pane]);
 
   async function openFile(name: string) {
@@ -186,6 +195,12 @@ export function ScreenDesk({
       setPending(null);
       setError(caught instanceof Error ? caught.message : "文件没删掉。");
     }
+  }
+
+  function onTermScroll() {
+    const node = termRef.current;
+    if (!node) return;
+    followTail.current = node.scrollHeight - node.scrollTop - node.clientHeight < 48;
   }
 
   const crumbs = folder ? folder.split("/") : [];
@@ -303,7 +318,7 @@ export function ScreenDesk({
                 </article>
               </section>
               {pane === "term" ? (
-                <div className="term-view" ref={termRef}>
+                <div className="term-view" ref={termRef} onScroll={onTermScroll}>
                   {!personId ? <p>这台电脑还没有人。</p> : null}
                   {shellError ? <p>{shellError}</p> : null}
                   {personId && runs === null && !shellError ? <p>在读终端。</p> : null}
