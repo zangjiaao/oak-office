@@ -1,3 +1,4 @@
+# VPS：把这份文件放在仓库目录，填好下面的口令后执行 npm run host:install
 DEEPSEEK_API_KEY=
 AI_MODEL=deepseek-flash
 TAVILY_API_KEY=

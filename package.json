@@ -10,7 +10,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && wrangler deploy",
+    "host": "node --experimental-strip-types worker/host.ts",
+    "host:install": "node scripts/install-host.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "^1.5.0",
