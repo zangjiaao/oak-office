@@ -17,4 +17,7 @@ export interface Env {
   TAVILY_API_KEY?: string;
   OFFICE_HOST?: string;
   OFFICE_HOST_TOKEN?: string;
+  /** Service token for the tunneled office machine. Omit when the host is on localhost. */
+  CF_ACCESS_CLIENT_ID?: string;
+  CF_ACCESS_CLIENT_SECRET?: string;
 }

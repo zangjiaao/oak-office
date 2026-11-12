@@ -1,5 +1,6 @@
 import { BASH_MAX_SECONDS, hideSecrets } from "./bash-guard";
 import type { Env } from "./env";
+import { officeJson } from "./office-client";
 
 const KEEP = 40;
 const COMMAND_MAX = 2_000;
@@ -90,22 +91,13 @@ export async function listShell(env: Env, personId: string): Promise<ShellRun[]>
 }
 
 async function liveOutput(env: Env, id: string) {
-  const host = env.OFFICE_HOST?.trim();
-  const token = env.OFFICE_HOST_TOKEN?.trim();
-  if (!host || !token) return null;
-  try {
-    const response = await fetch(`${host}/bash-log`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify({ id }),
-    });
-    if (!response.ok) return null;
-    const body = (await response.json()) as { ok?: boolean; text?: string; done?: boolean; exitCode?: number };
-    if (body.ok === false) return null;
-    return { text: body.text ?? "", done: Boolean(body.done), exitCode: typeof body.exitCode === "number" ? body.exitCode : null };
-  } catch {
-    return null;
-  }
+  const result = await officeJson<{ ok?: boolean; text?: string; done?: boolean; exitCode?: number }>(env, "/bash-log", { id });
+  if (!result.ok) return null;
+  return {
+    text: result.payload.text ?? "",
+    done: Boolean(result.payload.done),
+    exitCode: typeof result.payload.exitCode === "number" ? result.payload.exitCode : null,
+  };
 }
 
 function clip(value: string, max: number) {

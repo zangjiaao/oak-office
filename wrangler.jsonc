@@ -17,5 +17,23 @@
       "database_id": "00000000-0000-4000-8000-000000000001",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "env": {
+    "production": {
+      "name": "oak-office",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "AI_MODEL": "deepseek-flash"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "oak-office",
+          "database_id": "00000000-0000-4000-8000-000000000001",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
 }

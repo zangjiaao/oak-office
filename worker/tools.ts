@@ -3,6 +3,7 @@ import { BASH_MAX_SECONDS, bashSeconds, hideSecrets } from "./bash-guard";
 import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
 import { remember } from "./memory";
+import { officeJson } from "./office-client";
 import { finishShell, startShell } from "./shell";
 
 type Step = { pose: Pose; label: string };
@@ -181,23 +182,13 @@ async function note(steps: Step[], mark: Mark, pose: Pose, label: string) {
 }
 
 async function officeHost(env: Env, action: string, body: Record<string, unknown>, signal?: AbortSignal) {
-  const host = env.OFFICE_HOST?.trim();
-  const token = env.OFFICE_HOST_TOKEN?.trim();
-  if (!host || !token) return { ok: false as const, error: "脚本工作区还没打开。在 .dev.vars 里写 OFFICE_HOST_TOKEN。" };
-  try {
-    const response = await fetch(`${host}${action}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-      body: JSON.stringify(body),
-      signal,
-    });
-    const payload = (await response.json()) as { ok?: boolean; text?: string; error?: string; exitCode?: number };
-    if (!response.ok || payload.ok === false) return { ok: false as const, error: payload.error || "工作目录没接上。", exitCode: null };
-    return { ok: true as const, text: payload.text ?? "", exitCode: typeof payload.exitCode === "number" ? payload.exitCode : null };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "";
-    return { ok: false as const, error: message ? `脚本工作区没连上。${message}` : "脚本工作区没连上。" };
-  }
+  const result = await officeJson<{ ok?: boolean; text?: string; error?: string; exitCode?: number }>(env, action, body, signal);
+  if (!result.ok) return { ok: false as const, error: result.error, exitCode: null as number | null };
+  return {
+    ok: true as const,
+    text: result.payload.text ?? "",
+    exitCode: typeof result.payload.exitCode === "number" ? result.payload.exitCode : null,
+  };
 }
 
 function text(value: string) {
