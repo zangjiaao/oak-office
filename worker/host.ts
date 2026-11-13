@@ -1,8 +1,9 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { accessSync, constants } from "node:fs";
+import { accessSync, constants, createReadStream } from "node:fs";
 import { lstat, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
-import { createServer, type IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import path from "node:path";
+import { pipeline } from "node:stream/promises";
 import { accessHeaders } from "./access.ts";
 import { bashSeconds, hideSecrets } from "./bash-guard.ts";
 import { resolveReadPath } from "./read-path.ts";
@@ -19,6 +20,10 @@ const ACCESS_SECRET = await devVar("CF_ACCESS_CLIENT_SECRET");
 
 const server = createServer((request, response) => {
   void handle(request, response).catch((error) => {
+    if (response.headersSent) {
+      response.destroy();
+      return;
+    }
     send(response, 500, { ok: false, error: error instanceof Error ? error.message : "脚本工作区没写上。" });
   });
 });
@@ -67,7 +72,7 @@ server.listen(PORT, "127.0.0.1", () => {
   setInterval(() => void tick(), 30_000);
 });
 
-async function handle(request: IncomingMessage, response: import("node:http").ServerResponse) {
+async function handle(request: IncomingMessage, response: ServerResponse) {
   if (request.method !== "POST") {
     send(response, 405, { ok: false, error: "只收 POST。" });
     return;
@@ -94,11 +99,11 @@ async function handle(request: IncomingMessage, response: import("node:http").Se
   send(response, 404, { ok: false, error: "没有这个操作。" });
 }
 
-async function skills(response: import("node:http").ServerResponse) {
+async function skills(response: ServerResponse) {
   send(response, 200, { ok: true, skills: await listInstalledSkills() });
 }
 
-async function list(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+async function list(response: ServerResponse, body: Record<string, unknown>) {
   const folder = await locate(typeof body.path === "string" && body.path.trim() ? body.path : ".");
   if (!folder) return send(response, 400, { ok: false, error: "只能看工作目录里的文件夹。" });
   const info = await stat(folder).catch(() => null);
@@ -114,22 +119,22 @@ async function list(response: import("node:http").ServerResponse, body: Record<s
   send(response, 200, { ok: true, entries });
 }
 
-async function raw(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+async function raw(response: ServerResponse, body: Record<string, unknown>) {
   const file = await locate(body.path);
   if (!file) return send(response, 400, { ok: false, error: "只能拿工作目录里的文件。" });
   const info = await stat(file).catch(() => null);
   if (!info || info.isDirectory()) return send(response, 400, { ok: false, error: "这是文件夹。" });
-  if (info.size > 2_000_000) return send(response, 400, { ok: false, error: "文件太大，屏幕里放不下。" });
-  const data = await readFile(file);
   const name = path.basename(file).replace(/["\r\n]/g, "");
   response.writeHead(200, {
     "content-type": "application/octet-stream",
+    "content-length": String(info.size),
     "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+    "cache-control": "no-store",
   });
-  response.end(data);
+  await pipeline(createReadStream(file), response);
 }
 
-async function removeFile(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+async function removeFile(response: ServerResponse, body: Record<string, unknown>) {
   const file = await locate(body.path);
   if (!file || file === ROOT) return send(response, 400, { ok: false, error: "只能删工作目录里的文件。" });
   const info = await lstat(file).catch(() => null);
@@ -139,7 +144,7 @@ async function removeFile(response: import("node:http").ServerResponse, body: Re
   send(response, 200, { ok: true });
 }
 
-async function read(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+async function read(response: ServerResponse, body: Record<string, unknown>) {
   const placed = await resolveReadPath(ROOT, body.path);
   if (!placed.ok) return send(response, placed.status, { ok: false, error: placed.error });
   if (placed.kind === "skill") {
@@ -151,7 +156,7 @@ async function read(response: import("node:http").ServerResponse, body: Record<s
   send(response, 200, { ok: true, text: clip(text, 12000) });
 }
 
-async function write(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+async function write(response: ServerResponse, body: Record<string, unknown>) {
   const file = await locate(body.path);
   if (!file || typeof body.content !== "string") return send(response, 400, { ok: false, error: "只能把文件写进工作目录。" });
   if ([...body.content].length > 100000) return send(response, 400, { ok: false, error: "文件太长。" });
@@ -160,7 +165,7 @@ async function write(response: import("node:http").ServerResponse, body: Record<
   send(response, 200, { ok: true, text: `已写入 ${String(body.path)}` });
 }
 
-async function edit(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+async function edit(response: ServerResponse, body: Record<string, unknown>) {
   const file = await locate(body.path);
   const edits = editList(body.edits);
   if (!file || !edits) return send(response, 400, { ok: false, error: "修改要写明原句和新句。" });
@@ -206,7 +211,7 @@ function applyEdits(content: string, edits: { old: string; new: string }[]) {
   return { ok: true as const, text: next + content.slice(cursor) };
 }
 
-async function bash(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+async function bash(response: ServerResponse, body: Record<string, unknown>) {
   const command = typeof body.command === "string" ? body.command.trim() : "";
   if (!command) return send(response, 400, { ok: false, error: "没有命令。" });
   const seconds = bashSeconds(body.timeout);
@@ -260,7 +265,7 @@ async function bash(response: import("node:http").ServerResponse, body: Record<s
   });
 }
 
-function bashLog(response: import("node:http").ServerResponse, body: Record<string, unknown>) {
+function bashLog(response: ServerResponse, body: Record<string, unknown>) {
   const id = typeof body.id === "string" ? body.id : "";
   const live = liveBash.get(id);
   if (!live) return send(response, 404, { ok: false, error: "没有这次运行。" });
@@ -340,7 +345,7 @@ function clip(text: string, max: number) {
   return `${chars.slice(0, max).join("")}\n…后面省去了`;
 }
 
-function send(response: import("node:http").ServerResponse, status: number, body: unknown) {
+function send(response: ServerResponse, status: number, body: unknown) {
   response.writeHead(status, { "content-type": "application/json" });
   response.end(JSON.stringify(body));
 }
