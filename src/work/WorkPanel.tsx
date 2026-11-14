@@ -425,7 +425,11 @@ function speakerOptions(lines: WorkLine[], known: Map<string, string>) {
 function linesByAuthor(lines: WorkLine[], email: string) {
   const shown: WorkLine[] = [];
   let open = false;
-  for (const line of lines) {
+  for (const [index, line] of lines.entries()) {
+    if (line.role === "clock" || (line.role === "lead" && lines[index - 1]?.role === "clock")) {
+      shown.push(line);
+      continue;
+    }
     if (line.role === "user") open = line.author_email === email;
     if (open) shown.push(line);
   }
