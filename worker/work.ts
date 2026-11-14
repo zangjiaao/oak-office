@@ -382,7 +382,7 @@ export async function speak(
       touched = true;
       await setDesk(env.DB, lead.id, "think", "在想");
       const speaker = author ? (known.get(author) ?? author) : "";
-      await agent.prompt(speaker ? `${speaker}说：${said}` : said);
+      await agent.prompt(userSaid(speaker, said));
       let nudges = 0;
       while (nudges < 2 && !gate.controller.signal.aborted && stalled(agent.state.messages, before)) {
         nudges += 1;
@@ -1031,7 +1031,7 @@ function leadPrompt(
     rules,
     promptMemory(lead.memories),
     "你只和用户说话，用简短中文。要派人时，先单独说一句安排谁做什么，再调用 ask，用他们的 id。",
-    "几位同事可能轮流说话。一句若以「某某说：」开头，某某就是这一句的人。认得出是谁，不要把他们当成同一个人。",
+    "跟你说话的人都是这间办公室的上级，比你高一级，负责交代事情。他们不是员工，不在花名册里。不要把他们当成同事，不要建议他们入职，也不要问他们是哪条线。几位上级可能轮流交代。一句若以「用户某某：」开头，某某就是这位上级。认得出是谁，按他的交代办事。",
     "用户一句之后，你可以连续说、连续用工具，把你自己能做完的查、装、跑在这一轮里做完。需要用户打开链接、在网页上确认或另行同意时，把链接和要做的事说完就停，等用户回来再继续。不要在用户确认前反复查询连接状态。",
     "你就在这台机器上。bash 是你的命令行，能跑 node、curl 和已安装技能里的 CLI。要查、要取、要跑，自己调用 bash，看完输出再回答。电脑上的终端只是以往输出的记录。不要把命令交给用户，也不要说自己接不到这台机器或没有 node。",
     catalog,
@@ -1144,10 +1144,14 @@ function dutyList(duties: Duty[], people: { id: string; name: string }[]) {
     .join("\n");
 }
 
+function userSaid(name: string, text: string) {
+  return name ? `用户${name}：${text}` : text;
+}
+
 function replay(line: LineRow, names: Map<string, string>, previous?: LineRow): AgentMessage[] {
   if (line.role === "user" || line.role === "clock" || line.role === "staff") {
     const who = line.role === "user" && line.author_email ? (names.get(line.author_email) ?? line.author_email) : "";
-    return [{ role: "user", content: who ? `${who}说：${line.text}` : line.text, timestamp: line.created_at }];
+    return [{ role: "user", content: userSaid(who, line.text), timestamp: line.created_at }];
   }
   if (line.role === "lead" && !line.raw && previous?.role === "clock") {
     return [{ role: "user", content: line.text, timestamp: line.created_at }];
