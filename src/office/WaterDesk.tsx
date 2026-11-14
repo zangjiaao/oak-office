@@ -3,13 +3,21 @@ import { currentSession, type Session } from "../people/colleague";
 import { DUTY_ZONE } from "../work/duty";
 import { WATER_MINUTES, clearWater, readWater, saveWater, type WaterReminder } from "./water";
 
+const LEVEL: Record<(typeof WATER_MINUTES)[number], number> = {
+  30: 86,
+  45: 72,
+  60: 58,
+  90: 44,
+  120: 32,
+};
+
 export function WaterDesk({
   departmentId,
   box,
   onClose,
 }: {
   departmentId: string;
-  box: { left: number; top: number; width: number; height: number };
+  box: { left: number; top: number; width: number; zoom: number };
   onClose: () => void;
 }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -28,17 +36,21 @@ export function WaterDesk({
 
   useEffect(() => {
     let gone = false;
-    void Promise.all([currentSession(), readWater()])
-      .then(([me, next]) => {
+    void (async () => {
+      try {
+        const me = await currentSession();
         if (gone) return;
         setSession(me);
+        if (!me.email) return;
+        const next = await readWater();
+        if (gone) return;
         setReminder(next);
         if (next) setMinutes(next.everyMinutes);
         setError(null);
-      })
-      .catch((caught) => {
+      } catch (caught) {
         if (!gone) setError(caught instanceof Error ? caught.message : "饮水提醒没打开。");
-      });
+      }
+    })();
     return () => {
       gone = true;
     };
@@ -72,44 +84,47 @@ export function WaterDesk({
   }
 
   const who = session?.email ? (session.name ? `${session.name}（${session.email}）` : session.email) : null;
+  const chosen = (WATER_MINUTES as readonly number[]).includes(minutes) ? minutes : 60;
 
   return (
     <div className="desk-screen">
       <button type="button" className="desk-dim" aria-label="离开饮水" onClick={onClose} />
-      <section className="slate duties" role="dialog" aria-label="饮水" style={box as CSSProperties}>
-        <header>
-          <strong>饮水</strong>
-          <button type="button" aria-label="关上" onClick={onClose} disabled={saving}>
+      <section className="cooler" role="dialog" aria-label="饮水" style={box as CSSProperties}>
+        <div className="cooler-bottle" aria-hidden="true">
+          <span className="neck" />
+          <span className="jug" />
+        </div>
+        <div className="cooler-body">
+          <button type="button" className="cooler-close" aria-label="关上" onClick={onClose} disabled={saving}>
             <CloseIcon />
           </button>
-        </header>
-        <div className="slate-body">
-          {error ? <p className="quiet">{error}</p> : null}
-          {session && !session.email ? <p className="quiet">Access 进来之后，才能给自己定饮水提醒。</p> : null}
-          {who ? (
-            <>
-              <p className="quiet">只提醒 {who}。别人的间隔跟你无关。</p>
-              <div className="picks">
-                {WATER_MINUTES.map((item) => (
-                  <button key={item} type="button" className={minutes === item ? "on" : ""} onClick={() => setMinutes(item)}>
-                    {item % 60 === 0 ? `${item / 60}小时` : `${item}分钟`}
-                  </button>
-                ))}
-              </div>
-              <p className="quiet">
-                {reminder ? `下一次 ${clockFace(reminder.nextAt)}。提醒出现在这一层的对话里。` : "还没有提醒。记下之后，到点会叫你喝水。"}
-              </p>
-              <div className="slate-actions">
-                <button type="button" onClick={() => void drop()} disabled={saving || !reminder}>
-                  取消提醒
-                </button>
-                <button type="button" onClick={() => void save()} disabled={saving}>
-                  记下
-                </button>
-              </div>
-            </>
-          ) : null}
+          <p className="cooler-name">饮水</p>
+          {error ? <p className="cooler-note">{error}</p> : null}
+          {session && !session.email ? <p className="cooler-note">Access 进来之后，才能给自己定饮水提醒。</p> : null}
+          {who ? <p className="cooler-note">只提醒 {who}。</p> : null}
+          <div className="cooler-window">
+            <span className="level" style={{ height: `${LEVEL[chosen as (typeof WATER_MINUTES)[number]]}%` }} />
+            <b>{chosen % 60 === 0 ? `${chosen / 60}小时` : `${chosen}分钟`}</b>
+          </div>
+          <div className="cooler-picks">
+            {WATER_MINUTES.map((item) => (
+              <button key={item} type="button" className={minutes === item ? "on" : ""} onClick={() => setMinutes(item)} disabled={!who || saving}>
+                {item}
+              </button>
+            ))}
+          </div>
+          <span className="cooler-spout" aria-hidden="true" />
+          <p className="cooler-next">{reminder ? `下一次 ${clockFace(reminder.nextAt)}。` : "还没有提醒。"}</p>
+          <div className="cooler-actions">
+            <button type="button" onClick={() => void drop()} disabled={saving || !reminder}>
+              取消提醒
+            </button>
+            <button type="button" className="pour" onClick={() => void save()} disabled={saving || !who}>
+              记下
+            </button>
+          </div>
         </div>
+        <div className="cooler-stand" aria-hidden="true" />
       </section>
     </div>
   );

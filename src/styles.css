@@ -714,46 +714,206 @@ button, input, textarea {
   background: transparent;
 }
 
-.slate .picks { display: flex; flex-wrap: wrap; gap: 6px; }
+.cooler {
+  position: absolute;
+  z-index: 1;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #1a2a30;
+  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.4));
+  animation: computer-in 380ms ease both;
+}
 
-.slate .picks button {
-  border: 1px solid rgba(36, 28, 22, 0.25);
+.cooler-bottle {
+  width: 86px;
+  margin-bottom: -16px;
+  z-index: 1;
+}
+
+.cooler-bottle .neck {
+  display: block;
+  width: 22px;
+  height: 14px;
+  margin: 0 auto;
+  background: linear-gradient(#eaf7fc, #7eb8d0);
+  border: 3px solid #1d4254;
+  border-bottom: 0;
+  border-radius: 5px 5px 0 0;
+}
+
+.cooler-bottle .jug {
+  display: block;
+  height: 78px;
+  border: 3px solid #1d4254;
+  border-radius: 22px 22px 12px 12px;
+  background:
+    linear-gradient(100deg, rgba(255, 255, 255, 0.55), transparent 36%),
+    linear-gradient(#c5ebf8 0%, #3f95bf 46%, #1d6d96 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.cooler-bottle .jug::after {
+  content: "";
+  position: absolute;
+  left: -8%;
+  right: -8%;
+  bottom: -6px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
+  animation: cooler-wave 2.4s ease-in-out infinite alternate;
+}
+
+.cooler-body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 14px 14px;
+  background: linear-gradient(#f7fbfc, #d5e3e9 55%, #c5d5dc);
+  border: 3px solid #24343c;
+  border-radius: 18px 18px 8px 8px;
+  position: relative;
+}
+
+.cooler-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
   background: transparent;
-  color: inherit;
-  padding: 4px 10px;
+  color: #24343c;
   cursor: pointer;
 }
 
-.slate .picks button.on {
-  background: #1f3a32;
-  border-color: #1f3a32;
-  color: #f3ead7;
+.cooler-close svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
 }
 
-.slate-body .slate-actions {
-  justify-content: flex-start;
-  margin-top: 12px;
+.cooler-name {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.cooler-note,
+.cooler-next {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #3d5360;
+}
+
+.cooler-window {
+  height: 74px;
+  border: 3px solid #24343c;
+  border-radius: 8px;
+  background: #10242c;
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.cooler-window .level {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(#9ad8ee, #1c759c);
+  transition: height 180ms ease;
+}
+
+.cooler-window b {
+  position: relative;
+  color: #f4fbff;
+  font-size: 20px;
+  font-weight: 600;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
+}
+
+.cooler-picks {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.cooler-picks button {
+  min-width: 0;
+  padding: 6px 0;
+  border: 2px solid #24343c;
+  border-radius: 6px;
+  background: #f4fafc;
+  color: #1a2a30;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.cooler-picks button.on {
+  background: #1d6d96;
+  border-color: #143e56;
+  color: #f4fbff;
+}
+
+.cooler-spout {
+  width: 16px;
+  height: 8px;
+  margin: -2px auto 0;
+  background: #7d9098;
+  border-radius: 0 0 4px 4px;
+  box-shadow: inset 0 -2px 0 #546870;
+}
+
+.cooler-actions {
+  display: flex;
+  justify-content: space-between;
   gap: 8px;
 }
 
-.slate-body .slate-actions button {
-  width: auto;
-  height: auto;
-  padding: 6px 12px;
-  border: 1px solid rgba(36, 28, 22, 0.25);
-  background: transparent;
-  color: inherit;
-  white-space: nowrap;
+.cooler-actions button {
+  padding: 6px 10px;
+  border: 2px solid #24343c;
+  border-radius: 999px;
+  background: #f4fafc;
+  color: #1a2a30;
   cursor: pointer;
+  white-space: nowrap;
 }
 
-.slate-body .slate-actions button:last-child {
-  background: #1f3a32;
-  border-color: #1f3a32;
-  color: #f3ead7;
+.cooler-actions button.pour {
+  background: #1d6d96;
+  border-color: #143e56;
+  color: #f4fbff;
 }
 
-.slate-body .slate-actions button:disabled { opacity: 0.55; cursor: default; }
+.cooler-actions button:disabled { opacity: 0.45; cursor: default; }
+
+.cooler-stand {
+  width: 78%;
+  height: 14px;
+  background: #6b4428;
+  border: 3px solid #3e2918;
+  border-top: 0;
+  border-radius: 0 0 4px 4px;
+}
+
+@keyframes cooler-wave {
+  from { transform: translateY(0); }
+  to { transform: translateY(4px); }
+}
 
 .slate-actions {
   display: flex;
