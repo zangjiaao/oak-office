@@ -85,19 +85,24 @@ function drawRoom(
 
   rect(ctx, 364, 70, 16, 28, "#d9e4ea");
   rect(ctx, 368, 74, 8, 10, look.trim);
+  rect(ctx, 369, 88, 6, 2, "#7d9098");
+  rect(ctx, 371, 90, 2, 2, "#5c6e76");
   rect(ctx, 360, 96, 24, 4, look.wood);
+  rect(ctx, 366, 95, 12, 2, "#8a9aa2");
   if (dripping) drawDrip(ctx, frame);
 }
 
 function drawDrip(ctx: CanvasRenderingContext2D, frame: number) {
-  const step = Math.floor(frame / 4) % 12;
-  if (step < 5) {
-    rect(ctx, 371, 86, 2, step > 2 ? 3 : 2, "#3d8eb8");
+  const step = Math.floor(frame / 4) % 10;
+  if (step < 4) {
+    rect(ctx, 371, 91, 2, step > 1 ? 2 : 1, "#3d8eb8");
     return;
   }
-  const y = 90 + (step - 5) * 3;
-  rect(ctx, 371, y, 2, 2, "#3d8eb8");
-  if (step === 11) rect(ctx, 370, y + 2, 4, 1, "#7eb8d4");
+  if (step < 7) {
+    rect(ctx, 371, 93, 2, 2, "#3d8eb8");
+    return;
+  }
+  rect(ctx, 369, 95, 6, 1, "#7eb8d4");
 }
 
 function drawDesk(
