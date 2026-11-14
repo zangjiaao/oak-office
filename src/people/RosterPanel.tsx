@@ -380,88 +380,95 @@ export function RosterPanel({
                 取消
               </button>
             </header>
-            <div className="body file">
-            <label>
-              姓名
-              <input
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                autoComplete="off"
-                maxLength={32}
-                autoFocus
-              />
-            </label>
-            <div className="field">
-              <span>主管</span>
-              <button
-                type="button"
-                className={form.isLead ? "switch on" : "switch"}
-                aria-pressed={form.isLead}
-                onClick={() => setForm({ ...form, isLead: !form.isLead })}
-              >
-                <i />
-                {form.isLead ? "是主管" : "不是主管"}
-              </button>
-              {form.isLead ? <p className="hint">这个部门只有一位主管。保存后，原来的主管回到员工桌。</p> : null}
-              {people && !staffFits(people, { kind: form.kind, id: form.id, isLead: form.isLead }, seats) ? (
-                <p className="file-error">{staffFull(seats)}</p>
-              ) : null}
-            </div>
-            <div className="field">
-              <span>模型</span>
-              <div className="choices">
-                {MODELS.map((model) => (
-                  <button
-                    key={model}
-                    type="button"
-                    className={form.model === model ? "on" : ""}
-                    onClick={() =>
-                      setForm({
-                        ...form,
-                        model,
-                        thinking: THINKING_FOR[model].includes(form.thinking) ? form.thinking : "high",
-                      })
-                    }
-                  >
-                    {MODEL_LABEL[model]}
-                  </button>
-                ))}
+            <div className="body file zoned">
+            <section className="zone">
+              <h4>身份</h4>
+              <label>
+                姓名
+                <input
+                  value={form.name}
+                  onChange={(event) => setForm({ ...form, name: event.target.value })}
+                  autoComplete="off"
+                  maxLength={32}
+                  autoFocus
+                />
+              </label>
+              <div className="field">
+                <span>主管</span>
+                <button
+                  type="button"
+                  className={form.isLead ? "switch on" : "switch"}
+                  aria-pressed={form.isLead}
+                  onClick={() => setForm({ ...form, isLead: !form.isLead })}
+                >
+                  <i />
+                  {form.isLead ? "是主管" : "不是主管"}
+                </button>
+                {form.isLead ? <p className="hint">这个部门只有一位主管。保存后，原来的主管回到员工桌。</p> : null}
+                {people && !staffFits(people, { kind: form.kind, id: form.id, isLead: form.isLead }, seats) ? (
+                  <p className="file-error">{staffFull(seats)}</p>
+                ) : null}
               </div>
-              <p className="hint">每个员工可以用自己的模型。</p>
-            </div>
-            <div className="field">
-              <span>思考</span>
-              <div className="choices">
-                {THINKING_FOR[form.model].map((level) => (
-                  <button
-                    key={level}
-                    type="button"
-                    className={form.thinking === level ? "on" : ""}
-                    onClick={() => setForm({ ...form, thinking: level })}
-                  >
-                    {THINKING_LABEL[level]}
-                  </button>
-                ))}
+            </section>
+            <section className="zone">
+              <h4>模型</h4>
+              <div className="field">
+                <div className="choices">
+                  {MODELS.map((model) => (
+                    <button
+                      key={model}
+                      type="button"
+                      className={form.model === model ? "on" : ""}
+                      onClick={() =>
+                        setForm({
+                          ...form,
+                          model,
+                          thinking: THINKING_FOR[model].includes(form.thinking) ? form.thinking : "high",
+                        })
+                      }
+                    >
+                      {MODEL_LABEL[model]}
+                    </button>
+                  ))}
+                </div>
+                <p className="hint">每个员工可以用自己的模型。</p>
               </div>
-              <p className="hint">想过的内容不进聊天。开着的时候，办公室里显示在想。</p>
-            </div>
-            <div className="field">
-              <span>性别</span>
-              <div className="choices">
-                {GENDERS.map((gender) => (
-                  <button
-                    key={gender}
-                    type="button"
-                    className={form.gender === gender ? "on" : ""}
-                    onClick={() => setForm({ ...form, gender })}
-                  >
-                    {GENDER_LABEL[gender]}
-                  </button>
-                ))}
+              <div className="field">
+                <span>思考</span>
+                <div className="choices">
+                  {THINKING_FOR[form.model].map((level) => (
+                    <button
+                      key={level}
+                      type="button"
+                      className={form.thinking === level ? "on" : ""}
+                      onClick={() => setForm({ ...form, thinking: level })}
+                    >
+                      {THINKING_LABEL[level]}
+                    </button>
+                  ))}
+                </div>
+                <p className="hint">想过的内容不进聊天。开着的时候，办公室里显示在想。</p>
               </div>
-            </div>
-            <div className="field">
-              <span>形象</span>
+            </section>
+            <section className="zone">
+              <h4>形象</h4>
+              <div className="field">
+                <span>性别</span>
+                <div className="choices">
+                  {GENDERS.map((gender) => (
+                    <button
+                      key={gender}
+                      type="button"
+                      className={form.gender === gender ? "on" : ""}
+                      onClick={() => setForm({ ...form, gender })}
+                    >
+                      {GENDER_LABEL[gender]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="field">
+                <span>形象</span>
               <div className="presets">
                 {LOOK_PRESETS.map((preset) => (
                   <button
@@ -508,35 +515,39 @@ export function RosterPanel({
                   onChange={(pants) => setForm({ ...form, look: { ...form.look, pants } })}
                 />
               </div>
-            </div>
-            <label>
-              一句话
-              <input
-                value={form.brief}
-                onChange={(event) => setForm({ ...form, brief: event.target.value })}
-                placeholder="空着就用通用身份"
-                maxLength={80}
-              />
-            </label>
-            <label>
-              详细设定
-              <textarea
-                value={form.dossier}
-                onChange={(event) => setForm({ ...form, dossier: event.target.value })}
-                placeholder="空着就用通用身份"
-                maxLength={4000}
-              />
-            </label>
-            {identity ? (
-              <p className="hint">
-                {identity.generic
-                  ? `通用身份：${identity.brief}${identity.dossier}`
-                  : "空着的部分用通用身份。"}
-              </p>
-            ) : null}
+              </div>
+            </section>
+            <section className="zone">
+              <h4>设定</h4>
+              <label>
+                一句话
+                <input
+                  value={form.brief}
+                  onChange={(event) => setForm({ ...form, brief: event.target.value })}
+                  placeholder="空着就用通用身份"
+                  maxLength={80}
+                />
+              </label>
+              <label>
+                详细设定
+                <textarea
+                  value={form.dossier}
+                  onChange={(event) => setForm({ ...form, dossier: event.target.value })}
+                  placeholder="空着就用通用身份"
+                  maxLength={4000}
+                />
+              </label>
+              {identity ? (
+                <p className="hint">
+                  {identity.generic
+                    ? `通用身份：${identity.brief}${identity.dossier}`
+                    : "空着的部分用通用身份。"}
+                </p>
+              ) : null}
+            </section>
             {form.kind === "edit" ? (
-              <div className="field">
-                <span>定时</span>
+              <section className="zone">
+                <h4>定时</h4>
                 {dutiesHere.length === 0 ? (
                   <p className="hint">还没有定时。跟主管说周期要做的事，会排在这里。</p>
                 ) : (
@@ -553,11 +564,11 @@ export function RosterPanel({
                     ))}
                   </ul>
                 )}
-              </div>
+              </section>
             ) : null}
             {form.kind === "edit" ? (
-              <div className="field">
-                <span>记忆</span>
+              <section className="zone">
+                <h4>记忆</h4>
                 {memories.length === 0 ? (
                   <p className="hint">还没有记忆。做完的事，和记住的事实，会出现在这里。</p>
                 ) : (
@@ -572,7 +583,7 @@ export function RosterPanel({
                     ))}
                   </ul>
                 )}
-              </div>
+              </section>
             ) : null}
             {error ? <p className="file-error">{error}</p> : null}
             {form.kind === "edit" ? (
@@ -742,7 +753,7 @@ function DepartmentForm({
       await onRemoveFloor(department.id);
       onSaved();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "这一层没有拆掉。");
+      setError(caught instanceof Error ? caught.message : "这一层没有废除。");
     } finally {
       setSaving(false);
     }
@@ -781,7 +792,7 @@ function DepartmentForm({
     }
   }
 
-  const title = department ? "编辑这一层" : "新的一层";
+  const title = department ? "编辑部门" : "新的部门";
   return (
     <Dialog title={title} onClose={onClose}>
       <form className="sheet-form" onSubmit={(event) => void save(event)}>
@@ -791,29 +802,33 @@ function DepartmentForm({
             取消
           </button>
         </header>
-        <div className="body file">
-          <div className="floor-fields">
-            <label>
-              楼层
-              <input value={floor} onChange={(event) => setFloor(event.target.value)} inputMode="numeric" />
-            </label>
-            <label>
-              名称
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                maxLength={16}
-                placeholder={department ? undefined : "比如：调研组"}
-                autoFocus
-              />
-            </label>
-            <label>
-              工位
-              <input value={seats} onChange={(event) => setSeats(event.target.value)} inputMode="numeric" />
-            </label>
-          </div>
-          <div className="field">
-            <span>楼</span>
+        <div className="body file zoned">
+          <section className="zone">
+            <h4>基本</h4>
+            <div className="floor-fields">
+              <label>
+                楼层
+                <input value={floor} onChange={(event) => setFloor(event.target.value)} inputMode="numeric" />
+              </label>
+              <label>
+                名称
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  maxLength={16}
+                  placeholder={department ? undefined : "比如：调研组"}
+                  autoFocus
+                />
+              </label>
+              <label>
+                工位
+                <input value={seats} onChange={(event) => setSeats(event.target.value)} inputMode="numeric" />
+              </label>
+            </div>
+            <p className="hint">工位是这一层最多能有几位员工，主管不占工位。</p>
+          </section>
+          <section className="zone">
+            <h4>楼</h4>
             <div className="presets">
               {ROOM_PRESETS.map((preset) => (
                 <button
@@ -845,9 +860,9 @@ function DepartmentForm({
               <Color label="线" value={trim} onChange={setTrim} />
               <Color label="木" value={wood} onChange={setWood} />
             </div>
-          </div>
-          <div className="field">
-            <span>宠物</span>
+          </section>
+          <section className="zone">
+            <h4>宠物</h4>
             <div className="choices">
               {PET_CHOICES.map((pet) => (
                 <button
@@ -865,29 +880,40 @@ function DepartmentForm({
               ))}
             </div>
             <p className="hint">点一下放到这一层，再点一下拿掉。没选的楼层没有宠物。</p>
-          </div>
-          <label>
-            规章制度
-            <textarea
-              value={rules}
-              onChange={(event) => setRules(event.target.value)}
-              placeholder="比如：合同先由撰写人写完，交给盖章人，盖章人再交给主管。"
-              maxLength={8000}
-            />
-          </label>
-          <p className="hint">主管和这一层的员工都会读到。工位是这一层最多能有几位员工，主管不占工位。</p>
-          {removing ? <p className="hint">确认后，这一层的人、对话和规章制度都会去掉。</p> : null}
+          </section>
+          <section className="zone">
+            <h4>制度</h4>
+            <label>
+              规章制度
+              <textarea
+                value={rules}
+                onChange={(event) => setRules(event.target.value)}
+                placeholder="比如：合同先由撰写人写完，交给盖章人，盖章人再交给主管。"
+                maxLength={8000}
+              />
+            </label>
+            <p className="hint">主管和这一层的员工都会读到。</p>
+          </section>
           {error ? <p className="file-error">{error}</p> : null}
+          {department ? (
+            <div className="danger">
+              <h4>危险区</h4>
+              <div>
+                <p>{removing ? "再点一次，这一层才会废除。" : "废除后，这一层的人、对话和规章制度都会去掉。"}</p>
+                <button type="button" onClick={() => void remove()} disabled={saving}>
+                  {removing ? "确认废除" : "废除"}
+                </button>
+              </div>
+            </div>
+          ) : null}
         </div>
         <footer>
-          <button type="submit" className="save" disabled={saving}>
-            {saving ? "在写" : "保存这一层"}
+          <button type="button" onClick={onClose} disabled={saving}>
+            取消
           </button>
-          {department ? (
-            <button type="button" className="leave" onClick={() => void remove()} disabled={saving}>
-              {removing ? "确认拆掉" : "拆掉这一层"}
-            </button>
-          ) : null}
+          <button type="submit" className="save" disabled={saving}>
+            {saving ? "在写" : "保存"}
+          </button>
         </footer>
       </form>
     </Dialog>

@@ -1445,6 +1445,32 @@ dialog.sheet-dialog {
 
 .sheet-form .file { margin-top: 0; }
 
+.sheet-form .file.zoned { gap: 0; }
+
+.sheet-form .zone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.sheet-form .zone + .zone {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #e0d2b8;
+}
+
+.sheet-form .zone h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #241c16;
+}
+
+.sheet-form .zone > .hint { margin-top: 0; }
+
 .sheet-form input[readonly] { background: #efe6d4; }
 
 .sheet-form header button.close {
