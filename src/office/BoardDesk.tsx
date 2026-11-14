@@ -1,5 +1,4 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { dutyWhen, listDuties, type Duty } from "../work/duty";
 
 type Task = {
   id: string;
@@ -9,7 +8,11 @@ type Task = {
   created_at: number;
 };
 
-const RANK = { doing: 0, open: 1, done: 2 };
+const GROUPS = [
+  { state: "doing", label: "在做" },
+  { state: "open", label: "还没做" },
+  { state: "done", label: "划掉" },
+] as const;
 
 export function BoardDesk({
   departmentId,
@@ -24,7 +27,6 @@ export function BoardDesk({
   face: string;
   onClose: () => void;
 }) {
-  const [duties, setDuties] = useState<Duty[] | null>(null);
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -32,7 +34,6 @@ export function BoardDesk({
   const [editing, setEditing] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftOwner, setDraftOwner] = useState("");
-  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -45,12 +46,10 @@ export function BoardDesk({
   useEffect(() => {
     let gone = false;
     const load = () => {
-      void Promise.all([listDuties(departmentId), listTasks(departmentId)])
-        .then(([nextDuties, nextTasks]) => {
+      void listTasks(departmentId)
+        .then((nextTasks) => {
           if (gone) return;
-          setDuties(nextDuties);
           setTasks(nextTasks);
-          setNow(Date.now());
           setError(null);
         })
         .catch((caught) => {
@@ -108,7 +107,7 @@ export function BoardDesk({
     }
   }
 
-  const rows = [...(tasks ?? [])].sort((a, b) => RANK[a.state] - RANK[b.state] || a.created_at - b.created_at);
+  const rows = [...(tasks ?? [])].sort((a, b) => a.created_at - b.created_at);
 
   return (
     <div className="desk-screen">
@@ -127,76 +126,66 @@ export function BoardDesk({
         </header>
         <div className="slate-body">
           {error ? <p className="quiet">{error}</p> : null}
-          {duties && duties.length > 0 ? (
-            <ul>
-              {duties.map((duty, index) => (
-                <li key={duty.id} className={`pin tone-${index % 3}`}>
-                  <span>
-                    <small>
-                      {personName(people, duty.person_id)} · {dutyWhen(duty)}
-                    </small>
-                    <b>{duty.task}</b>
-                  </span>
-                  <em>{duty.next_at <= now ? "在做" : nextLabel(duty.next_at)}</em>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {rows.length > 0 ? (
-            <ul>
-              {rows.map((task, index) => (
-                <li
-                  key={task.id}
-                  className={`pin tone-${index % 3}${task.state === "done" ? " done" : ""}${editing === task.id ? " editing" : ""}`}
-                >
-                  {editing === task.id ? (
-                    <form onSubmit={(event) => void saveEdit(event)}>
-                      <small>{stateName(task.state)}</small>
-                      <input
-                        value={draftTitle}
-                        maxLength={80}
-                        aria-label="改这件事"
-                        onChange={(event) => setDraftTitle(event.target.value)}
-                      />
-                      <select aria-label="负责人" value={draftOwner} onChange={(event) => setDraftOwner(event.target.value)}>
-                        <option value="">不指定</option>
-                        {people.map((person) => (
-                          <option key={person.id} value={person.id}>
-                            {person.name}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="slate-actions">
-                        <button type="submit" aria-label="改好">
-                          <CheckIcon />
-                        </button>
-                        <button type="button" aria-label="取消" onClick={() => setEditing(null)}>
-                          <CloseIcon />
-                        </button>
+          {tasks && rows.length === 0 ? <p className="quiet">还没有记下的事。</p> : null}
+          {GROUPS.map((group) => {
+            const items = rows.filter((task) => task.state === group.state);
+            if (!items.length) return null;
+            return (
+              <section key={group.state} className="sheet-group">
+                <h3>{group.label}</h3>
+                <ul className="sheet">
+                  {items.map((task) => (
+                    <li key={task.id} className={`row ${task.state}${editing === task.id ? " editing" : ""}`}>
+                      <span className="mark" aria-hidden="true">
+                        {task.state === "done" ? <CheckIcon /> : null}
                       </span>
-                    </form>
-                  ) : (
-                    <>
-                      <span>
-                        <small>
-                          {stateName(task.state)} · {personName(people, task.person_id)}
-                        </small>
-                        <b>{task.title}</b>
-                      </span>
-                      <span className="slate-actions">
-                        <button type="button" aria-label="编辑" onClick={() => beginEdit(task)}>
-                          <PencilIcon />
-                        </button>
-                        <button type="button" aria-label="去掉" onClick={() => void remove(task.id)}>
-                          <TrashIcon />
-                        </button>
-                      </span>
-                    </>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : null}
+                      {editing === task.id ? (
+                        <form onSubmit={(event) => void saveEdit(event)}>
+                          <input
+                            value={draftTitle}
+                            maxLength={80}
+                            aria-label="改这件事"
+                            onChange={(event) => setDraftTitle(event.target.value)}
+                          />
+                          <select aria-label="负责人" value={draftOwner} onChange={(event) => setDraftOwner(event.target.value)}>
+                            <option value="">不指定</option>
+                            {people.map((person) => (
+                              <option key={person.id} value={person.id}>
+                                {person.name}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="slate-actions">
+                            <button type="submit" aria-label="改好">
+                              <CheckIcon />
+                            </button>
+                            <button type="button" aria-label="取消" onClick={() => setEditing(null)}>
+                              <CloseIcon />
+                            </button>
+                          </span>
+                        </form>
+                      ) : (
+                        <>
+                          <span className="copy">
+                            <b>{task.title}</b>
+                            <small>{personName(people, task.person_id)}</small>
+                          </span>
+                          <span className="slate-actions">
+                            <button type="button" aria-label="编辑" onClick={() => beginEdit(task)}>
+                              <PencilIcon />
+                            </button>
+                            <button type="button" aria-label="去掉" onClick={() => void remove(task.id)}>
+                              <TrashIcon />
+                            </button>
+                          </span>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
         </div>
         <form onSubmit={(event) => void addTask(event)}>
           <input
@@ -263,16 +252,6 @@ function ink(hex: string) {
 function personName(people: { id: string; name: string }[], id: string | null) {
   if (!id) return "不指定";
   return people.find((person) => person.id === id)?.name ?? "已离开";
-}
-
-function stateName(state: Task["state"]) {
-  if (state === "doing") return "在做";
-  if (state === "done") return "划掉";
-  return "还没做";
-}
-
-function nextLabel(nextAt: number) {
-  return `下次 ${new Date(nextAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
 }
 
 async function listTasks(departmentId: string) {

@@ -1,3 +1,4 @@
+import { DUTY_ZONE } from "../work/duty";
 import { petsAt, type PetFrame, type PetId } from "./pets";
 import { DEFAULT_ROOM, type RoomLook } from "./room";
 import { DESKS, ROOM, SPOTS } from "./roster";
@@ -41,7 +42,7 @@ function shade(hex: string, amount: number) {
   return `#${channel(16).toString(16).padStart(2, "0")}${channel(8).toString(16).padStart(2, "0")}${channel(0).toString(16).padStart(2, "0")}`;
 }
 
-function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: number; h: number }, look: RoomLook) {
+function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: number; h: number }, look: RoomLook, now: number) {
   rect(ctx, 0, 0, room.w, 78, look.wall);
   rect(ctx, 0, 0, room.w, 8, shade(look.wall, -20));
   if (look.style === "brick") {
@@ -61,16 +62,12 @@ function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: numbe
   rect(ctx, 172, 20, 28, 44, look.style === "glass" ? shade(look.trim, 40) : "#120e0c");
   rect(ctx, 196, 36, 4, 8, look.trim);
 
-  if (look.style !== "glass") {
-    rect(ctx, 214, 22, 22, 22, "#efe6d4");
-    rect(ctx, 224, 33, 2, 6, "#1a1714");
-    rect(ctx, 221, 33, 5, 2, "#a8322a");
-  }
+  drawClock(ctx, now);
 
   if (look.style === "glass") {
-    rect(ctx, 214, 12, 150, 48, look.trim);
-    rect(ctx, 218, 16, 68, 40, "#d7e6ee");
-    rect(ctx, 290, 16, 70, 40, "#f4f7fb");
+    rect(ctx, 242, 12, 122, 48, look.trim);
+    rect(ctx, 246, 16, 54, 40, "#d7e6ee");
+    rect(ctx, 304, 16, 56, 40, "#f4f7fb");
     if (frame % 80 < 40) rect(ctx, 348, 18, 3, 3, "#f4f0c8");
   } else {
     rect(ctx, 300, 16, 52, 36, look.style === "brick" ? look.wood : look.trim);
@@ -178,7 +175,70 @@ export function roomTransform(width: number, height: number, room = ROOM) {
 
 const BOARD = { x: 300, y: 16, w: 52, h: 36 };
 
+const CLOCK = { x: 214, y: 22, w: 22, h: 22 };
+
 const RULES = { x: 18, y: 18, w: 46, h: 40 };
+
+export function clockAt(roomX: number, roomY: number) {
+  const pad = 3;
+  return (
+    roomX >= CLOCK.x - pad &&
+    roomX <= CLOCK.x + CLOCK.w + pad &&
+    roomY >= CLOCK.y - pad &&
+    roomY <= CLOCK.y + CLOCK.h + pad
+  );
+}
+
+function drawClock(ctx: CanvasRenderingContext2D, now: number) {
+  const { hour, minute, second } = clockFace(now);
+  const cx = CLOCK.x + 11;
+  const cy = CLOCK.y + 11;
+  rect(ctx, CLOCK.x, CLOCK.y, CLOCK.w, CLOCK.h, "#efe6d4");
+  rect(ctx, CLOCK.x, CLOCK.y, CLOCK.w, 1, "#1a1714");
+  rect(ctx, CLOCK.x, CLOCK.y + CLOCK.h - 1, CLOCK.w, 1, "#1a1714");
+  rect(ctx, CLOCK.x, CLOCK.y, 1, CLOCK.h, "#1a1714");
+  rect(ctx, CLOCK.x + CLOCK.w - 1, CLOCK.y, 1, CLOCK.h, "#1a1714");
+  rect(ctx, cx - 1, CLOCK.y + 2, 2, 2, "#1a1714");
+  rect(ctx, CLOCK.x + CLOCK.w - 4, cy - 1, 2, 2, "#1a1714");
+  rect(ctx, cx - 1, CLOCK.y + CLOCK.h - 4, 2, 2, "#1a1714");
+  rect(ctx, CLOCK.x + 2, cy - 1, 2, 2, "#1a1714");
+  drawHand(ctx, cx, cy, (hour % 12) / 12 + minute / 720, 5, "#a8322a", 2);
+  drawHand(ctx, cx, cy, minute / 60 + second / 3600, 7, "#1a1714", 2);
+  drawHand(ctx, cx, cy, second / 60, 8, "#c6a15b", 1);
+  rect(ctx, cx - 1, cy - 1, 2, 2, "#1a1714");
+}
+
+function drawHand(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  turns: number,
+  length: number,
+  color: string,
+  thick: number,
+) {
+  const sin = Math.sin(turns * Math.PI * 2);
+  const cos = Math.cos(turns * Math.PI * 2);
+  for (let step = 0; step <= length; step += 1) {
+    rect(ctx, Math.round(cx + sin * step - thick / 2), Math.round(cy - cos * step - thick / 2), thick, thick, color);
+  }
+}
+
+function clockFace(now: number) {
+  const bag = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: DUTY_ZONE,
+      hourCycle: "h23",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+      .formatToParts(now)
+      .map((part) => [part.type, part.value]),
+  );
+  const hour = Number(bag.hour);
+  return { hour: hour === 24 ? 0 : hour, minute: Number(bag.minute), second: Number(bag.second) };
+}
 
 export function rulesAt(roomX: number, roomY: number) {
   return roomX >= RULES.x && roomX <= RULES.x + RULES.w && roomY >= RULES.y && roomY <= RULES.y + RULES.h;
@@ -337,6 +397,7 @@ export function drawOffice(
   desks: DeskSpot[] = rehearsalDesks(),
   look: RoomLook = DEFAULT_ROOM,
   pets: readonly PetId[] = [],
+  now = Date.now(),
 ) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#1a1714";
@@ -346,7 +407,7 @@ export function drawOffice(
   ctx.translate(ox, oy);
   ctx.scale(scale, scale);
   ctx.imageSmoothingEnabled = false;
-  drawRoom(ctx, frame, room, look);
+  drawRoom(ctx, frame, room, look, now);
 
   const layers: { y: number; draw: () => void }[] = desks.map((desk) => ({
     y: desk.y,

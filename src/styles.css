@@ -523,10 +523,27 @@ button, input, textarea {
   animation: computer-in 380ms ease both;
 }
 
+.slate.duties {
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #efe6d4;
+  color: #1a1714;
+}
+
 .slate header {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.slate header strong {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.slate header time {
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.72;
 }
 
 .slate header button,
@@ -564,14 +581,24 @@ button, input, textarea {
 
 .slate-body::-webkit-scrollbar { display: none; }
 
-.slate ul {
+.sheet-group { margin: 0 0 18px; }
+
+.sheet-group h3 {
+  margin: 0 14px 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.slate ul.sheet {
   display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  gap: 14px;
+  flex-direction: column;
+  gap: 0;
   margin: 0;
-  padding: 4px 2px 8px;
+  padding: 4px 6px;
   list-style: none;
+  background: #fffaf2;
+  border-radius: 14px;
 }
 
 .slate li.quiet,
@@ -581,95 +608,126 @@ button, input, textarea {
   opacity: 0.78;
 }
 
-.slate li.pin {
-  position: relative;
-  display: flex;
-  flex: none;
-  flex-direction: column;
-  align-items: stretch;
-  justify-content: space-between;
-  gap: 6px;
-  width: 128px;
-  height: 128px;
-  margin: 0;
-  padding: 16px 10px 8px;
-  color: #241c16;
-  background: #f4e7a8;
-  box-shadow: 0 8px 12px rgba(26, 23, 20, 0.22);
-  transform: rotate(-1.4deg);
-}
-
-.slate li.pin::before {
-  content: "";
-  position: absolute;
-  top: 5px;
-  left: 50%;
-  width: 9px;
-  height: 9px;
-  margin-left: -4px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, #f4f7fb, #a8322a 42%, #6e1d18);
-  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
-}
-
-.slate li.pin.tone-1 { background: #f7f1df; transform: rotate(0.9deg); }
-.slate li.pin.tone-2 { background: #d7e6ee; transform: rotate(-0.4deg); }
-.slate li.pin.editing { width: 196px; height: auto; min-height: 128px; transform: none; z-index: 1; }
-
-.slate li.pin form {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  min-width: 0;
-  margin: 0;
-}
-
-.slate li.pin input,
-.slate li.pin select {
-  flex: none;
-  width: 100%;
-  color: #241c16;
-  border-bottom-color: #8a7564;
-}
-
-.slate li > span:first-child {
-  min-width: 0;
+.slate li.row {
   display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 14px;
+  min-height: 72px;
+  margin: 0;
+  padding: 16px 10px;
+  color: #241c16;
+}
+
+.slate li.row + li.row { border-top: 1px solid rgba(36, 28, 22, 0.1); }
+
+.slate li.row .when {
+  display: grid;
+  align-content: start;
+  width: 5em;
   gap: 2px;
-}
-
-.slate li small {
-  color: #8a7564;
-  font-size: 12px;
-}
-
-.slate li b {
-  font-weight: 600;
-  font-size: 14px;
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.slate li em {
-  flex: none;
-  font-style: normal;
+  padding-top: 1px;
   color: #6b4428;
 }
 
-.slate li.done b {
+.slate li.row .when b {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.slate li.row .copy {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 1px;
+}
+
+.slate li.row .copy b {
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.slate li.row small {
+  color: #8a7564;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.slate li.row.done .copy b {
   color: #8a7564;
   text-decoration: line-through;
+}
+
+.slate li.row .mark {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-top: 3px;
+  border: 1.5px solid #a89880;
+  border-radius: 50%;
+  color: #fffaf2;
+}
+
+.slate li.row .mark svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.slate li.row.doing .mark {
+  border-color: #a86b2a;
+  box-shadow: inset 0 0 0 5px #a86b2a;
+}
+
+.slate li.row.done .mark {
+  background: #8a7564;
+  border-color: #8a7564;
+}
+
+.slate li.row form {
+  display: grid;
+  grid-column: 2 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(8em, 12em) auto;
+  gap: 8px 12px;
+  align-items: center;
+  min-width: 0;
+  margin: 0;
+}
+
+.slate li.row input,
+.slate li.row select {
+  width: 100%;
+  color: #241c16;
+  border-bottom-color: rgba(36, 28, 22, 0.35);
+  font-size: 16px;
+  padding: 8px 2px;
+  background: transparent;
 }
 
 .slate-actions {
   display: flex;
   flex: none;
   justify-content: flex-end;
+  margin-top: 1px;
 }
+
+.slate li.row .slate-actions button {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  color: #6b4428;
+}
+
+.slate li.row .slate-actions button:hover { background: rgba(36, 28, 22, 0.06); }
 
 .charter {
   position: absolute;
@@ -771,13 +829,22 @@ button, input, textarea {
 
 .slate input { flex: 1; }
 
+.slate > form input,
+.slate > form select,
+.slate > form button {
+  font-size: 16px;
+}
+
+.slate > form input,
+.slate > form select { padding: 8px 2px; }
+
 .slate > form button {
   flex: none;
   border: 1px solid currentColor;
   background: transparent;
   color: inherit;
   border-radius: 2px;
-  padding: 6px 12px;
+  padding: 8px 14px;
 }
 
 .poses {
