@@ -87,14 +87,6 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
           <PlusIcon />
         </button>
       </header>
-      <p className="hint">
-        {session?.email
-          ? here
-            ? `你现在是 ${here}（${session.email}）。`
-            : `你现在是 ${session.email}，还没起名。`
-          : "Access 进来之后，邮箱会出现在这里。"}
-        对上名字后，跟主管说话就显示这个名字。
-      </p>
       {rows && rows.length > 0 ? (
         <ul className="memories">
           {rows.map((row) => (
@@ -110,7 +102,14 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
           ))}
         </ul>
       ) : rows ? (
-        <p className="empty">还没有记下名字。</p>
+        <p className="empty">
+          {session?.email
+            ? here
+              ? `你现在是 ${here}（${session.email}）。`
+              : `你现在是 ${session.email}，还没起名。`
+            : "Access 进来之后，邮箱会出现在这里。"}
+          对上名字后，跟主管说话就显示这个名字。
+        </p>
       ) : null}
       {error && !draft ? <p className="file-error">{error}</p> : null}
       {draft ? (

@@ -1266,7 +1266,7 @@ button, input, textarea {
 .roster-section {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 6px;
 }
 
 .roster-section > header {
@@ -1284,6 +1284,7 @@ button, input, textarea {
 }
 
 .chat.staff .log {
+  gap: 0;
   font-size: 14px;
   line-height: 1.45;
 }
@@ -1349,7 +1350,8 @@ button, input, textarea {
 .colleagues .memories li { align-items: center; }
 
 .roster-section + .roster-section {
-  padding-top: 16px;
+  margin-top: 22px;
+  padding-top: 18px;
   border-top: 1px solid #e0d2b8;
 }
 
