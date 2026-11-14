@@ -9,11 +9,13 @@ export function WaterDesk({
   box,
   face,
   onClose,
+  onReminder,
 }: {
   departmentId: string;
   box: { left: number; top: number; width: number; zoom: number };
   face: RoomLook;
   onClose: () => void;
+  onReminder?: (set: boolean) => void;
 }) {
   const [session, setSession] = useState<Session | null>(null);
   const [reminder, setReminder] = useState<WaterReminder | null>(null);
@@ -41,6 +43,7 @@ export function WaterDesk({
         if (gone) return;
         setReminder(next);
         if (next) setMinutes(next.everyMinutes);
+        onReminder?.(Boolean(next));
         setError(null);
       } catch (caught) {
         if (!gone) setError(caught instanceof Error ? caught.message : "饮水提醒没打开。");
@@ -57,6 +60,7 @@ export function WaterDesk({
     setError(null);
     try {
       setReminder(await saveWater(departmentId, minutes));
+      onReminder?.(true);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "饮水提醒没记下。");
     } finally {
@@ -71,6 +75,7 @@ export function WaterDesk({
     try {
       await clearWater();
       setReminder(null);
+      onReminder?.(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "饮水提醒没取消。");
     } finally {

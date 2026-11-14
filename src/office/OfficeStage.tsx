@@ -5,6 +5,7 @@ import { ClockDesk } from "./ClockDesk";
 import { RulesDesk } from "./RulesDesk";
 import { ScreenDesk } from "./ScreenDesk";
 import { WaterDesk } from "./WaterDesk";
+import { readWater } from "./water";
 import { type PetId } from "./pets";
 import { DEFAULT_ROOM, type RoomLook } from "./room";
 import { ROOM } from "./roster";
@@ -79,6 +80,7 @@ export function OfficeStage({
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [ambient, setAmbient] = useState(0);
   const [wall, setWall] = useState(() => Date.now());
+  const [dripping, setDripping] = useState(false);
   const live = clock === null;
 
   actorsRef.current = actors;
@@ -107,6 +109,20 @@ export function OfficeStage({
   }, []);
 
   useEffect(() => {
+    let gone = false;
+    void readWater()
+      .then((reminder) => {
+        if (!gone) setDripping(Boolean(reminder));
+      })
+      .catch(() => {
+        if (!gone) setDripping(false);
+      });
+    return () => {
+      gone = true;
+    };
+  }, [departmentId]);
+
+  useEffect(() => {
     if (!live) return;
     let frame = 0;
     let last = 0;
@@ -132,8 +148,8 @@ export function OfficeStage({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, look, pets, Date.now());
-  }, [size, actors, drawn, room, desks, look, pets, wall]);
+    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, look, pets, Date.now(), dripping);
+  }, [size, actors, drawn, room, desks, look, pets, wall, dripping]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
     if (screen || board || clockOpen || rules || waterOpen) return;
@@ -188,7 +204,13 @@ export function OfficeStage({
         <ClockDesk departmentId={departmentId} people={people} box={boardBox(box)} onClose={onCloseClock} />
       ) : null}
       {waterOpen && onCloseWater && departmentId ? (
-        <WaterDesk departmentId={departmentId} box={coolerPlace(box)} face={look} onClose={onCloseWater} />
+        <WaterDesk
+          departmentId={departmentId}
+          box={coolerPlace(box)}
+          face={look}
+          onClose={onCloseWater}
+          onReminder={setDripping}
+        />
       ) : null}
       {rules && onCloseRules && onSaveRules ? (
         <RulesDesk text={rulesText} box={boardBox(box)} face={look.wood} onClose={onCloseRules} onSave={onSaveRules} />

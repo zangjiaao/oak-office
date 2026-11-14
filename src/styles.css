@@ -797,13 +797,14 @@ button, input, textarea {
 
 .cooler-picks {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
 }
 
 .cooler-picks button {
   min-width: 0;
   padding: 4px 0;
+  font-size: 12px;
   border: 0;
   border-radius: 0;
   background: #c5d4dc;

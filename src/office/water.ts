@@ -1,4 +1,4 @@
-export const WATER_MINUTES = [30, 45, 60, 90, 120] as const;
+export const WATER_MINUTES = [1, 30, 45, 60, 90, 120] as const;
 
 export type WaterReminder = {
   everyMinutes: number;

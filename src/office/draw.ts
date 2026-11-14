@@ -42,7 +42,14 @@ function shade(hex: string, amount: number) {
   return `#${channel(16).toString(16).padStart(2, "0")}${channel(8).toString(16).padStart(2, "0")}${channel(0).toString(16).padStart(2, "0")}`;
 }
 
-function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: number; h: number }, look: RoomLook, now: number) {
+function drawRoom(
+  ctx: CanvasRenderingContext2D,
+  frame: number,
+  room: { w: number; h: number },
+  look: RoomLook,
+  now: number,
+  dripping: boolean,
+) {
   rect(ctx, 0, 0, room.w, 78, look.wall);
   rect(ctx, 0, 0, room.w, 8, shade(look.wall, -20));
   if (look.style === "brick") {
@@ -79,6 +86,18 @@ function drawRoom(ctx: CanvasRenderingContext2D, frame: number, room: { w: numbe
   rect(ctx, 364, 70, 16, 28, "#d9e4ea");
   rect(ctx, 368, 74, 8, 10, look.trim);
   rect(ctx, 360, 96, 24, 4, look.wood);
+  if (dripping) drawDrip(ctx, frame);
+}
+
+function drawDrip(ctx: CanvasRenderingContext2D, frame: number) {
+  const step = Math.floor(frame / 4) % 12;
+  if (step < 5) {
+    rect(ctx, 371, 86, 2, step > 2 ? 3 : 2, "#3d8eb8");
+    return;
+  }
+  const y = 90 + (step - 5) * 3;
+  rect(ctx, 371, y, 2, 2, "#3d8eb8");
+  if (step === 11) rect(ctx, 370, y + 2, 4, 1, "#7eb8d4");
 }
 
 function drawDesk(
@@ -423,6 +442,7 @@ export function drawOffice(
   look: RoomLook = DEFAULT_ROOM,
   pets: readonly PetId[] = [],
   now = Date.now(),
+  dripping = false,
 ) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#1a1714";
@@ -436,7 +456,7 @@ export function drawOffice(
   roomCtx.clearRect(0, 0, buffer.width, buffer.height);
   roomCtx.setTransform(pixel, 0, 0, pixel, 0, 0);
   roomCtx.imageSmoothingEnabled = false;
-  drawRoom(roomCtx, frame, room, look, now);
+  drawRoom(roomCtx, frame, room, look, now, dripping);
 
   const layers: { y: number; draw: () => void }[] = desks.map((desk) => ({
     y: desk.y,

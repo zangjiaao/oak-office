@@ -1,7 +1,7 @@
 import { listColleagues } from "./colleague";
 import type { Env } from "./env";
 
-export const WATER_MINUTES = [30, 45, 60, 90, 120] as const;
+export const WATER_MINUTES = [1, 30, 45, 60, 90, 120] as const;
 
 export type WaterReminder = {
   everyMinutes: number;
@@ -37,7 +37,7 @@ export async function readWater(db: Env["DB"], email: string): Promise<WaterRemi
 
 export async function saveWater(db: Env["DB"], email: string, departmentId: string, minutes: number) {
   const every = waterEveryMs(minutes);
-  if (!every) return { ok: false as const, error: "间隔用 30、45、60、90 或 120 分钟。", status: 400 };
+  if (!every) return { ok: false as const, error: "间隔用 1、30、45、60、90 或 120 分钟。", status: 400 };
   const floor = await db.prepare("SELECT id FROM department WHERE id = ?").bind(departmentId).first<{ id: string }>();
   if (!floor) return { ok: false as const, error: "没有这一层。", status: 404 };
   const now = Date.now();
