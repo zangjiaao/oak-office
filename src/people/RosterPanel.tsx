@@ -5,6 +5,7 @@ import { rosterLabel, rosterNote, type DraftPreview } from "../office/seats";
 import type { HairStyle, Look } from "../office/types";
 import { dismissPerson, forgetMemory, hirePerson, updateDepartment, updatePerson } from "./api";
 import { staffFull, type Department, type DepartmentDraft } from "./department";
+import { Colleagues } from "./Colleagues";
 import { cancelDuty, dutyWhen, listDuties, type Duty } from "../work/duty";
 import {
   GENDER_LABEL,
@@ -314,6 +315,7 @@ export function RosterPanel({
           </ul>
         ) : null}
         {note ? <p className="hint">{note}</p> : null}
+        {floorDraft ? null : <Colleagues />}
         {form ? (
           <form id="person-form" className="file" onSubmit={save} ref={formRef}>
             <label>

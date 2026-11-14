@@ -875,6 +875,16 @@ button, input, textarea {
 
 .chat header { border-bottom: 1px solid #e0d2b8; }
 
+.chat header select {
+  max-width: 11em;
+  border: 1px solid #d9c7a4;
+  background: #fffaf2;
+  color: #241c16;
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 6px;
+}
+
 .chat header span { color: #7a6a56; }
 
 .log {
@@ -1252,6 +1262,21 @@ button, input, textarea {
 }
 
 .memories button:disabled { opacity: 0.55; cursor: default; }
+
+.colleagues { margin-top: 22px; }
+.colleagues h3 { margin: 0 0 6px; font-size: 16px; }
+.colleagues .memories { margin-top: 10px; }
+.colleagues .memories em { display: block; color: #7a6a56; font-style: normal; font-size: 12px; }
+.colleagues form { margin-top: 12px; }
+.colleagues form button {
+  align-self: flex-start;
+  border: 1px solid #1f3a32;
+  background: #1f3a32;
+  color: #f3ead7;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.colleagues form button:disabled { opacity: 0.55; cursor: default; }
 
 .file-error { margin: 12px 0 0; color: #a8322a; }
 

@@ -2,6 +2,7 @@ import type { AgentLoopTurnUpdate, AgentMessage, PrepareNextTurnContext } from "
 import type { StreamFn } from "@earendil-works/pi-agent-core";
 import type { Model, TranscriptContext } from "@earendil-works/pi-ai";
 import { visibleText } from "./pi";
+import { colleagueNames, listColleagues } from "./colleague";
 import type { D1Database } from "./env";
 
 /** Free tokens kept below the window. Same default as pi-coding-agent. */
@@ -16,6 +17,7 @@ export type TranscriptLine = {
   text: string;
   raw: string | null;
   created_at: number;
+  author_email: string | null;
 };
 
 type Saved = { summary: string; first_kept_id: string };
@@ -23,7 +25,7 @@ type Saved = { summary: string; first_kept_id: string };
 export async function listTranscript(db: D1Database, departmentId: string) {
   const { results } = await db
     .prepare(
-      `SELECT id, role, person_id, text, raw, created_at FROM work_line
+      `SELECT id, role, person_id, text, raw, created_at, author_email FROM work_line
        WHERE department_id = ? ORDER BY created_at ASC, id ASC`,
     )
     .bind(departmentId)
@@ -45,6 +47,7 @@ export async function fitHistory(
   apiKey: string,
 ) {
   const lines = await listTranscript(db, departmentId);
+  const names = colleagueNames(await listColleagues(db));
   const saved = await loadCompact(db, departmentId);
   const at = saved ? lines.findIndex((line) => line.id === saved.first_kept_id) : -1;
   const visible = at >= 0 ? lines.slice(at) : lines;
@@ -55,7 +58,7 @@ export async function fitHistory(
   const cut = keepFrom(visible, lineTokens);
   if (cut <= 0 || cut >= visible.length) return { summary: previous, lines: visible };
   const kept = visible.slice(cut);
-  const summary = await summarize(model, streamFn, apiKey, visible.slice(0, cut).map(spokenLine), previous, window);
+  const summary = await summarize(model, streamFn, apiKey, visible.slice(0, cut).map((line) => spokenLine(line, names)), previous, window);
   const text = summary ?? (previous ? `${previous}\n\n（再往前的一段没能并进摘要。）` : "更早的对话没能压缩，只保留了最近一段。");
   await saveCompact(db, departmentId, text, kept[0].id);
   console.error(`[oak] 压缩对话 ${JSON.stringify({ tokens, kept: kept.length })}`);
@@ -197,8 +200,17 @@ async function oneSummary(model: Model<any>, streamFn: StreamFn, apiKey: string,
   }
 }
 
-function spokenLine(line: TranscriptLine) {
-  const who = line.role === "lead" ? "主管" : line.role === "staff" ? "员工" : line.role === "clock" ? "定时" : "用户";
+function spokenLine(line: TranscriptLine, names: Map<string, string>) {
+  const who =
+    line.role === "lead"
+      ? "主管"
+      : line.role === "staff"
+        ? "员工"
+        : line.role === "clock"
+          ? "定时"
+          : line.author_email
+            ? (names.get(line.author_email) ?? line.author_email)
+            : "用户";
   return `[${who}] ${line.text}${toolHint(line.raw)}`;
 }
 

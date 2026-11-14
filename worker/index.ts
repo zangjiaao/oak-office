@@ -1,4 +1,5 @@
 import { createBoardTask, editBoardTask, listBoard, removeBoardTask } from "./board";
+import { callerEmail, listColleagues, readColleagueName, readEmail, removeColleague, saveColleague } from "./colleague";
 import { createDepartment, listDepartments, readDepartment, removeDepartment, updateDepartment } from "./department";
 import { cancelDuty, listDuties, runDue } from "./duty";
 import { forget } from "./memory";
@@ -73,7 +74,7 @@ export default {
           if (typeof record.departmentId !== "string" || !UUID.test(record.departmentId)) {
             return json({ error: "先选一层。" }, 400);
           }
-          const result = await speak(env, record.text, request.signal, "user", record.departmentId);
+          const result = await speak(env, record.text, request.signal, "user", record.departmentId, callerEmail(request));
           holdCrew(ctx);
           holdInflight(ctx);
           if (!result.ok) return json({ error: result.error }, result.status);
@@ -170,6 +171,33 @@ export default {
         const personId = await cancelDuty(env.DB, id);
         if (!personId) return json({ error: "没有这个定时。" }, 404);
         await settleShift(env, personId);
+        return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+      }
+      if (url.pathname === "/api/me") {
+        if (request.method !== "GET") return new Response(null, { status: 405, headers: { allow: "GET" } });
+        const email = callerEmail(request);
+        const named = email ? (await listColleagues(env.DB)).find((row) => row.email === email) : undefined;
+        return json({ email, name: named?.name ?? null });
+      }
+      if (url.pathname === "/api/colleagues") {
+        if (request.method === "GET") return json({ colleagues: await listColleagues(env.DB) });
+        if (request.method !== "PUT") return new Response(null, { status: 405, headers: { allow: "GET, PUT" } });
+        const record = await readRecord(request);
+        const email = readEmail(record?.email);
+        const name = readColleagueName(record?.name);
+        if (!email) return json({ error: "邮箱写全。" }, 400);
+        if (!name) return json({ error: "名字用 1 到 16 个字。" }, 400);
+        const result = await saveColleague(env.DB, email, name);
+        if (!result.ok) return json({ error: result.error }, result.status);
+        return json({ colleague: result.colleague });
+      }
+      const colleagueMatch = /^\/api\/colleagues\/(.+)$/.exec(url.pathname);
+      if (colleagueMatch) {
+        const email = readEmail(decodeURIComponent(colleagueMatch[1]));
+        if (!email) return json({ error: "没有这位同事。" }, 404);
+        if (request.method !== "DELETE") return new Response(null, { status: 405, headers: { allow: "DELETE" } });
+        const removed = await removeColleague(env.DB, email);
+        if (!removed) return json({ error: "没有这位同事。" }, 404);
         return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
       }
       if (url.pathname === "/api/people") {

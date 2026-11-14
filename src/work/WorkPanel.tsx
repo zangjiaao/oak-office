@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { onSite } from "../office/shift";
 import type { PersonRow } from "../people/record";
+import { currentSession, listColleagues, type Colleague } from "../people/colleague";
 import { loadWork, sayWork, stopWork, type DutyHold, type FloorMark, type WorkLine, type WorkOffice } from "./api";
 import { Markdown } from "./MarkdownView";
 
@@ -12,6 +13,7 @@ export function WorkPanel({
   onFloor,
   onHolding,
   onRetry,
+  active = true,
 }: {
   people: PersonRow[] | null;
   departmentId: string | null;
@@ -20,6 +22,7 @@ export function WorkPanel({
   onFloor: (floor: FloorMark[]) => void;
   onHolding: (duties: DutyHold[]) => void;
   onRetry: () => void;
+  active?: boolean;
 }) {
   const [lead, setLead] = useState<{ id: string; name: string } | null>(null);
   const [lines, setLines] = useState<WorkLine[] | null>(null);
@@ -27,6 +30,9 @@ export function WorkPanel({
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [colleagues, setColleagues] = useState<Colleague[]>([]);
+  const [me, setMe] = useState<string | null>(null);
+  const [who, setWho] = useState("all");
   const logRef = useRef<HTMLDivElement>(null);
   const fieldRef = useRef<HTMLTextAreaElement>(null);
   const sendingRef = useRef(false);
@@ -77,6 +83,21 @@ export function WorkPanel({
   }, [departmentId, onFloor, onHolding]);
 
   useEffect(() => {
+    if (!active) return;
+    let gone = false;
+    void Promise.all([listColleagues(), currentSession()])
+      .then(([rows, session]) => {
+        if (gone) return;
+        setColleagues(rows);
+        setMe(session.email);
+      })
+      .catch(() => {});
+    return () => {
+      gone = true;
+    };
+  }, [active]);
+
+  useEffect(() => {
     if (fieldRef.current) fitComposer(fieldRef.current);
   }, [text]);
 
@@ -88,7 +109,7 @@ export function WorkPanel({
     pin();
     const frame = requestAnimationFrame(pin);
     return () => cancelAnimationFrame(frame);
-  }, [tailId, sending]);
+  }, [tailId, sending, who]);
 
   async function say(event: FormEvent) {
     event.preventDefault();
@@ -101,7 +122,7 @@ export function WorkPanel({
     setSending(true);
     setError(null);
     setText("");
-    setLines([...(lines ?? []), { id: "pending-user", role: "user", person_id: null, text: said }]);
+    setLines([...(lines ?? []), { id: "pending-user", role: "user", person_id: null, text: said, author_email: me }]);
     const listening = previousFloor.map((mark) =>
       mark.person_id === lead.id ? { ...mark, pose: "think" as const, label: "在想" } : mark,
     );
@@ -249,12 +270,30 @@ export function WorkPanel({
   }
 
   const named = new Map(people?.map((person) => [person.id, person.name]));
+  const known = new Map(colleagues.map((row) => [row.email, row.name]));
+  const speakers = speakerOptions(lines ?? [], known);
+  const shown = who === "all" ? (lines ?? []) : linesByAuthor(lines ?? [], who);
+  useEffect(() => {
+    if (who !== "all" && !speakers.some(([email]) => email === who)) setWho("all");
+  }, [who, speakers]);
 
   return (
     <aside className="chat">
       <header>
-        <strong>{lead?.name ?? "主管"}</strong>
-        <span>{departmentName}主管</span>
+        <div>
+          <strong>{lead?.name ?? "主管"}</strong>
+          <span>{departmentName}主管</span>
+        </div>
+        {speakers.length > 0 ? (
+          <select aria-label="按人看" value={who} onChange={(event) => setWho(event.target.value)}>
+            <option value="all">全部</option>
+            {speakers.map(([email, label]) => (
+              <option key={email} value={email}>
+                {label}
+              </option>
+            ))}
+          </select>
+        ) : null}
       </header>
       <div className="log" ref={logRef}>
         {loadError ? (
@@ -268,9 +307,10 @@ export function WorkPanel({
         {people && !lead && !loadError ? <p className="empty">先在编制里指定一位主管。</p> : null}
         {lines === null && !error ? <p className="empty">在读。</p> : null}
         {lines?.length === 0 && lead ? <p className="empty">主管在等你开口。</p> : null}
-        {lines?.map((line) => (
+        {lines && lines.length > 0 && shown.length === 0 ? <p className="empty">没有这个人的对话。</p> : null}
+        {shown.map((line) => (
           <article key={line.id} className={line.role}>
-            <span>{speaker(line, lead?.name, named)}</span>
+            <span>{speaker(line, lead?.name, named, known)}</span>
             <div className="bubble">
               <Markdown text={line.text} />
             </div>
@@ -363,9 +403,31 @@ function submitOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
   event.currentTarget.form?.requestSubmit();
 }
 
-function speaker(line: WorkLine, leadName: string | undefined, names: Map<string, string>) {
-  if (line.role === "user") return "你";
+function speaker(line: WorkLine, leadName: string | undefined, names: Map<string, string>, known: Map<string, string>) {
+  if (line.role === "user") {
+    if (!line.author_email) return "你";
+    return known.get(line.author_email) ?? line.author_email;
+  }
   if (line.role === "clock") return "定时";
   if (line.role === "staff") return `${names.get(line.person_id ?? "") ?? "员工"} · 办理`;
   return `${leadName ?? "主管"} · 主管`;
+}
+
+function speakerOptions(lines: WorkLine[], known: Map<string, string>) {
+  const seen = new Map<string, string>();
+  for (const line of lines) {
+    if (line.role !== "user" || !line.author_email || seen.has(line.author_email)) continue;
+    seen.set(line.author_email, known.get(line.author_email) ?? line.author_email);
+  }
+  return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1], "zh"));
+}
+
+function linesByAuthor(lines: WorkLine[], email: string) {
+  const shown: WorkLine[] = [];
+  let open = false;
+  for (const line of lines) {
+    if (line.role === "user") open = line.author_email === email;
+    if (open) shown.push(line);
+  }
+  return shown;
 }
