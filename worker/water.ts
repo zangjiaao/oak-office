@@ -1,19 +1,14 @@
-import { listColleagues } from "./colleague";
 import type { Env } from "./env";
 
-export const WATER_MINUTES = [30, 45, 60, 90, 120] as const;
+export const WATER_MINUTES = [1, 30, 45, 60, 90, 120] as const;
+
+/** One shared reminder for the unsigned voice the chat already calls 你. */
+export const WATER_YOU = "you";
 
 export type WaterReminder = {
   everyMinutes: number;
   nextAt: number;
   departmentId: string;
-};
-
-type Stored = {
-  email: string;
-  department_id: string;
-  every_ms: number;
-  next_at: number;
 };
 
 function changed(result: unknown) {
@@ -37,7 +32,7 @@ export async function readWater(db: Env["DB"], email: string): Promise<WaterRemi
 
 export async function saveWater(db: Env["DB"], email: string, departmentId: string, minutes: number) {
   const every = waterEveryMs(minutes);
-  if (!every) return { ok: false as const, error: "间隔用 30、45、60、90 或 120 分钟。", status: 400 };
+  if (!every) return { ok: false as const, error: "间隔用 1、30、45、60、90 或 120 分钟。", status: 400 };
   const floor = await db.prepare("SELECT id FROM department WHERE id = ?").bind(departmentId).first<{ id: string }>();
   if (!floor) return { ok: false as const, error: "没有这一层。", status: 404 };
   const now = Date.now();
@@ -62,39 +57,23 @@ export async function clearWater(db: Env["DB"], email: string) {
   return changed(result);
 }
 
-/** Post one drink line per person who is due, then wait a full interval. A late tick does not pile up. */
-export async function pourWater(env: Env, departmentId?: string) {
+/** Empty the full cup and wait another full interval. Until then the cup stays full. */
+export async function drinkWater(db: Env["DB"], email: string) {
+  const row = await db
+    .prepare("SELECT every_ms, next_at, department_id FROM water_reminder WHERE email = ?")
+    .bind(email)
+    .first<{ every_ms: number; next_at: number; department_id: string }>();
+  if (!row) return { ok: false as const, error: "还没有提醒。", status: 404 };
   const now = Date.now();
-  const due = departmentId
-    ? await env.DB.prepare(
-        "SELECT email, department_id, every_ms, next_at FROM water_reminder WHERE department_id = ? AND next_at <= ? ORDER BY next_at ASC LIMIT 20",
-      )
-        .bind(departmentId, now)
-        .all<Stored>()
-    : await env.DB.prepare(
-        "SELECT email, department_id, every_ms, next_at FROM water_reminder WHERE next_at <= ? ORDER BY next_at ASC LIMIT 20",
-      )
-        .bind(now)
-        .all<Stored>();
-  const named = new Map((await listColleagues(env.DB)).map((row) => [row.email, row.name]));
-  let poured = 0;
-  for (const row of due.results) {
-    const floor = await env.DB.prepare("SELECT id FROM department WHERE id = ?").bind(row.department_id).first<{ id: string }>();
-    if (!floor) {
-      await env.DB.prepare("DELETE FROM water_reminder WHERE email = ?").bind(row.email).run();
-      continue;
-    }
-    const advanced = await env.DB.prepare("UPDATE water_reminder SET next_at = ? WHERE email = ? AND next_at = ?")
-      .bind(now + row.every_ms, row.email, row.next_at)
-      .run();
-    if (!changed(advanced)) continue;
-    const name = named.get(row.email);
-    await env.DB.prepare(
-      "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id, author_email) VALUES (?, 'water', NULL, ?, NULL, ?, ?, ?)",
-    )
-      .bind(crypto.randomUUID(), name ? `${name}，喝水。` : "喝水。", now, row.department_id, row.email)
-      .run();
-    poured += 1;
-  }
-  return { poured };
+  if (row.next_at > now) return { ok: false as const, error: "杯子还没满。", status: 400 };
+  const nextAt = now + row.every_ms;
+  const advanced = await db
+    .prepare("UPDATE water_reminder SET next_at = ? WHERE email = ? AND next_at = ?")
+    .bind(nextAt, email, row.next_at)
+    .run();
+  if (!changed(advanced)) return { ok: false as const, error: "已经喝过了。", status: 409 };
+  return {
+    ok: true as const,
+    reminder: { everyMinutes: Math.round(row.every_ms / 60_000), nextAt, departmentId: row.department_id } satisfies WaterReminder,
+  };
 }

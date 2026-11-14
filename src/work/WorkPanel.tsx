@@ -427,7 +427,7 @@ function speakerOptions(lines: WorkLine[], known: Map<string, string>) {
 }
 
 function linesForEveryone(lines: WorkLine[], me: string | null) {
-  return lines.filter((line) => line.role !== "water" || line.author_email === me);
+  return lines.filter((line) => line.role !== "water" || !line.author_email || line.author_email === me);
 }
 
 function linesByAuthor(lines: WorkLine[], email: string) {

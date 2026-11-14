@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { actorAt, boardAt, boardFace, clockAt, coolerAt, drawOffice, monitorAt, roomTransform, rulesAt } from "./draw";
+import { actorAt, boardAt, boardFace, clockAt, coolerAt, cupAt, drawOffice, monitorAt, roomTransform, rulesAt } from "./draw";
 import { BoardDesk } from "./BoardDesk";
 import { ClockDesk } from "./ClockDesk";
 import { RulesDesk } from "./RulesDesk";
 import { ScreenDesk } from "./ScreenDesk";
 import { WaterDesk } from "./WaterDesk";
+import { drinkWater, readWater, type WaterReminder } from "./water";
 import { type PetId } from "./pets";
 import { DEFAULT_ROOM, type RoomLook } from "./room";
 import { ROOM } from "./roster";
@@ -79,6 +80,8 @@ export function OfficeStage({
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [ambient, setAmbient] = useState(0);
   const [wall, setWall] = useState(() => Date.now());
+  const [reminder, setReminder] = useState<WaterReminder | null>(null);
+  const reminderRef = useRef(reminder);
   const live = clock === null;
 
   actorsRef.current = actors;
@@ -89,6 +92,7 @@ export function OfficeStage({
   onRulesRef.current = onRules;
   onWaterRef.current = onWater;
   desksRef.current = desks;
+  reminderRef.current = reminder;
 
   useEffect(() => {
     const wrap = wrapRef.current;
@@ -105,6 +109,20 @@ export function OfficeStage({
     const timer = setInterval(() => setWall(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    let gone = false;
+    void readWater()
+      .then((next) => {
+        if (!gone) setReminder(next);
+      })
+      .catch(() => {
+        if (!gone) setReminder(null);
+      });
+    return () => {
+      gone = true;
+    };
+  }, [departmentId]);
 
   useEffect(() => {
     if (!live) return;
@@ -132,8 +150,10 @@ export function OfficeStage({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, look, pets, Date.now());
-  }, [size, actors, drawn, room, desks, look, pets, wall]);
+    const now = Date.now();
+    const glass = waterGlass(reminder, now);
+    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, look, pets, now, glass.dripping, glass.cup);
+  }, [size, actors, drawn, room, desks, look, pets, wall, reminder]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
     if (screen || board || clockOpen || rules || waterOpen) return;
@@ -149,6 +169,13 @@ export function OfficeStage({
     }
     if (clockAt(x, y) && onClockRef.current) {
       onClockRef.current();
+      return;
+    }
+    const current = reminderRef.current;
+    if (current && current.nextAt <= Date.now() && cupAt(x, y)) {
+      void drinkWater()
+        .then(setReminder)
+        .catch(() => {});
       return;
     }
     if (coolerAt(x, y) && onWaterRef.current) {
@@ -188,7 +215,13 @@ export function OfficeStage({
         <ClockDesk departmentId={departmentId} people={people} box={boardBox(box)} onClose={onCloseClock} />
       ) : null}
       {waterOpen && onCloseWater && departmentId ? (
-        <WaterDesk departmentId={departmentId} box={coolerPlace(box)} face={look} onClose={onCloseWater} />
+        <WaterDesk
+          departmentId={departmentId}
+          box={coolerPlace(box)}
+          face={look}
+          onClose={onCloseWater}
+          onReminder={setReminder}
+        />
       ) : null}
       {rules && onCloseRules && onSaveRules ? (
         <RulesDesk text={rulesText} box={boardBox(box)} face={look.wood} onClose={onCloseRules} onSave={onSaveRules} />
@@ -211,6 +244,14 @@ function paddedOffice(office: { left: number; top: number; width: number; height
     width,
     height,
   };
+}
+
+function waterGlass(reminder: WaterReminder | null, now: number) {
+  if (!reminder) return { dripping: false, cup: null };
+  const every = reminder.everyMinutes * 60_000;
+  const due = reminder.nextAt <= now;
+  const fill = due ? 1 : Math.min(1, Math.max(0, 1 - (reminder.nextAt - now) / every));
+  return { dripping: !due, cup: { fill, due } };
 }
 
 function coolerPlace(office: { left: number; top: number; width: number; height: number }) {
