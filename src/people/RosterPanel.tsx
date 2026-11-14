@@ -576,11 +576,14 @@ export function RosterPanel({
             ) : null}
             {error ? <p className="file-error">{error}</p> : null}
             {form.kind === "edit" ? (
-              <div className="leave-row">
-                {leaving ? <p className="hint">确认后，这份档案去掉，工位留着。</p> : null}
-                <button type="button" onClick={() => void leave()} disabled={saving}>
-                  {leaving ? "确认离职" : "离职"}
-                </button>
+              <div className="danger">
+                <h4>危险区</h4>
+                <div>
+                  <p>{leaving ? "再点一次，这份档案才会去掉。" : "离职后，这份档案去掉，工位留着。"}</p>
+                  <button type="button" onClick={() => void leave()} disabled={saving}>
+                    {leaving ? "确认离职" : "离职"}
+                  </button>
+                </div>
               </div>
             ) : null}
             </div>

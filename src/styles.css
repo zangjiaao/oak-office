@@ -1486,24 +1486,44 @@ dialog.sheet-dialog {
   color: #a8322a;
 }
 
-.leave-row {
+.danger {
   margin-top: 28px;
   padding-top: 16px;
   border-top: 1px solid #e0d2b8;
 }
 
-.leave-row .hint { margin-top: 0; }
+.danger h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
 
-.leave-row button {
-  margin-top: 8px;
-  padding: 0;
-  border: 0;
+.danger > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.danger p {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  color: #7a6a56;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.danger button {
+  flex: none;
+  border: 1px solid #a8322a;
   background: transparent;
   color: #a8322a;
+  padding: 6px 12px;
   cursor: pointer;
 }
 
-.leave-row button:disabled { opacity: 0.55; cursor: default; }
+.danger button:disabled { opacity: 0.55; cursor: default; }
 
 .sheet-form footer button:disabled,
 .sheet-form header button:disabled { opacity: 0.55; cursor: default; }

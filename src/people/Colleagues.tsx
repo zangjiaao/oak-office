@@ -161,11 +161,14 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
               </label>
               {error ? <p className="file-error">{error}</p> : null}
               {draft.fresh ? null : (
-                <div className="leave-row">
-                  {removing ? <p className="hint">确认后，这个名字去掉。</p> : null}
-                  <button type="button" onClick={() => void drop()} disabled={saving}>
-                    {removing ? "确认去掉" : "去掉"}
-                  </button>
+                <div className="danger">
+                  <h4>危险区</h4>
+                  <div>
+                    <p>{removing ? "再点一次，这个名字才会去掉。" : "去掉后，跟主管说话不再显示这个名字。"}</p>
+                    <button type="button" onClick={() => void drop()} disabled={saving}>
+                      {removing ? "确认去掉" : "去掉"}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
