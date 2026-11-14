@@ -6,7 +6,7 @@ export type DutyHold = { person_id: string; label: string };
 
 export type WorkLine = {
   id: string;
-  role: "user" | "lead" | "staff" | "clock";
+  role: "user" | "lead" | "staff" | "clock" | "water";
   person_id: string | null;
   text: string;
   author_email?: string | null;

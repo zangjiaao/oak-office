@@ -272,7 +272,7 @@ export function WorkPanel({
   const named = new Map(people?.map((person) => [person.id, person.name]));
   const known = new Map(colleagues.map((row) => [row.email, row.name]));
   const speakers = speakerOptions(lines ?? [], known);
-  const shown = who === "all" ? (lines ?? []) : linesByAuthor(lines ?? [], who);
+  const shown = who === "all" ? linesForEveryone(lines ?? [], me) : linesByAuthor(lines ?? [], who);
   useEffect(() => {
     if (who !== "all" && !speakers.some(([email]) => email === who)) setWho("all");
   }, [who, speakers]);
@@ -409,6 +409,10 @@ function speaker(line: WorkLine, leadName: string | undefined, names: Map<string
     return known.get(line.author_email) ?? line.author_email;
   }
   if (line.role === "clock") return "定时";
+  if (line.role === "water") {
+    const name = line.author_email ? (known.get(line.author_email) ?? line.author_email) : "你";
+    return `${name} · 饮水`;
+  }
   if (line.role === "staff") return `${names.get(line.person_id ?? "") ?? "员工"} · 办理`;
   return `${leadName ?? "主管"} · 主管`;
 }
@@ -422,10 +426,18 @@ function speakerOptions(lines: WorkLine[], known: Map<string, string>) {
   return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1], "zh"));
 }
 
+function linesForEveryone(lines: WorkLine[], me: string | null) {
+  return lines.filter((line) => line.role !== "water" || line.author_email === me);
+}
+
 function linesByAuthor(lines: WorkLine[], email: string) {
   const shown: WorkLine[] = [];
   let open = false;
   for (const [index, line] of lines.entries()) {
+    if (line.role === "water") {
+      if (line.author_email === email) shown.push(line);
+      continue;
+    }
     if (line.role === "clock" || (line.role === "lead" && lines[index - 1]?.role === "clock")) {
       shown.push(line);
       continue;

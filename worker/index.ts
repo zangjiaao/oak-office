@@ -2,6 +2,7 @@ import { createBoardTask, editBoardTask, listBoard, removeBoardTask } from "./bo
 import { callerEmail, listColleagues, readColleagueName, readEmail, removeColleague, saveColleague } from "./colleague";
 import { createDepartment, listDepartments, readDepartment, removeDepartment, updateDepartment } from "./department";
 import { cancelDuty, listDuties, runDue } from "./duty";
+import { clearWater, pourWater, readWater, saveWater, type WaterReminder } from "./water";
 import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
@@ -60,6 +61,7 @@ export default {
         const departmentId = url.searchParams.get("department") ?? "";
         if (request.method === "GET") {
           if (!UUID.test(departmentId)) return json({ error: "先选一层。" }, 400);
+          await pourWater(env, departmentId);
           return json(await getWork(env.DB, departmentId));
         }
         if (request.method === "POST") {
@@ -160,8 +162,9 @@ export default {
           return json({ error: "口令不对。" }, 401);
         }
         const result = await runDue(env);
+        const water = await pourWater(env);
         holdCrew(ctx);
-        return json(result);
+        return json({ ...result, water: water.poured });
       }
       const dutyMatch = /^\/api\/duties\/([^/]+)$/.exec(url.pathname);
       if (dutyMatch) {
@@ -172,6 +175,23 @@ export default {
         if (!personId) return json({ error: "没有这个定时。" }, 404);
         await settleShift(env, personId);
         return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+      }
+      if (url.pathname === "/api/water") {
+        const email = callerEmail(request);
+        if (!email) return json({ error: "Access 进来之后，才能给自己定饮水提醒。" }, 401);
+        if (request.method === "GET") return json({ reminder: await readWater(env.DB, email) });
+        if (request.method === "DELETE") {
+          await clearWater(env.DB, email);
+          return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+        }
+        if (request.method !== "PUT") return new Response(null, { status: 405, headers: { allow: "GET, PUT, DELETE" } });
+        const record = await readRecord(request);
+        const departmentId = typeof record?.departmentId === "string" ? record.departmentId : "";
+        const everyMinutes = typeof record?.everyMinutes === "number" ? record.everyMinutes : Number.NaN;
+        if (!UUID.test(departmentId)) return json({ error: "先选一层。" }, 400);
+        const saved = await saveWater(env.DB, email, departmentId, everyMinutes);
+        if (!saved.ok) return json({ error: saved.error }, saved.status);
+        return json({ reminder: saved.reminder satisfies WaterReminder });
       }
       if (url.pathname === "/api/me") {
         if (request.method !== "GET") return new Response(null, { status: 405, headers: { allow: "GET" } });
