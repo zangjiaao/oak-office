@@ -3,6 +3,9 @@ import type { Env } from "./env";
 
 export const WATER_MINUTES = [1, 30, 45, 60, 90, 120] as const;
 
+/** One shared reminder for the unsigned voice the chat already calls 你. */
+export const WATER_YOU = "you";
+
 export type WaterReminder = {
   everyMinutes: number;
   nextAt: number;
@@ -88,11 +91,12 @@ export async function pourWater(env: Env, departmentId?: string) {
       .bind(now + row.every_ms, row.email, row.next_at)
       .run();
     if (!changed(advanced)) continue;
-    const name = named.get(row.email);
+    const shared = row.email === WATER_YOU;
+    const name = shared ? undefined : named.get(row.email);
     await env.DB.prepare(
       "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id, author_email) VALUES (?, 'water', NULL, ?, NULL, ?, ?, ?)",
     )
-      .bind(crypto.randomUUID(), name ? `${name}，喝水。` : "喝水。", now, row.department_id, row.email)
+      .bind(crypto.randomUUID(), name ? `${name}，喝水。` : "喝水。", now, row.department_id, shared ? null : row.email)
       .run();
     poured += 1;
   }

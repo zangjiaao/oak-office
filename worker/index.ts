@@ -2,7 +2,7 @@ import { createBoardTask, editBoardTask, listBoard, removeBoardTask } from "./bo
 import { callerEmail, listColleagues, readColleagueName, readEmail, removeColleague, saveColleague } from "./colleague";
 import { createDepartment, listDepartments, readDepartment, removeDepartment, updateDepartment } from "./department";
 import { cancelDuty, listDuties, runDue } from "./duty";
-import { clearWater, pourWater, readWater, saveWater, type WaterReminder } from "./water";
+import { WATER_YOU, clearWater, pourWater, readWater, saveWater, type WaterReminder } from "./water";
 import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
@@ -177,8 +177,7 @@ export default {
         return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
       }
       if (url.pathname === "/api/water") {
-        const email = callerEmail(request);
-        if (!email) return json({ error: "Access 进来之后，才能给自己定饮水提醒。" }, 401);
+        const email = callerEmail(request) ?? WATER_YOU;
         if (request.method === "GET") return json({ reminder: await readWater(env.DB, email) });
         if (request.method === "DELETE") {
           await clearWater(env.DB, email);

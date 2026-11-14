@@ -38,7 +38,6 @@ export function WaterDesk({
         const me = await currentSession();
         if (gone) return;
         setSession(me);
-        if (!me.email) return;
         const next = await readWater();
         if (gone) return;
         setReminder(next);
@@ -55,7 +54,7 @@ export function WaterDesk({
   }, []);
 
   async function save() {
-    if (!session?.email || saving) return;
+    if (!session || saving) return;
     setSaving(true);
     setError(null);
     try {
@@ -69,7 +68,7 @@ export function WaterDesk({
   }
 
   async function drop() {
-    if (!session?.email || saving || !reminder) return;
+    if (!session || saving || !reminder) return;
     setSaving(true);
     setError(null);
     try {
@@ -104,11 +103,11 @@ export function WaterDesk({
           </div>
           <div className="cooler-panel">
             {error ? <p>{error}</p> : null}
-            {session && !session.email ? <p>Access 进来之后，才能给自己定饮水提醒。</p> : null}
+            {session && !session.email ? <p>提醒你。跟对话里的你一样，大家都能看见。</p> : null}
             {who ? <p>只提醒 {who}。</p> : null}
             <div className="cooler-picks">
               {WATER_MINUTES.map((item) => (
-                <button key={item} type="button" className={minutes === item ? "on" : ""} onClick={() => setMinutes(item)} disabled={!who || saving}>
+                <button key={item} type="button" className={minutes === item ? "on" : ""} onClick={() => setMinutes(item)} disabled={!session || saving}>
                   {item}
                 </button>
               ))}
@@ -118,7 +117,7 @@ export function WaterDesk({
               <button type="button" onClick={() => void drop()} disabled={saving || !reminder}>
                 取消提醒
               </button>
-              <button type="button" className="save" onClick={() => void save()} disabled={saving || !who}>
+              <button type="button" className="save" onClick={() => void save()} disabled={saving || !session}>
                 记下
               </button>
             </footer>
