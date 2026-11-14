@@ -13,6 +13,7 @@ import type { Pose } from "../src/office/types";
 import type { Env } from "./env";
 import { departmentById } from "./department";
 import { listPeople } from "./people";
+import { colleagueNames, listColleagues } from "./colleague";
 import { compactTurn, fitHistory, listTranscript, summaryNote, type TranscriptLine } from "./context";
 import { hideSecrets } from "./bash-guard";
 import { quietDsml, stripSpoken } from "./dsml";
@@ -183,6 +184,7 @@ export type WorkLine = {
   role: "user" | "lead" | "staff" | "clock";
   person_id: string | null;
   text: string;
+  author_email?: string | null;
 };
 
 export type WorkBeat = {
@@ -221,6 +223,7 @@ type LineRow = {
   text: string;
   raw: string | null;
   created_at: number;
+  author_email: string | null;
 };
 
 type Job = {
@@ -265,6 +268,7 @@ export async function speak(
   signal?: AbortSignal,
   from: "user" | "clock" = "user",
   departmentId = "",
+  authorEmail: string | null = null,
 ): Promise<{ ok: true; office: WorkOffice } | { ok: false; error: string; status: number }> {
   const said = text.trim();
   if (!said) return { ok: false, error: "先写一句。", status: 400 };
@@ -296,15 +300,18 @@ export async function speak(
     if (!model) return { ok: false, error: `${lead.name}的模型不在目录里。`, status: 400 };
     const catalog = await skillCatalog(env);
     const systemPrompt = leadPrompt(lead, staff, desks, duties, board, department.name, rules, catalog);
+    const known = colleagueNames(await listColleagues(env.DB));
     const prior = withSummary(
       await fitHistory(env.DB, department.id, systemPrompt, model, runtime.streamFn, runtime.getApiKey()),
+      known,
     );
     if (gate.controller.signal.aborted) return { ok: true, office: await getWork(env.DB, department.id) };
-    const userLine: WorkLine = { id: crypto.randomUUID(), role: from, person_id: null, text: said };
+    const author = from === "user" ? authorEmail : null;
+    const userLine: WorkLine = { id: crypto.randomUUID(), role: from, person_id: null, text: said, author_email: author };
     await env.DB.prepare(
-      "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id) VALUES (?, ?, NULL, ?, NULL, ?, ?)",
+      "INSERT INTO work_line (id, role, person_id, text, raw, created_at, department_id, author_email) VALUES (?, ?, NULL, ?, NULL, ?, ?, ?)",
     )
-      .bind(userLine.id, userLine.role, userLine.text, Date.now(), department.id)
+      .bind(userLine.id, userLine.role, userLine.text, Date.now(), department.id, author)
       .run();
     turn = { jobs: new Map(), leadSteps: [] };
     let calls = 0;
@@ -374,7 +381,8 @@ export async function speak(
       if (gate.controller.signal.aborted) return await interrupted(env, department.id, published, agent, before, false, desks, turn);
       touched = true;
       await setDesk(env.DB, lead.id, "think", "在想");
-      await agent.prompt(said);
+      const speaker = author ? (known.get(author) ?? author) : "";
+      await agent.prompt(speaker ? `${speaker}说：${said}` : said);
       let nudges = 0;
       while (nudges < 2 && !gate.controller.signal.aborted && stalled(agent.state.messages, before)) {
         nudges += 1;
@@ -696,6 +704,7 @@ export async function runStaffDuty(
       .join("\n");
     const history = withSummary(
       await fitHistory(env.DB, department.id, leaderPrompt, leadModel, runtime.streamFn, runtime.getApiKey()),
+      colleagueNames(await listColleagues(env.DB)),
     );
     const leader = new Agent({
       streamFn: runtime.streamFn,
@@ -1022,6 +1031,7 @@ function leadPrompt(
     rules,
     promptMemory(lead.memories),
     "你只和用户说话，用简短中文。要派人时，先单独说一句安排谁做什么，再调用 ask，用他们的 id。",
+    "几位同事可能轮流说话。一句若以「某某说：」开头，某某就是这一句的人。认得出是谁，不要把他们当成同一个人。",
     "用户一句之后，你可以连续说、连续用工具，把你自己能做完的查、装、跑在这一轮里做完。需要用户打开链接、在网页上确认或另行同意时，把链接和要做的事说完就停，等用户回来再继续。不要在用户确认前反复查询连接状态。",
     "你就在这台机器上。bash 是你的命令行，能跑 node、curl 和已安装技能里的 CLI。要查、要取、要跑，自己调用 bash，看完输出再回答。电脑上的终端只是以往输出的记录。不要把命令交给用户，也不要说自己接不到这台机器或没有 node。",
     catalog,
@@ -1134,9 +1144,10 @@ function dutyList(duties: Duty[], people: { id: string; name: string }[]) {
     .join("\n");
 }
 
-function replay(line: LineRow, previous?: LineRow): AgentMessage[] {
+function replay(line: LineRow, names: Map<string, string>, previous?: LineRow): AgentMessage[] {
   if (line.role === "user" || line.role === "clock" || line.role === "staff") {
-    return [{ role: "user", content: line.text, timestamp: line.created_at }];
+    const who = line.role === "user" && line.author_email ? (names.get(line.author_email) ?? line.author_email) : "";
+    return [{ role: "user", content: who ? `${who}说：${line.text}` : line.text, timestamp: line.created_at }];
   }
   if (line.role === "lead" && !line.raw && previous?.role === "clock") {
     return [{ role: "user", content: line.text, timestamp: line.created_at }];
@@ -1270,7 +1281,7 @@ function office(
     lines: lines.flatMap((line) => {
       const text = stripSpoken(line.text);
       if (!text) return [];
-      return [{ id: line.id, role: line.role, person_id: line.person_id, text }];
+      return [{ id: line.id, role: line.role, person_id: line.person_id, text, author_email: line.author_email }];
     }),
     floor,
     holding,
@@ -1281,11 +1292,11 @@ async function linesOf(db: Env["DB"], departmentId: string) {
   return listTranscript(db, departmentId);
 }
 
-function withSummary(fitted: { summary: string | null; lines: TranscriptLine[] }): AgentMessage[] {
+function withSummary(fitted: { summary: string | null; lines: TranscriptLine[] }, names: Map<string, string>): AgentMessage[] {
   const head: AgentMessage[] = fitted.summary
     ? [{ role: "user", content: summaryNote(fitted.summary), timestamp: Date.now() }]
     : [];
-  return [...head, ...fitted.lines.flatMap((line, index) => replay(line, fitted.lines[index - 1]))];
+  return [...head, ...fitted.lines.flatMap((line, index) => replay(line, names, fitted.lines[index - 1]))];
 }
 
 async function floorOf(db: Env["DB"], departmentId: string) {
@@ -1506,6 +1517,7 @@ async function leadOnReport(
     .join("\n");
   const history = withSummary(
     await fitHistory(env.DB, lead.department_id, leaderPrompt, model, runtime.streamFn, runtime.getApiKey()),
+    colleagueNames(await listColleagues(env.DB)),
   );
   const leader = new Agent({
     streamFn: runtime.streamFn,

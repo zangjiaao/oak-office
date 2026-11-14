@@ -483,6 +483,7 @@ export function App() {
           onFloor={onFloor}
           onHolding={onHolding}
           onRetry={() => void load()}
+          active={mode === "work"}
         />
       </div>
       {mode === "roster" ? (

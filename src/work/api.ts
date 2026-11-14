@@ -9,6 +9,7 @@ export type WorkLine = {
   role: "user" | "lead" | "staff" | "clock";
   person_id: string | null;
   text: string;
+  author_email?: string | null;
 };
 
 export type WorkBeat = {
