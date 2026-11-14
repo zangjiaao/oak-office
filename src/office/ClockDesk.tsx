@@ -101,11 +101,8 @@ function DigitalClock() {
   }, []);
   const face = readFace(now);
   return (
-    <time className="face" dateTime={face.stamp}>
-      <small>
-        {face.date} {face.weekday}
-      </small>
-      <b>{face.time}</b>
+    <time dateTime={face.stamp}>
+      {face.date} {face.weekday} {face.time}
     </time>
   );
 }
