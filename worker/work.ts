@@ -181,7 +181,7 @@ type Mark = Static<typeof MarkArgs>;
 
 export type WorkLine = {
   id: string;
-  role: "user" | "lead" | "staff" | "clock";
+  role: "user" | "lead" | "staff" | "clock" | "water";
   person_id: string | null;
   text: string;
   author_email?: string | null;
@@ -218,7 +218,7 @@ type DeskRow = {
 
 type LineRow = {
   id: string;
-  role: "user" | "lead" | "staff" | "clock";
+  role: "user" | "lead" | "staff" | "clock" | "water";
   person_id: string | null;
   text: string;
   raw: string | null;
@@ -1149,6 +1149,7 @@ function userSaid(name: string, text: string) {
 }
 
 function replay(line: LineRow, names: Map<string, string>, previous?: LineRow): AgentMessage[] {
+  if (line.role === "water") return [];
   if (line.role === "user" || line.role === "clock" || line.role === "staff") {
     const who = line.role === "user" && line.author_email ? (names.get(line.author_email) ?? line.author_email) : "";
     return [{ role: "user", content: userSaid(who, line.text), timestamp: line.created_at }];

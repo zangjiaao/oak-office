@@ -12,7 +12,7 @@ const KEEP = 20_000;
 
 export type TranscriptLine = {
   id: string;
-  role: "user" | "lead" | "staff" | "clock";
+  role: "user" | "lead" | "staff" | "clock" | "water";
   person_id: string | null;
   text: string;
   raw: string | null;
@@ -58,7 +58,14 @@ export async function fitHistory(
   const cut = keepFrom(visible, lineTokens);
   if (cut <= 0 || cut >= visible.length) return { summary: previous, lines: visible };
   const kept = visible.slice(cut);
-  const summary = await summarize(model, streamFn, apiKey, visible.slice(0, cut).map((line) => spokenLine(line, names)), previous, window);
+  const summary = await summarize(
+    model,
+    streamFn,
+    apiKey,
+    visible.slice(0, cut).flatMap((line) => (line.role === "water" ? [] : [spokenLine(line, names)])),
+    previous,
+    window,
+  );
   const text = summary ?? (previous ? `${previous}\n\n（再往前的一段没能并进摘要。）` : "更早的对话没能压缩，只保留了最近一段。");
   await saveCompact(db, departmentId, text, kept[0].id);
   console.error(`[oak] 压缩对话 ${JSON.stringify({ tokens, kept: kept.length })}`);
@@ -208,6 +215,8 @@ function spokenLine(line: TranscriptLine, names: Map<string, string>) {
         ? "员工"
         : line.role === "clock"
           ? "定时"
+          : line.role === "water"
+            ? "饮水"
           : line.author_email
             ? `用户${names.get(line.author_email) ?? line.author_email}`
             : "用户";

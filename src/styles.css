@@ -714,6 +714,47 @@ button, input, textarea {
   background: transparent;
 }
 
+.slate .picks { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.slate .picks button {
+  border: 1px solid rgba(36, 28, 22, 0.25);
+  background: transparent;
+  color: inherit;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.slate .picks button.on {
+  background: #1f3a32;
+  border-color: #1f3a32;
+  color: #f3ead7;
+}
+
+.slate-body .slate-actions {
+  justify-content: flex-start;
+  margin-top: 12px;
+  gap: 8px;
+}
+
+.slate-body .slate-actions button {
+  width: auto;
+  height: auto;
+  padding: 6px 12px;
+  border: 1px solid rgba(36, 28, 22, 0.25);
+  background: transparent;
+  color: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.slate-body .slate-actions button:last-child {
+  background: #1f3a32;
+  border-color: #1f3a32;
+  color: #f3ead7;
+}
+
+.slate-body .slate-actions button:disabled { opacity: 0.55; cursor: default; }
+
 .slate-actions {
   display: flex;
   flex: none;
@@ -917,7 +958,7 @@ button, input, textarea {
 
 .log .user { align-self: flex-end; max-width: 92%; }
 .log .lead, .log .staff { align-self: flex-start; max-width: 96%; }
-.log .clock { align-self: flex-start; max-width: 96%; }
+.log .clock, .log .water { align-self: flex-start; max-width: 96%; }
 
 .log .user .bubble, .log .lead .bubble, .log .staff .bubble {
   padding: 8px 10px;
@@ -943,6 +984,13 @@ button, input, textarea {
   color: #7a6a56;
   padding: 0;
   text-align: left;
+}
+
+.log .water .bubble {
+  background: #e7f0f2;
+  border: 1px solid #b7c9ce;
+  color: #241c16;
+  padding: 8px 10px;
 }
 
 .log .md > * + * { margin-top: 0.55em; }

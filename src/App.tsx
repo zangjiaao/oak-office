@@ -74,6 +74,7 @@ export function App() {
   const [screen, setScreen] = useState<{ x: number; y: number; title: string; personId: string | null } | null>(null);
   const [boardOpen, setBoardOpen] = useState(false);
   const [clockOpen, setClockOpen] = useState(false);
+  const [waterOpen, setWaterOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [floorDraft, setFloorDraft] = useState<DepartmentDraft | null>(null);
   const [floorLive, setFloorLive] = useState<DepartmentDraft | null>(null);
@@ -180,6 +181,7 @@ export function App() {
     setScreen(null);
     setBoardOpen(false);
     setClockOpen(false);
+    setWaterOpen(false);
     setRulesOpen(false);
     dropDraft();
     localStorage.setItem(DEPARTMENT_KEY, id);
@@ -334,6 +336,7 @@ export function App() {
                 setScreen(null);
                 setBoardOpen(false);
                 setClockOpen(false);
+                setWaterOpen(false);
                 setRulesOpen(false);
                 dropDraft();
                 setMode("work");
@@ -348,6 +351,7 @@ export function App() {
                 setScreen(null);
                 setBoardOpen(false);
                 setClockOpen(false);
+                setWaterOpen(false);
                 setRulesOpen(false);
                 setMode("roster");
               }}
@@ -361,6 +365,7 @@ export function App() {
                 setScreen(null);
                 setBoardOpen(false);
                 setClockOpen(false);
+                setWaterOpen(false);
                 setRulesOpen(false);
                 dropDraft();
                 setMode("rehearsal");
@@ -413,6 +418,7 @@ export function App() {
           onScreen={(desk, title, personId) => {
             setBoardOpen(false);
             setClockOpen(false);
+            setWaterOpen(false);
             setRulesOpen(false);
             setScreen({ x: desk.x, y: desk.y, title, personId });
           }}
@@ -421,6 +427,7 @@ export function App() {
           onBoard={mode !== "rehearsal" && !floorDraft && department ? () => {
             setScreen(null);
             setClockOpen(false);
+            setWaterOpen(false);
             setRulesOpen(false);
             setBoardOpen(true);
           } : undefined}
@@ -430,6 +437,7 @@ export function App() {
             setScreen(null);
             setBoardOpen(false);
             setRulesOpen(false);
+            setWaterOpen(false);
             setClockOpen(true);
           } : undefined}
           onCloseClock={() => setClockOpen(false)}
@@ -438,9 +446,19 @@ export function App() {
             setScreen(null);
             setBoardOpen(false);
             setClockOpen(false);
+            setWaterOpen(false);
             setRulesOpen(true);
           } : undefined}
           onCloseRules={() => setRulesOpen(false)}
+          onWater={mode !== "rehearsal" && !floorDraft && department ? () => {
+            setScreen(null);
+            setBoardOpen(false);
+            setClockOpen(false);
+            setRulesOpen(false);
+            setWaterOpen(true);
+          } : undefined}
+          onCloseWater={() => setWaterOpen(false)}
+          waterOpen={waterOpen && !floorDraft && mode !== "rehearsal"}
           rules={rulesOpen && !floorDraft && mode !== "rehearsal"}
           rulesText={department?.rules ?? ""}
           onSaveRules={saveRules}

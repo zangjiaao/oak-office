@@ -193,6 +193,17 @@ const CLOCK = { x: 214, y: 22, w: 22, h: 22 };
 
 const RULES = { x: 18, y: 18, w: 46, h: 40 };
 
+const COOLER = { x: 358, y: 66, w: 30, h: 38 };
+
+export function coolerAt(roomX: number, roomY: number) {
+  return (
+    roomX >= COOLER.x &&
+    roomX <= COOLER.x + COOLER.w &&
+    roomY >= COOLER.y &&
+    roomY <= COOLER.y + COOLER.h
+  );
+}
+
 export function clockAt(roomX: number, roomY: number) {
   const pad = 3;
   return (

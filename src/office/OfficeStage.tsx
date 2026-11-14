@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { actorAt, boardAt, boardFace, clockAt, drawOffice, monitorAt, roomTransform, rulesAt } from "./draw";
+import { actorAt, boardAt, boardFace, clockAt, coolerAt, drawOffice, monitorAt, roomTransform, rulesAt } from "./draw";
 import { BoardDesk } from "./BoardDesk";
 import { ClockDesk } from "./ClockDesk";
 import { RulesDesk } from "./RulesDesk";
 import { ScreenDesk } from "./ScreenDesk";
+import { WaterDesk } from "./WaterDesk";
 import { type PetId } from "./pets";
 import { DEFAULT_ROOM, type RoomLook } from "./room";
 import { ROOM } from "./roster";
@@ -30,6 +31,9 @@ export function OfficeStage({
   onRules,
   onCloseRules,
   rules = false,
+  onWater,
+  onCloseWater,
+  waterOpen = false,
   rulesText = "",
   onSaveRules,
   departmentId = "",
@@ -54,6 +58,9 @@ export function OfficeStage({
   onRules?: () => void;
   onCloseRules?: () => void;
   rules?: boolean;
+  onWater?: () => void;
+  onCloseWater?: () => void;
+  waterOpen?: boolean;
   rulesText?: string;
   onSaveRules?: (rules: string) => Promise<void>;
   departmentId?: string;
@@ -67,6 +74,7 @@ export function OfficeStage({
   const onBoardRef = useRef(onBoard);
   const onClockRef = useRef(onClock);
   const onRulesRef = useRef(onRules);
+  const onWaterRef = useRef(onWater);
   const desksRef = useRef(desks);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [ambient, setAmbient] = useState(0);
@@ -79,6 +87,7 @@ export function OfficeStage({
   onBoardRef.current = onBoard;
   onClockRef.current = onClock;
   onRulesRef.current = onRules;
+  onWaterRef.current = onWater;
   desksRef.current = desks;
 
   useEffect(() => {
@@ -127,7 +136,7 @@ export function OfficeStage({
   }, [size, actors, drawn, room, desks, look, pets, wall]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
-    if (screen || board || clockOpen || rules) return;
+    if (screen || board || clockOpen || rules || waterOpen) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -140,6 +149,10 @@ export function OfficeStage({
     }
     if (clockAt(x, y) && onClockRef.current) {
       onClockRef.current();
+      return;
+    }
+    if (coolerAt(x, y) && onWaterRef.current) {
+      onWaterRef.current();
       return;
     }
     if (boardAt(x, y, look.style) && onBoardRef.current) {
@@ -163,8 +176,8 @@ export function OfficeStage({
   const box = officeBox(size.w, size.h, room);
 
   return (
-    <div className={screen || board || clockOpen || rules ? "stage into" : "stage"} ref={wrapRef}>
-      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard || onClock || onRules ? "pick" : ""} />
+    <div className={screen || board || clockOpen || rules || waterOpen ? "stage into" : "stage"} ref={wrapRef}>
+      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard || onClock || onRules || onWater ? "pick" : ""} />
       {screen && onCloseScreen ? (
         <ScreenDesk title={screen.title} personId={screen.personId} onClose={onCloseScreen} box={paddedOffice(box)} />
       ) : null}
@@ -173,6 +186,9 @@ export function OfficeStage({
       ) : null}
       {clockOpen && onCloseClock && departmentId ? (
         <ClockDesk departmentId={departmentId} people={people} box={boardBox(box)} onClose={onCloseClock} />
+      ) : null}
+      {waterOpen && onCloseWater && departmentId ? (
+        <WaterDesk departmentId={departmentId} box={boardBox(box)} onClose={onCloseWater} />
       ) : null}
       {rules && onCloseRules && onSaveRules ? (
         <RulesDesk text={rulesText} box={boardBox(box)} face={look.wood} onClose={onCloseRules} onSave={onSaveRules} />
