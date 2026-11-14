@@ -95,13 +95,15 @@ export function WaterDesk({
           <span className="jug" />
         </div>
         <div className="cooler-body">
-          <button type="button" className="cooler-close" aria-label="关上" onClick={onClose} disabled={saving}>
-            <CloseIcon />
-          </button>
-          <p className="cooler-name">饮水</p>
-          {error ? <p className="cooler-note">{error}</p> : null}
-          {session && !session.email ? <p className="cooler-note">Access 进来之后，才能给自己定饮水提醒。</p> : null}
-          {who ? <p className="cooler-note">只提醒 {who}。</p> : null}
+          <header>
+            <strong>饮水</strong>
+            <button type="button" aria-label="关上" onClick={onClose} disabled={saving}>
+              <CloseIcon />
+            </button>
+          </header>
+          {error ? <p>{error}</p> : null}
+          {session && !session.email ? <p>Access 进来之后，才能给自己定饮水提醒。</p> : null}
+          {who ? <p>只提醒 {who}。</p> : null}
           <div className="cooler-window">
             <span className="level" style={{ height: `${LEVEL[chosen as (typeof WATER_MINUTES)[number]]}%` }} />
             <b>{chosen % 60 === 0 ? `${chosen / 60}小时` : `${chosen}分钟`}</b>
@@ -114,15 +116,15 @@ export function WaterDesk({
             ))}
           </div>
           <span className="cooler-spout" aria-hidden="true" />
-          <p className="cooler-next">{reminder ? `下一次 ${clockFace(reminder.nextAt)}。` : "还没有提醒。"}</p>
-          <div className="cooler-actions">
+          <p>{reminder ? `下一次 ${clockFace(reminder.nextAt)}。` : "还没有提醒。"}</p>
+          <footer>
             <button type="button" onClick={() => void drop()} disabled={saving || !reminder}>
               取消提醒
             </button>
-            <button type="button" className="pour" onClick={() => void save()} disabled={saving || !who}>
+            <button type="button" className="save" onClick={() => void save()} disabled={saving || !who}>
               记下
             </button>
-          </div>
+          </footer>
         </div>
         <div className="cooler-stand" aria-hidden="true" />
       </section>

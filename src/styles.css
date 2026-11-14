@@ -721,50 +721,34 @@ button, input, textarea {
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: #1a2a30;
-  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.4));
+  color: #241c16;
   animation: computer-in 380ms ease both;
 }
 
 .cooler-bottle {
-  width: 86px;
-  margin-bottom: -16px;
+  width: 72px;
+  margin-bottom: -8px;
   z-index: 1;
 }
 
 .cooler-bottle .neck {
   display: block;
-  width: 22px;
-  height: 14px;
+  width: 18px;
+  height: 10px;
   margin: 0 auto;
-  background: linear-gradient(#eaf7fc, #7eb8d0);
-  border: 3px solid #1d4254;
+  background: #d7e6ee;
+  border: 2px solid #3e2918;
   border-bottom: 0;
-  border-radius: 5px 5px 0 0;
+  border-radius: 2px 2px 0 0;
 }
 
 .cooler-bottle .jug {
   display: block;
-  height: 78px;
-  border: 3px solid #1d4254;
-  border-radius: 22px 22px 12px 12px;
-  background:
-    linear-gradient(100deg, rgba(255, 255, 255, 0.55), transparent 36%),
-    linear-gradient(#c5ebf8 0%, #3f95bf 46%, #1d6d96 100%);
-  position: relative;
-  overflow: hidden;
-}
-
-.cooler-bottle .jug::after {
-  content: "";
-  position: absolute;
-  left: -8%;
-  right: -8%;
-  bottom: -6px;
-  height: 18px;
-  background: rgba(255, 255, 255, 0.28);
-  border-radius: 50%;
-  animation: cooler-wave 2.4s ease-in-out infinite alternate;
+  height: 58px;
+  background: #8ec8e6;
+  border: 2px solid #3e2918;
+  border-radius: 6px 6px 3px 3px;
+  box-shadow: inset 10px 0 0 #d7eef6;
 }
 
 .cooler-body {
@@ -772,56 +756,62 @@ button, input, textarea {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 24px 14px 14px;
-  background: linear-gradient(#f7fbfc, #d5e3e9 55%, #c5d5dc);
-  border: 3px solid #24343c;
-  border-radius: 18px 18px 8px 8px;
-  position: relative;
+  padding: 12px 14px 0;
+  background: #efe6d4;
+  border: 14px solid #3e2918;
+  border-radius: 4px;
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 236, 196, 0.35),
+    0 0 0 1px #1a120c,
+    0 24px 50px rgba(0, 0, 0, 0.45);
 }
 
-.cooler-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+.cooler-body header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cooler-body header strong {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.cooler-body header button {
+  display: grid;
+  place-items: center;
   width: 26px;
   height: 26px;
+  margin-left: auto;
   padding: 0;
   border: 0;
-  border-radius: 50%;
   background: transparent;
-  color: #24343c;
+  color: inherit;
   cursor: pointer;
 }
 
-.cooler-close svg {
-  width: 14px;
-  height: 14px;
+.cooler-body header svg {
+  width: 15px;
+  height: 15px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
   stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.cooler-name {
+.cooler-body p {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-}
-
-.cooler-note,
-.cooler-next {
-  margin: 0;
+  color: #7a6a56;
   font-size: 13px;
   line-height: 1.45;
-  color: #3d5360;
 }
 
 .cooler-window {
-  height: 74px;
-  border: 3px solid #24343c;
-  border-radius: 8px;
-  background: #10242c;
+  height: 64px;
+  border: 1px solid #d9c7a4;
+  border-radius: 2px;
+  background: #f3ead7;
   position: relative;
   overflow: hidden;
   display: grid;
@@ -833,86 +823,77 @@ button, input, textarea {
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(#9ad8ee, #1c759c);
+  background: #8ec8e6;
   transition: height 180ms ease;
 }
 
 .cooler-window b {
   position: relative;
-  color: #f4fbff;
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 600;
-  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.35);
 }
 
 .cooler-picks {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 4px;
+  gap: 6px;
 }
 
 .cooler-picks button {
   min-width: 0;
   padding: 6px 0;
-  border: 2px solid #24343c;
-  border-radius: 6px;
-  background: #f4fafc;
-  color: #1a2a30;
-  font-size: 12px;
+  border: 1px solid #d9c7a4;
+  border-radius: 2px;
+  background: transparent;
+  color: #241c16;
   cursor: pointer;
 }
 
 .cooler-picks button.on {
-  background: #1d6d96;
-  border-color: #143e56;
-  color: #f4fbff;
+  background: #1f3a32;
+  border-color: #1f3a32;
+  color: #f3ead7;
 }
 
 .cooler-spout {
-  width: 16px;
-  height: 8px;
-  margin: -2px auto 0;
-  background: #7d9098;
-  border-radius: 0 0 4px 4px;
-  box-shadow: inset 0 -2px 0 #546870;
+  width: 14px;
+  height: 6px;
+  margin: -4px auto -6px;
+  background: #6b4428;
+  border-radius: 0 0 2px 2px;
 }
 
-.cooler-actions {
+.cooler-body footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
+  margin: 0 -14px;
+  padding: 12px 14px;
+  border-top: 1px solid #e0d2b8;
 }
 
-.cooler-actions button {
-  padding: 6px 10px;
-  border: 2px solid #24343c;
-  border-radius: 999px;
-  background: #f4fafc;
-  color: #1a2a30;
+.cooler-body footer button {
+  border: 1px solid #d9c7a4;
+  background: transparent;
+  color: #241c16;
+  padding: 6px 12px;
   cursor: pointer;
   white-space: nowrap;
 }
 
-.cooler-actions button.pour {
-  background: #1d6d96;
-  border-color: #143e56;
-  color: #f4fbff;
+.cooler-body footer button.save {
+  background: #1f3a32;
+  border-color: #1f3a32;
+  color: #f3ead7;
 }
 
-.cooler-actions button:disabled { opacity: 0.45; cursor: default; }
+.cooler-body button:disabled { opacity: 0.55; cursor: default; }
 
 .cooler-stand {
-  width: 78%;
-  height: 14px;
-  background: #6b4428;
-  border: 3px solid #3e2918;
-  border-top: 0;
-  border-radius: 0 0 4px 4px;
-}
-
-@keyframes cooler-wave {
-  from { transform: translateY(0); }
-  to { transform: translateY(4px); }
+  width: 72%;
+  height: 10px;
+  background: #3e2918;
+  box-shadow: 0 0 0 1px #1a120c;
 }
 
 .slate-actions {

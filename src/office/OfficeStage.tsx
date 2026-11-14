@@ -214,10 +214,10 @@ function paddedOffice(office: { left: number; top: number; width: number; height
 }
 
 function coolerPlace(office: { left: number; top: number; width: number; height: number }) {
-  const width = 236;
+  const width = 280;
   const top = Math.max(8, Math.round(office.top + Math.min(28, office.height * 0.04)));
   const roomBottom = office.top + office.height - 8;
-  const zoom = Math.min(1, Math.max(0.62, roomBottom - top) / 450, Math.max(160, office.width - 24) / width);
+  const zoom = Math.min(1, Math.max(0.62, roomBottom - top) / 480, Math.max(180, office.width - 24) / width);
   const visual = width * zoom;
   return {
     left: Math.max(8, Math.round(office.left + office.width - visual - 16)),
