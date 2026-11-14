@@ -88,11 +88,11 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
         </button>
       </header>
       {rows && rows.length > 0 ? (
-        <ul className="memories">
+        <ul className="people">
           {rows.map((row) => (
             <li key={row.email}>
               <button type="button" className="who" onClick={() => beginEdit(row)}>
-                {row.name}
+                <b>{row.name}</b>
                 <em>{row.email}</em>
               </button>
               <button type="button" className="icon" aria-label="去掉" onClick={() => void drop(row.email)} disabled={saving}>

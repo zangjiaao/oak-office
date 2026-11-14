@@ -1300,18 +1300,16 @@ button, input, textarea {
 .chat.staff .empty,
 .chat.staff .people b,
 .chat.staff .people em,
-.chat.staff .roster-facts,
-.chat.staff .colleagues .memories button.who,
-.chat.staff .colleagues .memories em {
+.chat.staff .roster-facts {
   font-size: 14px;
 }
 
-.chat.staff .people b,
-.chat.staff .colleagues .memories button.who {
+.chat.staff .people b {
   font-weight: 600;
 }
 
 .roster-section > header button.icon,
+.colleagues .people button.icon,
 .memories button.icon {
   display: grid;
   place-items: center;
@@ -1326,6 +1324,7 @@ button, input, textarea {
 }
 
 .roster-section > header button.icon svg,
+.colleagues .people button.icon svg,
 .memories button.icon svg {
   width: 16px;
   height: 16px;
@@ -1337,17 +1336,41 @@ button, input, textarea {
 }
 
 .roster-section > header button.icon:hover,
+.colleagues .people button.icon:hover,
 .memories button.icon:hover {
   background: rgba(36, 28, 22, 0.06);
 }
 
 .roster-section > header button.icon:disabled,
+.colleagues .people button.icon:disabled,
 .memories button.icon:disabled {
   opacity: 0.55;
   cursor: default;
 }
 
-.colleagues .memories li { align-items: center; }
+.colleagues .people li {
+  display: flex;
+  align-items: center;
+  border: 1px solid #d9c7a4;
+  background: #fffaf2;
+}
+
+.colleagues .people button.who {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 8px 4px 8px 10px;
+  color: inherit;
+}
+
+.colleagues .people button.icon {
+  flex: none;
+  width: 28px;
+  margin-right: 4px;
+}
 
 .roster-section + .roster-section {
   margin-top: 22px;
@@ -1379,18 +1402,6 @@ button, input, textarea {
   -webkit-box-orient: vertical;
 }
 
-.colleagues .memories { margin-top: 0; }
-.colleagues .memories em { display: block; color: #7a6a56; font-style: normal; font-size: 12px; }
-.colleagues .memories button.who {
-  flex: 1;
-  min-width: 0;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: inherit;
-  cursor: pointer;
-}
 
 dialog.sheet-dialog {
   position: fixed;
