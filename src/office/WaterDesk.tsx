@@ -1,23 +1,18 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { currentSession, type Session } from "../people/colleague";
 import { DUTY_ZONE } from "../work/duty";
+import type { RoomLook } from "./room";
 import { WATER_MINUTES, clearWater, readWater, saveWater, type WaterReminder } from "./water";
-
-const LEVEL: Record<(typeof WATER_MINUTES)[number], number> = {
-  30: 86,
-  45: 72,
-  60: 58,
-  90: 44,
-  120: 32,
-};
 
 export function WaterDesk({
   departmentId,
   box,
+  face,
   onClose,
 }: {
   departmentId: string;
   box: { left: number; top: number; width: number; zoom: number };
+  face: RoomLook;
   onClose: () => void;
 }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -89,42 +84,40 @@ export function WaterDesk({
   return (
     <div className="desk-screen">
       <button type="button" className="desk-dim" aria-label="离开饮水" onClick={onClose} />
-      <section className="cooler" role="dialog" aria-label="饮水" style={box as CSSProperties}>
-        <div className="cooler-bottle" aria-hidden="true">
-          <span className="neck" />
-          <span className="jug" />
-        </div>
+      <section
+        className="cooler"
+        role="dialog"
+        aria-label="饮水"
+        style={{ ...box, "--cooler-trim": face.trim, "--cooler-wood": face.wood } as CSSProperties}
+      >
         <div className="cooler-body">
-          <header>
-            <strong>饮水</strong>
-            <button type="button" aria-label="关上" onClick={onClose} disabled={saving}>
-              <CloseIcon />
-            </button>
-          </header>
-          {error ? <p>{error}</p> : null}
-          {session && !session.email ? <p>Access 进来之后，才能给自己定饮水提醒。</p> : null}
-          {who ? <p>只提醒 {who}。</p> : null}
+          <button type="button" className="cooler-close" aria-label="关上" onClick={onClose} disabled={saving}>
+            <CloseIcon />
+          </button>
           <div className="cooler-window">
-            <span className="level" style={{ height: `${LEVEL[chosen as (typeof WATER_MINUTES)[number]]}%` }} />
             <b>{chosen % 60 === 0 ? `${chosen / 60}小时` : `${chosen}分钟`}</b>
           </div>
-          <div className="cooler-picks">
-            {WATER_MINUTES.map((item) => (
-              <button key={item} type="button" className={minutes === item ? "on" : ""} onClick={() => setMinutes(item)} disabled={!who || saving}>
-                {item}
+          <div className="cooler-panel">
+            {error ? <p>{error}</p> : null}
+            {session && !session.email ? <p>Access 进来之后，才能给自己定饮水提醒。</p> : null}
+            {who ? <p>只提醒 {who}。</p> : null}
+            <div className="cooler-picks">
+              {WATER_MINUTES.map((item) => (
+                <button key={item} type="button" className={minutes === item ? "on" : ""} onClick={() => setMinutes(item)} disabled={!who || saving}>
+                  {item}
+                </button>
+              ))}
+            </div>
+            <p>{reminder ? `下一次 ${clockFace(reminder.nextAt)}。` : "还没有提醒。"}</p>
+            <footer>
+              <button type="button" onClick={() => void drop()} disabled={saving || !reminder}>
+                取消提醒
               </button>
-            ))}
+              <button type="button" className="save" onClick={() => void save()} disabled={saving || !who}>
+                记下
+              </button>
+            </footer>
           </div>
-          <span className="cooler-spout" aria-hidden="true" />
-          <p>{reminder ? `下一次 ${clockFace(reminder.nextAt)}。` : "还没有提醒。"}</p>
-          <footer>
-            <button type="button" onClick={() => void drop()} disabled={saving || !reminder}>
-              取消提醒
-            </button>
-            <button type="button" className="save" onClick={() => void save()} disabled={saving || !who}>
-              记下
-            </button>
-          </footer>
         </div>
         <div className="cooler-stand" aria-hidden="true" />
       </section>

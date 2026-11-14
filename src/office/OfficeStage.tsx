@@ -188,7 +188,7 @@ export function OfficeStage({
         <ClockDesk departmentId={departmentId} people={people} box={boardBox(box)} onClose={onCloseClock} />
       ) : null}
       {waterOpen && onCloseWater && departmentId ? (
-        <WaterDesk departmentId={departmentId} box={coolerPlace(box)} onClose={onCloseWater} />
+        <WaterDesk departmentId={departmentId} box={coolerPlace(box)} face={look} onClose={onCloseWater} />
       ) : null}
       {rules && onCloseRules && onSaveRules ? (
         <RulesDesk text={rulesText} box={boardBox(box)} face={look.wood} onClose={onCloseRules} onSave={onSaveRules} />
@@ -214,13 +214,13 @@ function paddedOffice(office: { left: number; top: number; width: number; height
 }
 
 function coolerPlace(office: { left: number; top: number; width: number; height: number }) {
-  const width = 280;
-  const top = Math.max(8, Math.round(office.top + Math.min(28, office.height * 0.04)));
+  const width = 220;
+  const visual = width * 1.5;
+  const top = Math.max(8, Math.round(office.top + Math.min(20, office.height * 0.03)));
   const roomBottom = office.top + office.height - 8;
-  const zoom = Math.min(1, Math.max(0.62, roomBottom - top) / 480, Math.max(180, office.width - 24) / width);
-  const visual = width * zoom;
+  const zoom = Math.min(1, Math.max(0.62, roomBottom - top) / (width * 1.9), Math.max(168, office.width - 16) / visual);
   return {
-    left: Math.max(8, Math.round(office.left + office.width - visual - 16)),
+    left: Math.max(8, Math.round(office.left + office.width - visual * zoom - 12)),
     top,
     width,
     zoom,

@@ -721,78 +721,36 @@ button, input, textarea {
   display: flex;
   flex-direction: column;
   align-items: center;
-  color: #241c16;
+  color: #1a1714;
   animation: computer-in 380ms ease both;
 }
 
-.cooler-bottle {
-  width: 72px;
-  margin-bottom: -8px;
-  z-index: 1;
-}
-
-.cooler-bottle .neck {
-  display: block;
-  width: 18px;
-  height: 10px;
-  margin: 0 auto;
-  background: #d7e6ee;
-  border: 2px solid #3e2918;
-  border-bottom: 0;
-  border-radius: 2px 2px 0 0;
-}
-
-.cooler-bottle .jug {
-  display: block;
-  height: 58px;
-  background: #8ec8e6;
-  border: 2px solid #3e2918;
-  border-radius: 6px 6px 3px 3px;
-  box-shadow: inset 10px 0 0 #d7eef6;
-}
-
 .cooler-body {
+  position: relative;
   width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px 0;
-  background: #efe6d4;
-  border: 14px solid #3e2918;
-  border-radius: 4px;
-  box-shadow:
-    inset 0 0 0 2px rgba(255, 236, 196, 0.35),
-    0 0 0 1px #1a120c,
-    0 24px 50px rgba(0, 0, 0, 0.45);
+  aspect-ratio: 16 / 28;
+  background: #d9e4ea;
 }
 
-.cooler-body header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.cooler-body header strong {
-  font-size: 22px;
-  font-weight: 600;
-}
-
-.cooler-body header button {
+.cooler-close {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 1;
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 26px;
-  margin-left: auto;
+  width: 22px;
+  height: 22px;
   padding: 0;
   border: 0;
   background: transparent;
-  color: inherit;
+  color: #1a1714;
   cursor: pointer;
 }
 
-.cooler-body header svg {
-  width: 15px;
-  height: 15px;
+.cooler-close svg {
+  width: 14px;
+  height: 14px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.6;
@@ -800,100 +758,90 @@ button, input, textarea {
   stroke-linejoin: round;
 }
 
-.cooler-body p {
-  margin: 0;
-  color: #7a6a56;
-  font-size: 13px;
-  line-height: 1.45;
-}
-
 .cooler-window {
-  height: 64px;
-  border: 1px solid #d9c7a4;
-  border-radius: 2px;
-  background: #f3ead7;
-  position: relative;
-  overflow: hidden;
+  position: absolute;
+  left: 25%;
+  top: calc(100% * 4 / 28);
+  width: 50%;
+  height: calc(100% * 10 / 28);
   display: grid;
   place-items: center;
-}
-
-.cooler-window .level {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: #8ec8e6;
-  transition: height 180ms ease;
+  background: var(--cooler-trim, #c6a15b);
+  color: #1a1714;
 }
 
 .cooler-window b {
-  position: relative;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.cooler-panel {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: calc(100% * 15 / 28);
+  bottom: calc(100% * 2 / 28 + 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.cooler-panel p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .cooler-picks {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
+  gap: 4px;
 }
 
 .cooler-picks button {
   min-width: 0;
-  padding: 6px 0;
-  border: 1px solid #d9c7a4;
-  border-radius: 2px;
-  background: transparent;
-  color: #241c16;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 0;
+  background: #c5d4dc;
+  color: #1a1714;
   cursor: pointer;
 }
 
-.cooler-picks button.on {
-  background: #1f3a32;
-  border-color: #1f3a32;
-  color: #f3ead7;
-}
+.cooler-picks button.on { background: var(--cooler-trim, #c6a15b); }
 
-.cooler-spout {
-  width: 14px;
-  height: 6px;
-  margin: -4px auto -6px;
-  background: #6b4428;
-  border-radius: 0 0 2px 2px;
-}
-
-.cooler-body footer {
+.cooler-panel footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  margin: 0 -14px;
-  padding: 12px 14px;
-  border-top: 1px solid #e0d2b8;
+  margin-top: auto;
 }
 
-.cooler-body footer button {
-  border: 1px solid #d9c7a4;
+.cooler-panel footer button {
+  border: 0;
+  border-radius: 0;
   background: transparent;
-  color: #241c16;
-  padding: 6px 12px;
+  color: #1a1714;
+  padding: 4px 8px;
   cursor: pointer;
   white-space: nowrap;
 }
 
-.cooler-body footer button.save {
-  background: #1f3a32;
-  border-color: #1f3a32;
-  color: #f3ead7;
+.cooler-panel footer button.save {
+  background: var(--cooler-wood, #6b4428);
+  color: #f4f7fb;
 }
 
-.cooler-body button:disabled { opacity: 0.55; cursor: default; }
+.cooler-body button:disabled { opacity: 0.45; cursor: default; }
 
 .cooler-stand {
-  width: 72%;
-  height: 10px;
-  background: #3e2918;
-  box-shadow: 0 0 0 1px #1a120c;
+  width: 150%;
+  aspect-ratio: 24 / 4;
+  margin-top: -12.5%;
+  background: var(--cooler-wood, #6b4428);
 }
 
 .slate-actions {
