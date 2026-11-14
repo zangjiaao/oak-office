@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { DUTY_ZONE, dutyWhen, listDuties, type Duty } from "../work/duty";
+import { DUTY_ZONE, listDuties, type Duty } from "../work/duty";
 
 export function ClockDesk({
   departmentId,
@@ -66,18 +66,24 @@ export function ClockDesk({
           {error ? <p className="quiet">{error}</p> : null}
           {duties && duties.length === 0 ? <p className="quiet">现在没有定时。</p> : null}
           {duties && duties.length > 0 ? (
-            <ul>
-              {duties.map((duty, index) => (
-                <li key={duty.id} className={`pin tone-${index % 3}`}>
-                  <span>
-                    <small>
-                      {personName(people, duty.person_id)} · {dutyWhen(duty)}
-                    </small>
-                    <b>{duty.task}</b>
-                  </span>
-                  <em>{duty.next_at <= now ? "在做" : nextLabel(duty.next_at)}</em>
-                </li>
-              ))}
+            <ul className="sheet">
+              {duties.map((duty) => {
+                const when = scheduleParts(duty);
+                return (
+                  <li key={duty.id} className="row">
+                    <span className="when">
+                      <small>{when.kicker}</small>
+                      <b>{when.time}</b>
+                    </span>
+                    <span className="copy">
+                      <b>{duty.task}</b>
+                      <small>
+                        {personName(people, duty.person_id)} · {duty.next_at <= now ? "在做" : nextLabel(duty.next_at)}
+                      </small>
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
         </div>
@@ -99,8 +105,28 @@ function personName(people: { id: string; name: string }[], id: string | null) {
   return people.find((person) => person.id === id)?.name ?? "已离开";
 }
 
+function scheduleParts(duty: { every_ms: number; at_minutes?: number | null }) {
+  if (typeof duty.at_minutes === "number") {
+    const hour = Math.floor(duty.at_minutes / 60);
+    const minute = duty.at_minutes % 60;
+    return { kicker: "每天", time: `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}` };
+  }
+  const minutes = Math.round(duty.every_ms / 60_000);
+  if (minutes % 1440 === 0) return { kicker: "每", time: `${minutes / 1440}天` };
+  if (minutes % 60 === 0) return { kicker: "每", time: `${minutes / 60}小时` };
+  return { kicker: "每", time: `${minutes}分钟` };
+}
+
 function nextLabel(nextAt: number) {
-  return `下次 ${new Date(nextAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
+  const when = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: DUTY_ZONE,
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(nextAt);
+  return `下次 ${when}`;
 }
 
 function faceClock(now: number) {
