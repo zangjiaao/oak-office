@@ -7,6 +7,7 @@ import { dismissPerson, forgetMemory, hirePerson, updateDepartment, updatePerson
 import { staffFull, type Department, type DepartmentDraft } from "./department";
 import { Colleagues } from "./Colleagues";
 import { Dialog } from "./Dialog";
+import { PencilIcon, PlusIcon } from "./icons";
 import { cancelDuty, dutyWhen, listDuties, type Duty } from "../work/duty";
 import {
   GENDER_LABEL,
@@ -299,10 +300,10 @@ export function RosterPanel({
         {floorDraft || department ? (
           <section className="roster-section">
             <header>
-              <h3>这一层</h3>
+              <h3>部门</h3>
               {department && !floorDraft ? (
-                <button type="button" onClick={editFloor}>
-                  编辑
+                <button type="button" className="icon" aria-label="编辑" onClick={editFloor}>
+                  <PencilIcon />
                 </button>
               ) : null}
             </header>
@@ -314,8 +315,8 @@ export function RosterPanel({
           <section className="roster-section">
             <header>
               <h3>员工</h3>
-              <button type="button" onClick={startHire} disabled={people === null || !roomForHire}>
-                入职
+              <button type="button" className="icon" aria-label="入职" onClick={startHire} disabled={people === null || !roomForHire}>
+                <PlusIcon />
               </button>
             </header>
             {people === null && !loadError ? <p className="empty">在读档案。</p> : null}

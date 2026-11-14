@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { currentSession, listColleagues, removeColleague, saveColleague, type Colleague, type Session } from "./colleague";
 import { Dialog } from "./Dialog";
+import { CloseIcon, PlusIcon } from "./icons";
 
 export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin: () => void }) {
   const [rows, setRows] = useState<Colleague[] | null>(null);
@@ -82,8 +83,8 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
     <section className="roster-section colleagues">
       <header>
         <h3>同事</h3>
-        <button type="button" onClick={beginCreate}>
-          记下
+        <button type="button" className="icon" aria-label="记下" onClick={beginCreate}>
+          <PlusIcon />
         </button>
       </header>
       <p className="hint">
@@ -102,8 +103,8 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
                 {row.name}
                 <em>{row.email}</em>
               </button>
-              <button type="button" onClick={() => void drop(row.email)} disabled={saving}>
-                去掉
+              <button type="button" className="icon" aria-label="去掉" onClick={() => void drop(row.email)} disabled={saving}>
+                <CloseIcon />
               </button>
             </li>
           ))}
