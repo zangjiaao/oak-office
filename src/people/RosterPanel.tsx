@@ -431,7 +431,7 @@ export function RosterPanel({
                 ))}
               </div>
               <div className="field">
-                <ZoneTitle note="想过的内容不进聊天。开着的时候，办公室里显示在想。">思考</ZoneTitle>
+                <span>思考</span>
                 <div className="choices">
                   {THINKING_FOR[form.model].map((level) => (
                     <button
