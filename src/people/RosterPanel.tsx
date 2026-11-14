@@ -313,14 +313,14 @@ export function RosterPanel({
         {floorDraft ? null : (
           <section className="roster-section">
             <header>
-              <h3>人</h3>
+              <h3>员工</h3>
               <button type="button" onClick={startHire} disabled={people === null || !roomForHire}>
                 入职
               </button>
             </header>
             {people === null && !loadError ? <p className="empty">在读档案。</p> : null}
             {people && people.length === 0 ? (
-              <p className="empty">还没有人。入职只留下档案，主管派活时才会进办公室。</p>
+              <p className="empty">还没有员工。入职只留下档案，主管派活时才会进办公室。</p>
             ) : null}
             {people && people.length > 0 ? (
               <ul className="people">
@@ -425,7 +425,7 @@ export function RosterPanel({
                   </button>
                 ))}
               </div>
-              <p className="hint">每个人可以用自己的模型。</p>
+              <p className="hint">每个员工可以用自己的模型。</p>
             </div>
             <div className="field">
               <span>思考</span>

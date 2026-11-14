@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode, type SyntheticEvent } from "react";
+import { createPortal } from "react-dom";
 
 export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -17,7 +18,7 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
     onClose();
   }
 
-  return (
+  return createPortal(
     <dialog
       ref={ref}
       className="sheet-dialog"
@@ -28,6 +29,7 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
       }}
     >
       {children}
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }
