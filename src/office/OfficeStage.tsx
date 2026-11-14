@@ -166,7 +166,7 @@ export function OfficeStage({
     <div className={screen || board || clockOpen || rules ? "stage into" : "stage"} ref={wrapRef}>
       <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard || onClock || onRules ? "pick" : ""} />
       {screen && onCloseScreen ? (
-        <ScreenDesk title={screen.title} personId={screen.personId} onClose={onCloseScreen} box={box} />
+        <ScreenDesk title={screen.title} personId={screen.personId} onClose={onCloseScreen} box={paddedOffice(box)} />
       ) : null}
       {board && onCloseBoard && departmentId ? (
         <BoardDesk departmentId={departmentId} people={people} box={boardBox(box)} face={boardFace(look)} onClose={onCloseBoard} />
@@ -186,21 +186,31 @@ function officeBox(width: number, height: number, room: { w: number; h: number }
   return { left: ox, top: oy, width: room.w * scale, height: room.h * scale };
 }
 
+function paddedOffice(office: { left: number; top: number; width: number; height: number }) {
+  const width = Math.round(office.width * 0.94);
+  const height = Math.round(office.height * 0.86);
+  return {
+    left: Math.round(office.left + (office.width - width) / 2),
+    top: Math.round(office.top + (office.height - height) / 2),
+    width,
+    height,
+  };
+}
+
 function boardBox(office: { left: number; top: number; width: number; height: number }) {
+  const frame = paddedOffice(office);
   const aspect = 52 / 36;
-  const maxW = office.width * 0.94;
-  const maxH = office.height * 0.86;
-  let width = maxW;
+  let width = frame.width;
   let height = width / aspect;
-  if (height > maxH) {
-    height = maxH;
+  if (height > frame.height) {
+    height = frame.height;
     width = height * aspect;
   }
   width = Math.round(width);
   height = Math.round(height);
   return {
-    left: Math.round(office.left + (office.width - width) / 2),
-    top: Math.round(office.top + (office.height - height) / 2),
+    left: Math.round(frame.left + (frame.width - width) / 2),
+    top: Math.round(frame.top + (frame.height - height) / 2),
     width,
     height,
   };

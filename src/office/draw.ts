@@ -166,8 +166,22 @@ function drawPerson(
   }
 }
 
+let scratch: HTMLCanvasElement | null = null;
+
+function roomScratch(pixel: number, room: { w: number; h: number }) {
+  const width = Math.ceil(room.w * pixel);
+  const height = Math.ceil(room.h * pixel);
+  if (!scratch) scratch = document.createElement("canvas");
+  if (scratch.width !== width || scratch.height !== height) {
+    scratch.width = width;
+    scratch.height = height;
+  }
+  return scratch;
+}
+
 export function roomTransform(width: number, height: number, room = ROOM) {
-  const scale = Math.max(1, Math.floor(Math.min(width / room.w, height / room.h)));
+  if (width < 1 || height < 1) return { scale: 1, ox: 0, oy: 0 };
+  const scale = Math.min(width / room.w, height / room.h);
   const ox = Math.floor((width - room.w * scale) / 2);
   const oy = Math.floor((height - room.h * scale) / 2);
   return { scale, ox, oy };
@@ -403,18 +417,22 @@ export function drawOffice(
   ctx.fillStyle = "#1a1714";
   ctx.fillRect(0, 0, width, height);
   const { scale, ox, oy } = roomTransform(width, height, room);
-  ctx.save();
-  ctx.translate(ox, oy);
-  ctx.scale(scale, scale);
-  ctx.imageSmoothingEnabled = false;
-  drawRoom(ctx, frame, room, look, now);
+  const pixel = Math.max(1, Math.round(scale));
+  const buffer = roomScratch(pixel, room);
+  const roomCtx = buffer.getContext("2d");
+  if (!roomCtx) return;
+  roomCtx.setTransform(1, 0, 0, 1, 0, 0);
+  roomCtx.clearRect(0, 0, buffer.width, buffer.height);
+  roomCtx.setTransform(pixel, 0, 0, pixel, 0, 0);
+  roomCtx.imageSmoothingEnabled = false;
+  drawRoom(roomCtx, frame, room, look, now);
 
   const layers: { y: number; draw: () => void }[] = desks.map((desk) => ({
     y: desk.y,
     draw: () => {
       const owner = occupant(actors, desk);
       drawDesk(
-        ctx,
+        roomCtx,
         desk.x,
         desk.y - 8,
         screenFor(owner?.pose ?? "idle", Boolean(owner), owner?.label ?? ""),
@@ -424,12 +442,13 @@ export function drawOffice(
       );
     },
   }));
-  for (const pet of petsAt(frame, room.h, pets)) layers.push({ y: pet.y, draw: () => drawPet(ctx, pet) });
-  for (const actor of actors) layers.push({ y: actor.y, draw: () => drawPerson(ctx, actor, frame) });
+  for (const pet of petsAt(frame, room.h, pets)) layers.push({ y: pet.y, draw: () => drawPet(roomCtx, pet) });
+  for (const actor of actors) layers.push({ y: actor.y, draw: () => drawPerson(roomCtx, actor, frame) });
   layers.sort((a, b) => a.y - b.y);
   for (const layer of layers) layer.draw();
 
-  ctx.restore();
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(buffer, ox, oy, room.w * scale, room.h * scale);
 
   ctx.textAlign = "center";
   ctx.textBaseline = "bottom";
