@@ -7,7 +7,7 @@ import { dismissPerson, forgetMemory, hirePerson, updateDepartment, updatePerson
 import { staffFull, type Department, type DepartmentDraft } from "./department";
 import { Colleagues } from "./Colleagues";
 import { Dialog } from "./Dialog";
-import { PencilIcon, PlusIcon } from "./icons";
+import { CloseIcon, PencilIcon, PlusIcon } from "./icons";
 import { cancelDuty, dutyWhen, listDuties, type Duty } from "../work/duty";
 import {
   GENDER_LABEL,
@@ -376,13 +376,13 @@ export function RosterPanel({
           <form className="sheet-form" onSubmit={save}>
             <header>
               <strong>{form.kind === "create" ? "入职" : form.name.trim() || "档案"}</strong>
-              <button type="button" className="close" onClick={closeForm} disabled={saving}>
-                取消
+              <button type="button" className="close" aria-label="关闭" onClick={closeForm} disabled={saving}>
+                <CloseIcon />
               </button>
             </header>
             <div className="body file zoned">
             <section className="zone">
-              <h4>身份</h4>
+              <ZoneTitle>身份</ZoneTitle>
               <label>
                 姓名
                 <input
@@ -411,30 +411,27 @@ export function RosterPanel({
               </div>
             </section>
             <section className="zone">
-              <h4>模型</h4>
-              <div className="field">
-                <div className="choices">
-                  {MODELS.map((model) => (
-                    <button
-                      key={model}
-                      type="button"
-                      className={form.model === model ? "on" : ""}
-                      onClick={() =>
-                        setForm({
-                          ...form,
-                          model,
-                          thinking: THINKING_FOR[model].includes(form.thinking) ? form.thinking : "high",
-                        })
-                      }
-                    >
-                      {MODEL_LABEL[model]}
-                    </button>
-                  ))}
-                </div>
-                <p className="hint">每个员工可以用自己的模型。</p>
+              <ZoneTitle note="每个员工可以用自己的模型。">模型</ZoneTitle>
+              <div className="choices">
+                {MODELS.map((model) => (
+                  <button
+                    key={model}
+                    type="button"
+                    className={form.model === model ? "on" : ""}
+                    onClick={() =>
+                      setForm({
+                        ...form,
+                        model,
+                        thinking: THINKING_FOR[model].includes(form.thinking) ? form.thinking : "high",
+                      })
+                    }
+                  >
+                    {MODEL_LABEL[model]}
+                  </button>
+                ))}
               </div>
               <div className="field">
-                <span>思考</span>
+                <ZoneTitle note="想过的内容不进聊天。开着的时候，办公室里显示在想。">思考</ZoneTitle>
                 <div className="choices">
                   {THINKING_FOR[form.model].map((level) => (
                     <button
@@ -447,11 +444,10 @@ export function RosterPanel({
                     </button>
                   ))}
                 </div>
-                <p className="hint">想过的内容不进聊天。开着的时候，办公室里显示在想。</p>
               </div>
             </section>
             <section className="zone">
-              <h4>形象</h4>
+              <ZoneTitle>形象</ZoneTitle>
               <div className="field">
                 <span>性别</span>
                 <div className="choices">
@@ -518,7 +514,7 @@ export function RosterPanel({
               </div>
             </section>
             <section className="zone">
-              <h4>设定</h4>
+              <ZoneTitle>设定</ZoneTitle>
               <label>
                 一句话
                 <input
@@ -547,9 +543,9 @@ export function RosterPanel({
             </section>
             {form.kind === "edit" ? (
               <section className="zone">
-                <h4>定时</h4>
+                <ZoneTitle note="跟主管说周期要做的事，会排在这里。">定时</ZoneTitle>
                 {dutiesHere.length === 0 ? (
-                  <p className="hint">还没有定时。跟主管说周期要做的事，会排在这里。</p>
+                  <p className="hint">还没有定时。</p>
                 ) : (
                   <ul className="memories">
                     {dutiesHere.map((duty) => (
@@ -568,9 +564,9 @@ export function RosterPanel({
             ) : null}
             {form.kind === "edit" ? (
               <section className="zone">
-                <h4>记忆</h4>
+                <ZoneTitle note="做完的事，和记住的事实，会出现在这里。">记忆</ZoneTitle>
                 {memories.length === 0 ? (
-                  <p className="hint">还没有记忆。做完的事，和记住的事实，会出现在这里。</p>
+                  <p className="hint">还没有记忆。</p>
                 ) : (
                   <ul className="memories">
                     {memories.map((note) => (
@@ -611,6 +607,15 @@ export function RosterPanel({
         ) : null}
       </div>
     </aside>
+  );
+}
+
+function ZoneTitle({ children, note }: { children: string; note?: string }) {
+  return (
+    <div className="zone-title">
+      <h4>{children}</h4>
+      {note ? <p>{note}</p> : null}
+    </div>
   );
 }
 
@@ -798,13 +803,13 @@ function DepartmentForm({
       <form className="sheet-form" onSubmit={(event) => void save(event)}>
         <header>
           <strong>{title}</strong>
-          <button type="button" className="close" onClick={onClose} disabled={saving}>
-            取消
+          <button type="button" className="close" aria-label="关闭" onClick={onClose} disabled={saving}>
+            <CloseIcon />
           </button>
         </header>
         <div className="body file zoned">
           <section className="zone">
-            <h4>基本</h4>
+            <ZoneTitle note="工位是这一层最多能有几位员工，主管不占工位。">基本</ZoneTitle>
             <div className="floor-fields">
               <label>
                 楼层
@@ -825,10 +830,9 @@ function DepartmentForm({
                 <input value={seats} onChange={(event) => setSeats(event.target.value)} inputMode="numeric" />
               </label>
             </div>
-            <p className="hint">工位是这一层最多能有几位员工，主管不占工位。</p>
           </section>
           <section className="zone">
-            <h4>楼</h4>
+            <ZoneTitle>楼</ZoneTitle>
             <div className="presets">
               {ROOM_PRESETS.map((preset) => (
                 <button
@@ -862,7 +866,7 @@ function DepartmentForm({
             </div>
           </section>
           <section className="zone">
-            <h4>宠物</h4>
+            <ZoneTitle note="点一下放到这一层，再点一下拿掉。没选的楼层没有宠物。">宠物</ZoneTitle>
             <div className="choices">
               {PET_CHOICES.map((pet) => (
                 <button
@@ -879,10 +883,9 @@ function DepartmentForm({
                 </button>
               ))}
             </div>
-            <p className="hint">点一下放到这一层，再点一下拿掉。没选的楼层没有宠物。</p>
           </section>
           <section className="zone">
-            <h4>制度</h4>
+            <ZoneTitle note="主管和这一层的员工都会读到。">制度</ZoneTitle>
             <label>
               规章制度
               <textarea
@@ -892,7 +895,6 @@ function DepartmentForm({
                 maxLength={8000}
               />
             </label>
-            <p className="hint">主管和这一层的员工都会读到。</p>
           </section>
           {error ? <p className="file-error">{error}</p> : null}
           {department ? (

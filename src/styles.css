@@ -1469,17 +1469,52 @@ dialog.sheet-dialog {
   color: #241c16;
 }
 
+.sheet-form .zone-title {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.sheet-form .zone-title h4 { flex: none; }
+
+.sheet-form .zone-title p {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  color: #7a6a56;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
 .sheet-form .zone > .hint { margin-top: 0; }
 
 .sheet-form input[readonly] { background: #efe6d4; }
 
 .sheet-form header button.close {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
   border: 0;
+  border-radius: 4px;
   background: transparent;
-  color: inherit;
-  padding: 4px 8px;
+  color: #6b4428;
   cursor: pointer;
 }
+
+.sheet-form header button.close svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sheet-form header button.close:hover { background: rgba(36, 28, 22, 0.06); }
 
 .sheet-form footer {
   display: flex;

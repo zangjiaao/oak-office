@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { currentSession, listColleagues, removeColleague, saveColleague, type Colleague, type Session } from "./colleague";
 import { Dialog } from "./Dialog";
-import { PlusIcon } from "./icons";
+import { CloseIcon, PlusIcon } from "./icons";
 
 export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin: () => void }) {
   const [rows, setRows] = useState<Colleague[] | null>(null);
@@ -132,8 +132,8 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
           <form className="sheet-form" onSubmit={(event) => void save(event)}>
             <header>
               <strong>{draft.fresh ? "记下名字" : "改名字"}</strong>
-              <button type="button" className="close" onClick={() => setDraft(null)} disabled={saving}>
-                取消
+              <button type="button" className="close" aria-label="关闭" onClick={() => setDraft(null)} disabled={saving}>
+                <CloseIcon />
               </button>
             </header>
             <div className="body file">
