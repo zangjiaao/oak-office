@@ -15,18 +15,13 @@ export function ClockDesk({
   const [duties, setDuties] = useState<Duty[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [clock, setClock] = useState(() => faceClock(Date.now()));
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
-    const timer = setInterval(() => setClock(faceClock(Date.now())), 1000);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      clearInterval(timer);
-    };
+    return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
   useEffect(() => {
@@ -57,7 +52,7 @@ export function ClockDesk({
       <section className="slate duties" role="dialog" aria-label="定时" style={box as CSSProperties}>
         <header>
           <strong>定时</strong>
-          <time>{clock}</time>
+          <DigitalClock />
           <button type="button" aria-label="关上" onClick={onClose}>
             <CloseIcon />
           </button>
@@ -90,6 +85,54 @@ export function ClockDesk({
       </section>
     </div>
   );
+}
+
+function DigitalClock() {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    let timer = 0;
+    const tick = () => {
+      const next = Date.now();
+      setNow(next);
+      timer = window.setTimeout(tick, 1000 - (next % 1000));
+    };
+    timer = window.setTimeout(tick, 1000 - (Date.now() % 1000));
+    return () => window.clearTimeout(timer);
+  }, []);
+  const face = readFace(now);
+  return (
+    <time className="face" dateTime={face.stamp}>
+      <small>
+        {face.date} {face.weekday}
+      </small>
+      <b>{face.time}</b>
+    </time>
+  );
+}
+
+function readFace(now: number) {
+  const bag = Object.fromEntries(
+    new Intl.DateTimeFormat("zh-CN", {
+      timeZone: DUTY_ZONE,
+      hourCycle: "h23",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric",
+      weekday: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    })
+      .formatToParts(now)
+      .map((part) => [part.type, part.value]),
+  );
+  const hour = bag.hour === "24" ? "00" : bag.hour;
+  return {
+    date: `${bag.year}年${bag.month}月${bag.day}日`,
+    weekday: bag.weekday,
+    time: `${hour}:${bag.minute}:${bag.second}`,
+    stamp: `${bag.year}-${bag.month.padStart(2, "0")}-${bag.day.padStart(2, "0")}T${hour}:${bag.minute}:${bag.second}`,
+  };
 }
 
 function CloseIcon() {
@@ -129,12 +172,3 @@ function nextLabel(nextAt: number) {
   return `下次 ${when}`;
 }
 
-function faceClock(now: number) {
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: DUTY_ZONE,
-    hourCycle: "h23",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).format(now);
-}

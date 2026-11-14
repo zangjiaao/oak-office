@@ -560,6 +560,30 @@ button, input, textarea {
 
 .slate header button { margin-left: auto; }
 
+.slate.duties header .face {
+  margin-left: auto;
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding: 6px 12px 8px;
+  border-radius: 8px;
+  background: #1a1714;
+  color: #f3e2a4;
+  font-size: 13px;
+  line-height: 1.2;
+  opacity: 1;
+}
+
+.slate.duties header .face b {
+  font-family: ui-monospace, "SFMono-Regular", monospace;
+  font-size: 28px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+}
+
+.slate.duties header button { margin-left: 12px; }
+
 .slate header svg,
 .slate-actions svg {
   width: 15px;
