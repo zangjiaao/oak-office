@@ -73,6 +73,7 @@ export function App() {
   const [floor, setFloor] = useState<Record<string, FloorMark>>({});
   const [screen, setScreen] = useState<{ x: number; y: number; title: string; personId: string | null } | null>(null);
   const [boardOpen, setBoardOpen] = useState(false);
+  const [clockOpen, setClockOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [floorDraft, setFloorDraft] = useState<DepartmentDraft | null>(null);
   const [floorLive, setFloorLive] = useState<DepartmentDraft | null>(null);
@@ -178,6 +179,7 @@ export function App() {
   async function choose(id: string) {
     setScreen(null);
     setBoardOpen(false);
+    setClockOpen(false);
     setRulesOpen(false);
     dropDraft();
     localStorage.setItem(DEPARTMENT_KEY, id);
@@ -331,6 +333,7 @@ export function App() {
               onClick={() => {
                 setScreen(null);
                 setBoardOpen(false);
+                setClockOpen(false);
                 setRulesOpen(false);
                 dropDraft();
                 setMode("work");
@@ -344,6 +347,7 @@ export function App() {
               onClick={() => {
                 setScreen(null);
                 setBoardOpen(false);
+                setClockOpen(false);
                 setRulesOpen(false);
                 setMode("roster");
               }}
@@ -356,6 +360,7 @@ export function App() {
               onClick={() => {
                 setScreen(null);
                 setBoardOpen(false);
+                setClockOpen(false);
                 setRulesOpen(false);
                 dropDraft();
                 setMode("rehearsal");
@@ -407,6 +412,7 @@ export function App() {
           onPick={mode === "roster" ? pick : undefined}
           onScreen={(desk, title, personId) => {
             setBoardOpen(false);
+            setClockOpen(false);
             setRulesOpen(false);
             setScreen({ x: desk.x, y: desk.y, title, personId });
           }}
@@ -414,14 +420,24 @@ export function App() {
           screen={screen}
           onBoard={mode !== "rehearsal" && !floorDraft && department ? () => {
             setScreen(null);
+            setClockOpen(false);
             setRulesOpen(false);
             setBoardOpen(true);
           } : undefined}
           onCloseBoard={() => setBoardOpen(false)}
           board={boardOpen && !floorDraft && mode !== "rehearsal"}
+          onClock={mode !== "rehearsal" && !floorDraft && department ? () => {
+            setScreen(null);
+            setBoardOpen(false);
+            setRulesOpen(false);
+            setClockOpen(true);
+          } : undefined}
+          onCloseClock={() => setClockOpen(false)}
+          clockOpen={clockOpen && !floorDraft && mode !== "rehearsal"}
           onRules={mode !== "rehearsal" && !floorDraft && department ? () => {
             setScreen(null);
             setBoardOpen(false);
+            setClockOpen(false);
             setRulesOpen(true);
           } : undefined}
           onCloseRules={() => setRulesOpen(false)}

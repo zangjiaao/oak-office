@@ -523,10 +523,20 @@ button, input, textarea {
   animation: computer-in 380ms ease both;
 }
 
+.slate.duties {
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #efe6d4;
+  color: #1a1714;
+}
+
 .slate header {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.slate header time {
+  font-variant-numeric: tabular-nums;
 }
 
 .slate header button,

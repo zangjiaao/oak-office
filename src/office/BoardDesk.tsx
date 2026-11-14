@@ -1,5 +1,4 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { dutyWhen, listDuties, type Duty } from "../work/duty";
 
 type Task = {
   id: string;
@@ -24,7 +23,6 @@ export function BoardDesk({
   face: string;
   onClose: () => void;
 }) {
-  const [duties, setDuties] = useState<Duty[] | null>(null);
   const [tasks, setTasks] = useState<Task[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [title, setTitle] = useState("");
@@ -32,7 +30,6 @@ export function BoardDesk({
   const [editing, setEditing] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftOwner, setDraftOwner] = useState("");
-  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -45,12 +42,10 @@ export function BoardDesk({
   useEffect(() => {
     let gone = false;
     const load = () => {
-      void Promise.all([listDuties(departmentId), listTasks(departmentId)])
-        .then(([nextDuties, nextTasks]) => {
+      void listTasks(departmentId)
+        .then((nextTasks) => {
           if (gone) return;
-          setDuties(nextDuties);
           setTasks(nextTasks);
-          setNow(Date.now());
           setError(null);
         })
         .catch((caught) => {
@@ -127,21 +122,6 @@ export function BoardDesk({
         </header>
         <div className="slate-body">
           {error ? <p className="quiet">{error}</p> : null}
-          {duties && duties.length > 0 ? (
-            <ul>
-              {duties.map((duty, index) => (
-                <li key={duty.id} className={`pin tone-${index % 3}`}>
-                  <span>
-                    <small>
-                      {personName(people, duty.person_id)} · {dutyWhen(duty)}
-                    </small>
-                    <b>{duty.task}</b>
-                  </span>
-                  <em>{duty.next_at <= now ? "在做" : nextLabel(duty.next_at)}</em>
-                </li>
-              ))}
-            </ul>
-          ) : null}
           {rows.length > 0 ? (
             <ul>
               {rows.map((task, index) => (
@@ -269,10 +249,6 @@ function stateName(state: Task["state"]) {
   if (state === "doing") return "在做";
   if (state === "done") return "划掉";
   return "还没做";
-}
-
-function nextLabel(nextAt: number) {
-  return `下次 ${new Date(nextAt).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}`;
 }
 
 async function listTasks(departmentId: string) {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { actorAt, boardAt, boardFace, drawOffice, monitorAt, roomTransform, rulesAt } from "./draw";
+import { actorAt, boardAt, boardFace, clockAt, drawOffice, monitorAt, roomTransform, rulesAt } from "./draw";
 import { BoardDesk } from "./BoardDesk";
+import { ClockDesk } from "./ClockDesk";
 import { RulesDesk } from "./RulesDesk";
 import { ScreenDesk } from "./ScreenDesk";
 import { type PetId } from "./pets";
@@ -23,6 +24,9 @@ export function OfficeStage({
   onBoard,
   onCloseBoard,
   board = false,
+  onClock,
+  onCloseClock,
+  clockOpen = false,
   onRules,
   onCloseRules,
   rules = false,
@@ -44,6 +48,9 @@ export function OfficeStage({
   onBoard?: () => void;
   onCloseBoard?: () => void;
   board?: boolean;
+  onClock?: () => void;
+  onCloseClock?: () => void;
+  clockOpen?: boolean;
   onRules?: () => void;
   onCloseRules?: () => void;
   rules?: boolean;
@@ -58,16 +65,19 @@ export function OfficeStage({
   const onPickRef = useRef(onPick);
   const onScreenRef = useRef(onScreen);
   const onBoardRef = useRef(onBoard);
+  const onClockRef = useRef(onClock);
   const onRulesRef = useRef(onRules);
   const desksRef = useRef(desks);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [ambient, setAmbient] = useState(0);
+  const [wall, setWall] = useState(() => Date.now());
   const live = clock === null;
 
   actorsRef.current = actors;
   onPickRef.current = onPick;
   onScreenRef.current = onScreen;
   onBoardRef.current = onBoard;
+  onClockRef.current = onClock;
   onRulesRef.current = onRules;
   desksRef.current = desks;
 
@@ -80,6 +90,11 @@ export function OfficeStage({
     });
     observer.observe(wrap);
     return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => setWall(Date.now()), 1000);
+    return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -108,11 +123,11 @@ export function OfficeStage({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, look, pets);
-  }, [size, actors, drawn, room, desks, look, pets]);
+    drawOffice(ctx, size.w, size.h, actors, drawn, room, desks, look, pets, Date.now());
+  }, [size, actors, drawn, room, desks, look, pets, wall]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
-    if (screen || board || rules) return;
+    if (screen || board || clockOpen || rules) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
@@ -121,6 +136,10 @@ export function OfficeStage({
     const y = (event.clientY - rect.top - oy) / scale;
     if (rulesAt(x, y) && onRulesRef.current) {
       onRulesRef.current();
+      return;
+    }
+    if (clockAt(x, y) && onClockRef.current) {
+      onClockRef.current();
       return;
     }
     if (boardAt(x, y, look.style) && onBoardRef.current) {
@@ -144,13 +163,16 @@ export function OfficeStage({
   const box = officeBox(size.w, size.h, room);
 
   return (
-    <div className={screen || board || rules ? "stage into" : "stage"} ref={wrapRef}>
-      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard || onRules ? "pick" : ""} />
+    <div className={screen || board || clockOpen || rules ? "stage into" : "stage"} ref={wrapRef}>
+      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard || onClock || onRules ? "pick" : ""} />
       {screen && onCloseScreen ? (
         <ScreenDesk title={screen.title} personId={screen.personId} onClose={onCloseScreen} box={box} />
       ) : null}
       {board && onCloseBoard && departmentId ? (
         <BoardDesk departmentId={departmentId} people={people} box={boardBox(box)} face={boardFace(look)} onClose={onCloseBoard} />
+      ) : null}
+      {clockOpen && onCloseClock && departmentId ? (
+        <ClockDesk departmentId={departmentId} people={people} box={boardBox(box)} onClose={onCloseClock} />
       ) : null}
       {rules && onCloseRules && onSaveRules ? (
         <RulesDesk text={rulesText} box={boardBox(box)} face={look.wood} onClose={onCloseRules} onSave={onSaveRules} />
