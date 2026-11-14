@@ -1263,10 +1263,24 @@ button, input, textarea {
 
 .memories button:disabled { opacity: 0.55; cursor: default; }
 
+.roster-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .roster-section > header {
   padding: 0;
   border: 0;
   gap: 12px;
+}
+
+.roster-section > .hint,
+.roster-section > .empty,
+.roster-section > .people,
+.roster-section > .roster-facts,
+.roster-section > .memories {
+  margin-top: 0;
 }
 
 .roster-section h3 {
@@ -1316,7 +1330,7 @@ button, input, textarea {
   -webkit-box-orient: vertical;
 }
 
-.colleagues .memories { margin-top: 10px; }
+.colleagues .memories { margin-top: 0; }
 .colleagues .memories em { display: block; color: #7a6a56; font-style: normal; font-size: 12px; }
 .colleagues .memories button.who {
   flex: 1;
@@ -1438,6 +1452,25 @@ dialog.sheet-dialog {
   border-color: #a8322a;
   color: #a8322a;
 }
+
+.leave-row {
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid #e0d2b8;
+}
+
+.leave-row .hint { margin-top: 0; }
+
+.leave-row button {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #a8322a;
+  cursor: pointer;
+}
+
+.leave-row button:disabled { opacity: 0.55; cursor: default; }
 
 .sheet-form footer button:disabled,
 .sheet-form header button:disabled { opacity: 0.55; cursor: default; }

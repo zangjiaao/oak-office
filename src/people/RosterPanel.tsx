@@ -572,18 +572,23 @@ export function RosterPanel({
                 )}
               </div>
             ) : null}
-            {leaving ? <p className="hint">确认后，这份档案去掉，工位留着。</p> : null}
             {error ? <p className="file-error">{error}</p> : null}
+            {form.kind === "edit" ? (
+              <div className="leave-row">
+                {leaving ? <p className="hint">确认后，这份档案去掉，工位留着。</p> : null}
+                <button type="button" onClick={() => void leave()} disabled={saving}>
+                  {leaving ? "确认离职" : "离职"}
+                </button>
+              </div>
+            ) : null}
             </div>
             <footer>
+              <button type="button" onClick={closeForm} disabled={saving}>
+                取消
+              </button>
               <button type="submit" className="save" disabled={saving}>
                 {form.kind === "create" ? "入职" : "保存"}
               </button>
-              {form.kind === "edit" ? (
-                <button type="button" className="leave" onClick={() => void leave()} disabled={saving}>
-                  {leaving ? "确认离职" : "离职"}
-                </button>
-              ) : null}
             </footer>
           </form>
           </Dialog>
