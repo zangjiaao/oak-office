@@ -16,6 +16,11 @@ export async function saveWater(departmentId: string, everyMinutes: number): Pro
   return (body as { reminder: WaterReminder }).reminder;
 }
 
+export async function drinkWater(): Promise<WaterReminder> {
+  const body = await send("/api/water", { method: "POST" });
+  return (body as { reminder: WaterReminder }).reminder;
+}
+
 export async function clearWater(): Promise<void> {
   let response: Response;
   try {
@@ -26,13 +31,13 @@ export async function clearWater(): Promise<void> {
   if (!response.ok) throw new Error(await errorMessage(response));
 }
 
-async function send(path: string, options?: { method: "PUT"; departmentId: string; everyMinutes: number }) {
+async function send(path: string, options?: { method: "PUT" | "POST"; departmentId?: string; everyMinutes?: number }) {
   let response: Response;
   try {
     response = await fetch(path, {
       method: options?.method ?? "GET",
-      headers: options ? { "content-type": "application/json" } : undefined,
-      body: options ? JSON.stringify({ departmentId: options.departmentId, everyMinutes: options.everyMinutes }) : undefined,
+      headers: options?.departmentId ? { "content-type": "application/json" } : undefined,
+      body: options?.departmentId ? JSON.stringify({ departmentId: options.departmentId, everyMinutes: options.everyMinutes }) : undefined,
     });
   } catch {
     throw new Error("饮水提醒没连上。");

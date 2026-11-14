@@ -2,7 +2,7 @@ import { createBoardTask, editBoardTask, listBoard, removeBoardTask } from "./bo
 import { callerEmail, listColleagues, readColleagueName, readEmail, removeColleague, saveColleague } from "./colleague";
 import { createDepartment, listDepartments, readDepartment, removeDepartment, updateDepartment } from "./department";
 import { cancelDuty, listDuties, runDue } from "./duty";
-import { WATER_YOU, clearWater, pourWater, readWater, saveWater, type WaterReminder } from "./water";
+import { WATER_YOU, clearWater, drinkWater, readWater, saveWater, type WaterReminder } from "./water";
 import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
 import { crewUntil, releaseCrew } from "./crew";
@@ -61,7 +61,6 @@ export default {
         const departmentId = url.searchParams.get("department") ?? "";
         if (request.method === "GET") {
           if (!UUID.test(departmentId)) return json({ error: "先选一层。" }, 400);
-          await pourWater(env, departmentId);
           return json(await getWork(env.DB, departmentId));
         }
         if (request.method === "POST") {
@@ -162,9 +161,8 @@ export default {
           return json({ error: "口令不对。" }, 401);
         }
         const result = await runDue(env);
-        const water = await pourWater(env);
         holdCrew(ctx);
-        return json({ ...result, water: water.poured });
+        return json(result);
       }
       const dutyMatch = /^\/api\/duties\/([^/]+)$/.exec(url.pathname);
       if (dutyMatch) {
@@ -179,11 +177,16 @@ export default {
       if (url.pathname === "/api/water") {
         const email = callerEmail(request) ?? WATER_YOU;
         if (request.method === "GET") return json({ reminder: await readWater(env.DB, email) });
+        if (request.method === "POST") {
+          const drank = await drinkWater(env.DB, email);
+          if (!drank.ok) return json({ error: drank.error }, drank.status);
+          return json({ reminder: drank.reminder });
+        }
         if (request.method === "DELETE") {
           await clearWater(env.DB, email);
           return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
         }
-        if (request.method !== "PUT") return new Response(null, { status: 405, headers: { allow: "GET, PUT, DELETE" } });
+        if (request.method !== "PUT") return new Response(null, { status: 405, headers: { allow: "GET, POST, PUT, DELETE" } });
         const record = await readRecord(request);
         const departmentId = typeof record?.departmentId === "string" ? record.departmentId : "";
         const everyMinutes = typeof record?.everyMinutes === "number" ? record.everyMinutes : Number.NaN;

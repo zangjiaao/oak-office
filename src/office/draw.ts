@@ -49,6 +49,7 @@ function drawRoom(
   look: RoomLook,
   now: number,
   dripping: boolean,
+  cup: { fill: number; due: boolean } | null,
 ) {
   rect(ctx, 0, 0, room.w, 78, look.wall);
   rect(ctx, 0, 0, room.w, 8, shade(look.wall, -20));
@@ -85,24 +86,38 @@ function drawRoom(
 
   rect(ctx, 364, 70, 16, 28, "#d9e4ea");
   rect(ctx, 368, 74, 8, 10, look.trim);
-  rect(ctx, 369, 88, 6, 2, "#7d9098");
-  rect(ctx, 371, 90, 2, 2, "#5c6e76");
   rect(ctx, 360, 96, 24, 4, look.wood);
   rect(ctx, 366, 95, 12, 2, "#8a9aa2");
+  if (cup) drawCup(ctx, cup.fill);
+  rect(ctx, 369, 84, 6, 2, "#7d9098");
+  rect(ctx, 371, 86, 2, 2, "#5c6e76");
   if (dripping) drawDrip(ctx, frame);
+  if (cup?.due) drawThirst(ctx);
+}
+
+function drawCup(ctx: CanvasRenderingContext2D, fill: number) {
+  rect(ctx, 368, 89, 8, 7, "#f7fbfd");
+  rect(ctx, 368, 89, 8, 1, "#d5dee4");
+  const level = fill >= 1 ? 4 : Math.round(Math.min(1, Math.max(0, fill)) * 4);
+  if (level > 0) rect(ctx, 369, 95 - level, 6, level, "#3d8eb8");
+}
+
+function drawThirst(ctx: CanvasRenderingContext2D) {
+  ctx.fillStyle = "#fffaf2";
+  ctx.fillRect(376, 58, 12, 10);
+  ctx.fillStyle = "#1a1714";
+  ctx.font = "8px ui-monospace, monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("!", 382, 66);
 }
 
 function drawDrip(ctx: CanvasRenderingContext2D, frame: number) {
-  const step = Math.floor(frame / 4) % 10;
+  const step = Math.floor(frame / 4) % 8;
   if (step < 4) {
-    rect(ctx, 371, 91, 2, step > 1 ? 2 : 1, "#3d8eb8");
+    rect(ctx, 371, 87, 2, step > 1 ? 2 : 1, "#3d8eb8");
     return;
   }
-  if (step < 7) {
-    rect(ctx, 371, 93, 2, 2, "#3d8eb8");
-    return;
-  }
-  rect(ctx, 369, 95, 6, 1, "#7eb8d4");
+  rect(ctx, 371, 90, 2, 2, "#3d8eb8");
 }
 
 function drawDesk(
@@ -218,6 +233,12 @@ const CLOCK = { x: 214, y: 22, w: 22, h: 22 };
 const RULES = { x: 18, y: 18, w: 46, h: 40 };
 
 const COOLER = { x: 358, y: 66, w: 30, h: 38 };
+
+const CUP = { x: 366, y: 87, w: 12, h: 12 };
+
+export function cupAt(roomX: number, roomY: number) {
+  return roomX >= CUP.x && roomX <= CUP.x + CUP.w && roomY >= CUP.y && roomY <= CUP.y + CUP.h;
+}
 
 export function coolerAt(roomX: number, roomY: number) {
   return (
@@ -448,6 +469,7 @@ export function drawOffice(
   pets: readonly PetId[] = [],
   now = Date.now(),
   dripping = false,
+  cup: { fill: number; due: boolean } | null = null,
 ) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#1a1714";
@@ -461,7 +483,7 @@ export function drawOffice(
   roomCtx.clearRect(0, 0, buffer.width, buffer.height);
   roomCtx.setTransform(pixel, 0, 0, pixel, 0, 0);
   roomCtx.imageSmoothingEnabled = false;
-  drawRoom(roomCtx, frame, room, look, now, dripping);
+  drawRoom(roomCtx, frame, room, look, now, dripping, cup);
 
   const layers: { y: number; draw: () => void }[] = desks.map((desk) => ({
     y: desk.y,
