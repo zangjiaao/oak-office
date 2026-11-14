@@ -348,6 +348,7 @@ export function RosterPanel({
           <Colleagues
             suspended={form !== null || showFloor}
             onBegin={() => {
+              onSelect(null);
               setForm(null);
               setError(null);
               setLeaving(false);

@@ -1,12 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { currentSession, listColleagues, removeColleague, saveColleague, type Colleague, type Session } from "./colleague";
 import { Dialog } from "./Dialog";
-import { CloseIcon, PlusIcon } from "./icons";
+import { PlusIcon } from "./icons";
 
 export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin: () => void }) {
   const [rows, setRows] = useState<Colleague[] | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [draft, setDraft] = useState<{ email: string; name: string; fresh: boolean } | null>(null);
+  const [chosen, setChosen] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -27,17 +29,24 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
   }, []);
 
   useEffect(() => {
-    if (suspended) setDraft(null);
+    if (!suspended) return;
+    setDraft(null);
+    setChosen(null);
+    setRemoving(false);
   }, [suspended]);
 
   function beginCreate() {
     onBegin();
+    setChosen(null);
+    setRemoving(false);
     setDraft({ email: "", name: "", fresh: true });
     setError(null);
   }
 
   function beginEdit(row: Colleague) {
     onBegin();
+    setChosen(row.email);
+    setRemoving(false);
     setDraft({ email: row.email, name: row.name, fresh: false });
     setError(null);
   }
@@ -62,14 +71,23 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
     }
   }
 
-  async function drop(target: string) {
+  async function drop() {
+    if (!draft || draft.fresh || saving) return;
+    if (!removing) {
+      setRemoving(true);
+      setError(null);
+      return;
+    }
+    const target = draft.email;
     setSaving(true);
     setError(null);
     try {
       await removeColleague(target);
       setRows((current) => (current ?? []).filter((row) => row.email !== target));
       setSession((current) => (current?.email === target ? { email: target, name: null } : current));
-      setDraft((current) => (current?.email === target ? null : current));
+      setChosen(null);
+      setDraft(null);
+      setRemoving(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "这位同事没去掉。");
     } finally {
@@ -91,12 +109,9 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
         <ul className="people">
           {rows.map((row) => (
             <li key={row.email}>
-              <button type="button" className="who" onClick={() => beginEdit(row)}>
+              <button type="button" className={chosen === row.email ? "on" : ""} onClick={() => beginEdit(row)}>
                 <b>{row.name}</b>
                 <em>{row.email}</em>
-              </button>
-              <button type="button" className="icon" aria-label="去掉" onClick={() => void drop(row.email)} disabled={saving}>
-                <CloseIcon />
               </button>
             </li>
           ))}
@@ -145,8 +160,19 @@ export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin
                 />
               </label>
               {error ? <p className="file-error">{error}</p> : null}
+              {draft.fresh ? null : (
+                <div className="leave-row">
+                  {removing ? <p className="hint">确认后，这个名字去掉。</p> : null}
+                  <button type="button" onClick={() => void drop()} disabled={saving}>
+                    {removing ? "确认去掉" : "去掉"}
+                  </button>
+                </div>
+              )}
             </div>
             <footer>
+              <button type="button" onClick={() => setDraft(null)} disabled={saving}>
+                取消
+              </button>
               <button type="submit" className="save" disabled={saving || draft.email.trim() === "" || draft.name.trim() === ""}>
                 记下
               </button>
