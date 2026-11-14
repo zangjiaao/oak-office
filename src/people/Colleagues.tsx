@@ -1,11 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { currentSession, listColleagues, removeColleague, saveColleague, type Colleague, type Session } from "./colleague";
+import { Dialog } from "./Dialog";
 
-export function Colleagues() {
+export function Colleagues({ suspended, onBegin }: { suspended: boolean; onBegin: () => void }) {
   const [rows, setRows] = useState<Colleague[] | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
+  const [draft, setDraft] = useState<{ email: string; name: string; fresh: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -25,19 +25,35 @@ export function Colleagues() {
     };
   }, []);
 
+  useEffect(() => {
+    if (suspended) setDraft(null);
+  }, [suspended]);
+
+  function beginCreate() {
+    onBegin();
+    setDraft({ email: "", name: "", fresh: true });
+    setError(null);
+  }
+
+  function beginEdit(row: Colleague) {
+    onBegin();
+    setDraft({ email: row.email, name: row.name, fresh: false });
+    setError(null);
+  }
+
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (!draft) return;
     setSaving(true);
     setError(null);
     try {
-      const saved = await saveColleague(email, name);
+      const saved = await saveColleague(draft.email, draft.name);
       setRows((current) => {
         const rest = (current ?? []).filter((row) => row.email !== saved.email);
         return [...rest, saved].sort((a, b) => a.name.localeCompare(b.name, "zh"));
       });
       setSession((current) => (current?.email === saved.email ? { ...current, name: saved.name } : current));
-      setEmail("");
-      setName("");
+      setDraft(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "这位同事没记下。");
     } finally {
@@ -52,6 +68,7 @@ export function Colleagues() {
       await removeColleague(target);
       setRows((current) => (current ?? []).filter((row) => row.email !== target));
       setSession((current) => (current?.email === target ? { email: target, name: null } : current));
+      setDraft((current) => (current?.email === target ? null : current));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "这位同事没去掉。");
     } finally {
@@ -62,8 +79,13 @@ export function Colleagues() {
   const here = session?.email ? (rows?.find((row) => row.email === session.email)?.name ?? session.name) : null;
 
   return (
-    <section className="colleagues">
-      <h3>同事</h3>
+    <section className="roster-section colleagues">
+      <header>
+        <h3>同事</h3>
+        <button type="button" onClick={beginCreate}>
+          记下
+        </button>
+      </header>
       <p className="hint">
         {session?.email
           ? here
@@ -76,31 +98,62 @@ export function Colleagues() {
         <ul className="memories">
           {rows.map((row) => (
             <li key={row.email}>
-              <p>
+              <button type="button" className="who" onClick={() => beginEdit(row)}>
                 {row.name}
                 <em>{row.email}</em>
-              </p>
+              </button>
               <button type="button" onClick={() => void drop(row.email)} disabled={saving}>
                 去掉
               </button>
             </li>
           ))}
         </ul>
+      ) : rows ? (
+        <p className="empty">还没有记下名字。</p>
       ) : null}
-      <form className="file" onSubmit={(event) => void save(event)}>
-        <label>
-          邮箱
-          <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="off" maxLength={254} />
-        </label>
-        <label>
-          名字
-          <input value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" maxLength={16} />
-        </label>
-        {error ? <p className="file-error">{error}</p> : null}
-        <button type="submit" disabled={saving || email.trim() === "" || name.trim() === ""}>
-          记下
-        </button>
-      </form>
+      {error && !draft ? <p className="file-error">{error}</p> : null}
+      {draft ? (
+        <Dialog title={draft.fresh ? "记下名字" : "改名字"} onClose={() => setDraft(null)}>
+          <form className="sheet-form" onSubmit={(event) => void save(event)}>
+            <header>
+              <strong>{draft.fresh ? "记下名字" : "改名字"}</strong>
+              <button type="button" className="close" onClick={() => setDraft(null)} disabled={saving}>
+                取消
+              </button>
+            </header>
+            <div className="body file">
+              <label>
+                邮箱
+                <input
+                  value={draft.email}
+                  onChange={(event) => setDraft({ ...draft, email: event.target.value })}
+                  type="email"
+                  autoComplete="off"
+                  maxLength={254}
+                  readOnly={!draft.fresh}
+                  autoFocus={draft.fresh}
+                />
+              </label>
+              <label>
+                名字
+                <input
+                  value={draft.name}
+                  onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                  autoComplete="off"
+                  maxLength={16}
+                  autoFocus={!draft.fresh}
+                />
+              </label>
+              {error ? <p className="file-error">{error}</p> : null}
+            </div>
+            <footer>
+              <button type="submit" className="save" disabled={saving || draft.email.trim() === "" || draft.name.trim() === ""}>
+                记下
+              </button>
+            </footer>
+          </form>
+        </Dialog>
+      ) : null}
     </section>
   );
 }

@@ -6,6 +6,7 @@ import type { HairStyle, Look } from "../office/types";
 import { dismissPerson, forgetMemory, hirePerson, updateDepartment, updatePerson } from "./api";
 import { staffFull, type Department, type DepartmentDraft } from "./department";
 import { Colleagues } from "./Colleagues";
+import { Dialog } from "./Dialog";
 import { cancelDuty, dutyWhen, listDuties, type Duty } from "../work/duty";
 import {
   GENDER_LABEL,
@@ -80,12 +81,12 @@ export function RosterPanel({
   onPets: (pets: PetId[] | null) => void;
 }) {
   const [form, setForm] = useState<FormState | null>(null);
+  const [floorOpen, setFloorOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [duties, setDuties] = useState<Duty[]>([]);
   const handledPick = useRef<number | null>(pickRequest?.n ?? null);
-  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     if (!form) {
@@ -96,6 +97,12 @@ export function RosterPanel({
   }, [form, onDraft]);
 
   useEffect(() => () => onDraft(null), [onDraft]);
+
+  useEffect(() => {
+    if (!floorDraft) return;
+    setFloorOpen(true);
+    setForm(null);
+  }, [floorDraft]);
 
   useEffect(() => {
     let gone = false;
@@ -111,22 +118,20 @@ export function RosterPanel({
   }, [people, department]);
 
   useEffect(() => {
-    if (!form) return;
-    formRef.current?.scrollIntoView({ block: "start" });
-  }, [form?.kind, form?.id]);
-
-  useEffect(() => {
     if (!pickRequest || pickRequest.n === handledPick.current || !people) return;
     const person = people.find((item) => item.id === pickRequest.id);
     if (!person) return;
     handledPick.current = pickRequest.n;
+    if (floorDraft) return;
+    setFloorOpen(false);
     setForm(editForm(person));
     setError(null);
     setLeaving(false);
-  }, [pickRequest, people]);
+  }, [pickRequest, people, floorDraft]);
 
   function startHire() {
     onSelect(null);
+    setFloorOpen(false);
     setForm(createForm());
     setError(null);
     setLeaving(false);
@@ -134,9 +139,22 @@ export function RosterPanel({
 
   function open(person: PersonRow) {
     onSelect(person.id);
+    setFloorOpen(false);
     setForm(editForm(person));
     setError(null);
     setLeaving(false);
+  }
+
+  function editFloor() {
+    setForm(null);
+    setError(null);
+    setLeaving(false);
+    setFloorOpen(true);
+  }
+
+  function closeFloor() {
+    setFloorOpen(false);
+    if (floorDraft) onDiscardFloor();
   }
 
   function closeForm() {
@@ -182,7 +200,7 @@ export function RosterPanel({
       } else if (form.id) {
         const person = await updatePerson(form.id, parsed.value);
         onPeople(applyPerson(people ?? [], person));
-        setForm(editForm(person));
+        setForm(null);
         setLeaving(false);
       }
     } catch (caught) {
@@ -217,6 +235,7 @@ export function RosterPanel({
   const seats = department?.seats ?? 8;
   const note = people ? rosterNote(people, seats) : null;
   const roomForHire = people ? canHire(people, seats) : false;
+  const showFloor = Boolean(floorDraft) || floorOpen;
   const identity = form ? identityOf({ brief: form.brief, dossier: form.dossier }) : null;
   const memories =
     form?.kind === "edit" && form.id ? (people?.find((person) => person.id === form.id)?.memories ?? []) : [];
@@ -269,21 +288,6 @@ export function RosterPanel({
         </span>
       </header>
       <div className="log">
-        {floorDraft ? <p className="hint">保存之后，这一层才出现在办公楼。</p> : null}
-        {floorDraft || department ? (
-          <DepartmentForm
-            key={floorDraft ? "new-floor" : department?.id}
-            department={floorDraft ? null : department}
-            draft={floorDraft}
-            onDepartment={onDepartment}
-            onCreateFloor={onCreateFloor}
-            onDiscardFloor={onDiscardFloor}
-            onPreviewFloor={onPreviewFloor}
-            onRemoveFloor={onRemoveFloor}
-            onLook={onLook}
-            onPets={onPets}
-          />
-        ) : null}
         {loadError ? (
           <p className="file-error">
             {loadError}{" "}
@@ -292,32 +296,89 @@ export function RosterPanel({
             </button>
           </p>
         ) : null}
-        {people === null && !loadError && !floorDraft ? <p className="empty">在读档案。</p> : null}
-        {people && people.length === 0 && !form && !floorDraft ? (
-          <p className="empty">还没有人。入职只留下档案，主管派活时才会进办公室。</p>
-        ) : null}
-        {people && people.length > 0 && !floorDraft ? (
-          <ul className="people">
-            {people.map((person) => (
-              <li key={person.id}>
-                <button
-                  type="button"
-                  className={person.id === selectedId ? "on" : ""}
-                  onClick={() => open(person)}
-                >
-                  <b>{person.name}</b>
-                  <em>
-                    {GENDER_LABEL[person.gender]} · {rosterLabel(person)}
-                  </em>
+        {floorDraft || department ? (
+          <section className="roster-section">
+            <header>
+              <h3>这一层</h3>
+              {department && !floorDraft ? (
+                <button type="button" onClick={editFloor}>
+                  编辑
                 </button>
-              </li>
-            ))}
-          </ul>
+              ) : null}
+            </header>
+            {department ? <FloorSummary department={department} /> : null}
+            {floorDraft ? <p className="hint">保存之后，这一层才出现在办公楼。</p> : null}
+          </section>
         ) : null}
-        {note ? <p className="hint">{note}</p> : null}
-        {floorDraft ? null : <Colleagues />}
+        {floorDraft ? null : (
+          <section className="roster-section">
+            <header>
+              <h3>人</h3>
+              <button type="button" onClick={startHire} disabled={people === null || !roomForHire}>
+                入职
+              </button>
+            </header>
+            {people === null && !loadError ? <p className="empty">在读档案。</p> : null}
+            {people && people.length === 0 ? (
+              <p className="empty">还没有人。入职只留下档案，主管派活时才会进办公室。</p>
+            ) : null}
+            {people && people.length > 0 ? (
+              <ul className="people">
+                {people.map((person) => (
+                  <li key={person.id}>
+                    <button
+                      type="button"
+                      className={person.id === selectedId ? "on" : ""}
+                      onClick={() => open(person)}
+                    >
+                      <b>{person.name}</b>
+                      <em>
+                        {GENDER_LABEL[person.gender]} · {rosterLabel(person)}
+                      </em>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {note ? <p className="hint">{note}</p> : null}
+          </section>
+        )}
+        {floorDraft ? null : (
+          <Colleagues
+            suspended={form !== null || showFloor}
+            onBegin={() => {
+              setForm(null);
+              setError(null);
+              setLeaving(false);
+              setFloorOpen(false);
+            }}
+          />
+        )}
+        {showFloor && (floorDraft || department) ? (
+          <DepartmentForm
+            key={floorDraft ? "new-floor" : department?.id}
+            department={floorDraft ? null : department}
+            draft={floorDraft}
+            onDepartment={onDepartment}
+            onCreateFloor={onCreateFloor}
+            onPreviewFloor={onPreviewFloor}
+            onRemoveFloor={onRemoveFloor}
+            onLook={onLook}
+            onPets={onPets}
+            onClose={closeFloor}
+            onSaved={() => setFloorOpen(false)}
+          />
+        ) : null}
         {form ? (
-          <form id="person-form" className="file" onSubmit={save} ref={formRef}>
+          <Dialog title={form.kind === "create" ? "入职" : "档案"} onClose={closeForm}>
+          <form className="sheet-form" onSubmit={save}>
+            <header>
+              <strong>{form.kind === "create" ? "入职" : form.name.trim() || "档案"}</strong>
+              <button type="button" className="close" onClick={closeForm} disabled={saving}>
+                取消
+              </button>
+            </header>
+            <div className="body file">
             <label>
               姓名
               <input
@@ -325,6 +386,7 @@ export function RosterPanel({
                 onChange={(event) => setForm({ ...form, name: event.target.value })}
                 autoComplete="off"
                 maxLength={32}
+                autoFocus
               />
             </label>
             <div className="field">
@@ -510,31 +572,22 @@ export function RosterPanel({
                 )}
               </div>
             ) : null}
-            {error ? <p className="file-error">{error}</p> : null}
-          </form>
-        ) : null}
-      </div>
-      <div className="staff-bar">
-        {form ? (
-          <>
             {leaving ? <p className="hint">确认后，这份档案去掉，工位留着。</p> : null}
-            <button type="submit" form="person-form" className="save" disabled={saving}>
-              {form.kind === "create" ? "入职" : "保存"}
-            </button>
-            {form.kind === "edit" ? (
-              <button type="button" className="leave" onClick={() => void leave()} disabled={saving}>
-                {leaving ? "确认离职" : "离职"}
+            {error ? <p className="file-error">{error}</p> : null}
+            </div>
+            <footer>
+              <button type="submit" className="save" disabled={saving}>
+                {form.kind === "create" ? "入职" : "保存"}
               </button>
-            ) : null}
-            <button type="button" onClick={closeForm} disabled={saving}>
-              取消
-            </button>
-          </>
-        ) : floorDraft ? null : (
-          <button type="button" className="save" onClick={startHire} disabled={people === null || !roomForHire}>
-            入职
-          </button>
-        )}
+              {form.kind === "edit" ? (
+                <button type="button" className="leave" onClick={() => void leave()} disabled={saving}>
+                  {leaving ? "确认离职" : "离职"}
+                </button>
+              ) : null}
+            </footer>
+          </form>
+          </Dialog>
+        ) : null}
       </div>
     </aside>
   );
@@ -583,21 +636,23 @@ function DepartmentForm({
   draft,
   onDepartment,
   onCreateFloor,
-  onDiscardFloor,
   onPreviewFloor,
   onRemoveFloor,
   onLook,
   onPets,
+  onClose,
+  onSaved,
 }: {
   department: Department | null;
   draft: DepartmentDraft | null;
   onDepartment: (department: Department) => void;
   onCreateFloor: (draft: DepartmentDraft) => Promise<void>;
-  onDiscardFloor: () => void;
   onPreviewFloor: (draft: DepartmentDraft) => void;
   onRemoveFloor: (id: string) => Promise<void>;
   onLook: (look: RoomLook | null) => void;
   onPets: (pets: PetId[] | null) => void;
+  onClose: () => void;
+  onSaved: () => void;
 }) {
   const opening = department ?? draft ?? { floor: 1, name: "", rules: "", seats: 4, pets: "", ...DEFAULT_ROOM };
   const [floor, setFloor] = useState(String(opening.floor));
@@ -662,7 +717,7 @@ function DepartmentForm({
 
   async function remove() {
     if (!department) {
-      onDiscardFloor();
+      onClose();
       return;
     }
     if (saving) return;
@@ -675,6 +730,7 @@ function DepartmentForm({
     setError(null);
     try {
       await onRemoveFloor(department.id);
+      onSaved();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "这一层没有拆掉。");
     } finally {
@@ -702,10 +758,12 @@ function DepartmentForm({
     try {
       if (!department) {
         await onCreateFloor(body);
+        onSaved();
         return;
       }
       const next = await updateDepartment(department.id, body);
       onDepartment(next);
+      onSaved();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "这一层没有写成。");
     } finally {
@@ -713,102 +771,140 @@ function DepartmentForm({
     }
   }
 
+  const title = department ? "编辑这一层" : "新的一层";
   return (
-    <form className="file floor-file" onSubmit={(event) => void save(event)}>
-      <div className="floor-fields">
-        <label>
-          楼层
-          <input value={floor} onChange={(event) => setFloor(event.target.value)} inputMode="numeric" />
-        </label>
-        <label>
-          名称
-          <input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            maxLength={16}
-            placeholder={department ? undefined : "比如：调研组"}
-          />
-        </label>
-        <label>
-          工位
-          <input value={seats} onChange={(event) => setSeats(event.target.value)} inputMode="numeric" />
-        </label>
-      </div>
-        <div className="field">
-          <span>楼</span>
-          <div className="presets">
-            {ROOM_PRESETS.map((preset) => (
-              <button
-                key={preset.name}
-                type="button"
-                className={sameRoom(preset.look, { style, wall, ground, trim, wood }) ? "on" : ""}
-                style={{ background: preset.look.wall }}
-                aria-label={preset.name}
-                onClick={() => {
-                  setStyle(preset.look.style);
-                  setWall(preset.look.wall);
-                  setGround(preset.look.ground);
-                  setTrim(preset.look.trim);
-                  setWood(preset.look.wood);
-                }}
+    <Dialog title={title} onClose={onClose}>
+      <form className="sheet-form" onSubmit={(event) => void save(event)}>
+        <header>
+          <strong>{title}</strong>
+          <button type="button" className="close" onClick={onClose} disabled={saving}>
+            取消
+          </button>
+        </header>
+        <div className="body file">
+          <div className="floor-fields">
+            <label>
+              楼层
+              <input value={floor} onChange={(event) => setFloor(event.target.value)} inputMode="numeric" />
+            </label>
+            <label>
+              名称
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                maxLength={16}
+                placeholder={department ? undefined : "比如：调研组"}
+                autoFocus
               />
-            ))}
+            </label>
+            <label>
+              工位
+              <input value={seats} onChange={(event) => setSeats(event.target.value)} inputMode="numeric" />
+            </label>
           </div>
-          <div className="choices">
-            {ROOM_STYLES.map((item) => (
-              <button key={item} type="button" className={style === item ? "on" : ""} onClick={() => setStyle(item)}>
-                {ROOM_STYLE_LABEL[item]}
-              </button>
-            ))}
+          <div className="field">
+            <span>楼</span>
+            <div className="presets">
+              {ROOM_PRESETS.map((preset) => (
+                <button
+                  key={preset.name}
+                  type="button"
+                  className={sameRoom(preset.look, { style, wall, ground, trim, wood }) ? "on" : ""}
+                  style={{ background: preset.look.wall }}
+                  aria-label={preset.name}
+                  onClick={() => {
+                    setStyle(preset.look.style);
+                    setWall(preset.look.wall);
+                    setGround(preset.look.ground);
+                    setTrim(preset.look.trim);
+                    setWood(preset.look.wood);
+                  }}
+                />
+              ))}
+            </div>
+            <div className="choices">
+              {ROOM_STYLES.map((item) => (
+                <button key={item} type="button" className={style === item ? "on" : ""} onClick={() => setStyle(item)}>
+                  {ROOM_STYLE_LABEL[item]}
+                </button>
+              ))}
+            </div>
+            <div className="colors">
+              <Color label="墙" value={wall} onChange={setWall} />
+              <Color label="地" value={ground} onChange={setGround} />
+              <Color label="线" value={trim} onChange={setTrim} />
+              <Color label="木" value={wood} onChange={setWood} />
+            </div>
           </div>
-          <div className="colors">
-            <Color label="墙" value={wall} onChange={setWall} />
-            <Color label="地" value={ground} onChange={setGround} />
-            <Color label="线" value={trim} onChange={setTrim} />
-            <Color label="木" value={wood} onChange={setWood} />
+          <div className="field">
+            <span>宠物</span>
+            <div className="choices">
+              {PET_CHOICES.map((pet) => (
+                <button
+                  key={pet.id}
+                  type="button"
+                  className={pets.includes(pet.id) ? "on" : ""}
+                  onClick={() =>
+                    setPets((current) =>
+                      current.includes(pet.id) ? current.filter((id) => id !== pet.id) : [...current, pet.id],
+                    )
+                  }
+                >
+                  {pet.name}
+                </button>
+              ))}
+            </div>
+            <p className="hint">点一下放到这一层，再点一下拿掉。没选的楼层没有宠物。</p>
           </div>
+          <label>
+            规章制度
+            <textarea
+              value={rules}
+              onChange={(event) => setRules(event.target.value)}
+              placeholder="比如：合同先由撰写人写完，交给盖章人，盖章人再交给主管。"
+              maxLength={8000}
+            />
+          </label>
+          <p className="hint">主管和这一层的员工都会读到。工位是这一层最多能有几位员工，主管不占工位。</p>
+          {removing ? <p className="hint">确认后，这一层的人、对话和规章制度都会去掉。</p> : null}
+          {error ? <p className="file-error">{error}</p> : null}
         </div>
-        <div className="field">
-          <span>宠物</span>
-          <div className="choices">
-            {PET_CHOICES.map((pet) => (
-              <button
-                key={pet.id}
-                type="button"
-                className={pets.includes(pet.id) ? "on" : ""}
-                onClick={() =>
-                  setPets((current) =>
-                    current.includes(pet.id) ? current.filter((id) => id !== pet.id) : [...current, pet.id],
-                  )
-                }
-              >
-                {pet.name}
-              </button>
-            ))}
-          </div>
-          <p className="hint">点一下放到这一层，再点一下拿掉。没选的楼层没有宠物。</p>
-        </div>
-        <label>
-          规章制度
-        <textarea
-          value={rules}
-          onChange={(event) => setRules(event.target.value)}
-          placeholder="比如：合同先由撰写人写完，交给盖章人，盖章人再交给主管。"
-          maxLength={8000}
-        />
-      </label>
-      <p className="hint">主管和这一层的员工都会读到。工位是这一层最多能有几位员工，主管不占工位。</p>
-      {removing ? <p className="hint">确认后，这一层的人、对话和规章制度都会去掉。</p> : null}
-      {error ? <p className="file-error">{error}</p> : null}
-      <div className="floor-actions">
-        <button type="submit" disabled={saving}>
-          {saving ? "在写" : "保存这一层"}
-        </button>
-        <button type="button" className="leave" onClick={() => void remove()} disabled={Boolean(department) && saving}>
-          {department ? (removing ? "确认拆掉" : "拆掉这一层") : "取消"}
-        </button>
-      </div>
-    </form>
+        <footer>
+          <button type="submit" className="save" disabled={saving}>
+            {saving ? "在写" : "保存这一层"}
+          </button>
+          {department ? (
+            <button type="button" className="leave" onClick={() => void remove()} disabled={saving}>
+              {removing ? "确认拆掉" : "拆掉这一层"}
+            </button>
+          ) : null}
+        </footer>
+      </form>
+    </Dialog>
+  );
+}
+
+function FloorSummary({ department }: { department: Department }) {
+  const pets = (petIds(department.pets) ?? []).flatMap((id) => {
+    const name = PET_CHOICES.find((pet) => pet.id === id)?.name;
+    return name ? [name] : [];
+  });
+  const rule = department.rules
+    .trim()
+    .split("\n")
+    .map((line) => line.trim())
+    .find(Boolean);
+  return (
+    <dl className="roster-facts">
+      <dt>工位</dt>
+      <dd>{department.seats}</dd>
+      <dt>楼</dt>
+      <dd>{ROOM_STYLE_LABEL[department.style] ?? ROOM_STYLE_LABEL.wood}</dd>
+      <dt>宠物</dt>
+      <dd>{pets.length ? pets.join("、") : "没有"}</dd>
+      <dt>制度</dt>
+      <dd className="rule">{rule || "还没有"}</dd>
+    </dl>
   );
 }
 
