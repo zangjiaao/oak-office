@@ -162,7 +162,7 @@ async function oneSummary(model: Model<any>, streamFn: StreamFn, apiKey: string,
     previous
       ? "把上面的新对话并进已有摘要。保留已有信息，补上新的进展、决定和上下文。完成的事项从「正在做」挪到「已完成」。"
       : "把上面的对话写成一份供另一个模型接着工作的摘要。",
-    "用下面的标题，内容用中文，尽量短。保留准确的文件路径、人名、数字和原话。",
+    "用下面的标题，内容用中文，尽量短。保留准确的文件路径、人名、数字和原话。标成「用户某某」的人是主管的上级，不是员工。",
     "## 目标",
     "## 约束",
     "## 进度",
@@ -209,7 +209,7 @@ function spokenLine(line: TranscriptLine, names: Map<string, string>) {
         : line.role === "clock"
           ? "定时"
           : line.author_email
-            ? (names.get(line.author_email) ?? line.author_email)
+            ? `用户${names.get(line.author_email) ?? line.author_email}`
             : "用户";
   return `[${who}] ${line.text}${toolHint(line.raw)}`;
 }
