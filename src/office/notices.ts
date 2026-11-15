@@ -4,12 +4,12 @@ export type Notice = {
   body: string;
 };
 
-/** Newest first. A new top id brings the horn mark back for anyone who has not opened it. */
+/** Newest first. A new top id brings the mark back for anyone who has not opened the rules. */
 export const NOTICES: Notice[] = [
   {
-    id: "horn",
-    title: "喇叭",
-    body: "办公室右上角的喇叭放功能更新和调整。有新的一条时，喇叭上会出现感叹号。点开一次，感叹号只对你消失。",
+    id: "rules",
+    title: "公告",
+    body: "左上角的制度可以切到公告，看功能更新和调整。有新的一条时，制度上会出现感叹号。点开一次，感叹号只对你消失。",
   },
   {
     id: "water",

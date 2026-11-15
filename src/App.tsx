@@ -75,7 +75,6 @@ export function App() {
   const [boardOpen, setBoardOpen] = useState(false);
   const [clockOpen, setClockOpen] = useState(false);
   const [waterOpen, setWaterOpen] = useState(false);
-  const [hornOpen, setHornOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [floorDraft, setFloorDraft] = useState<DepartmentDraft | null>(null);
   const [floorLive, setFloorLive] = useState<DepartmentDraft | null>(null);
@@ -179,7 +178,6 @@ export function App() {
     setClockOpen(false);
     setWaterOpen(false);
     setRulesOpen(false);
-    setHornOpen(false);
   }
 
   function dropDraft() {
@@ -438,12 +436,6 @@ export function App() {
           } : undefined}
           onCloseWater={() => setWaterOpen(false)}
           waterOpen={waterOpen && !floorDraft && mode !== "rehearsal"}
-          onHorn={() => {
-            closeDesks();
-            setHornOpen(true);
-          }}
-          onCloseHorn={() => setHornOpen(false)}
-          hornOpen={hornOpen}
           rules={rulesOpen && !floorDraft && mode !== "rehearsal"}
           rulesText={department?.rules ?? ""}
           onSaveRules={saveRules}

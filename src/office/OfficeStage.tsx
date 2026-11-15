@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { actorAt, boardAt, boardFace, clockAt, coolerAt, cupAt, drawOffice, hornAt, monitorAt, roomTransform, rulesAt } from "./draw";
+import { actorAt, boardAt, boardFace, clockAt, coolerAt, cupAt, drawOffice, monitorAt, roomTransform, rulesAt } from "./draw";
 import { BoardDesk } from "./BoardDesk";
 import { ClockDesk } from "./ClockDesk";
-import { NoticeDesk } from "./NoticeDesk";
 import { RulesDesk } from "./RulesDesk";
 import { ScreenDesk } from "./ScreenDesk";
 import { WaterDesk } from "./WaterDesk";
@@ -37,9 +36,6 @@ export function OfficeStage({
   onWater,
   onCloseWater,
   waterOpen = false,
-  onHorn,
-  onCloseHorn,
-  hornOpen = false,
   rulesText = "",
   onSaveRules,
   departmentId = "",
@@ -67,9 +63,6 @@ export function OfficeStage({
   onWater?: () => void;
   onCloseWater?: () => void;
   waterOpen?: boolean;
-  onHorn?: () => void;
-  onCloseHorn?: () => void;
-  hornOpen?: boolean;
   rulesText?: string;
   onSaveRules?: (rules: string) => Promise<void>;
   departmentId?: string;
@@ -84,7 +77,6 @@ export function OfficeStage({
   const onClockRef = useRef(onClock);
   const onRulesRef = useRef(onRules);
   const onWaterRef = useRef(onWater);
-  const onHornRef = useRef(onHorn);
   const desksRef = useRef(desks);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [ambient, setAmbient] = useState(0);
@@ -93,9 +85,10 @@ export function OfficeStage({
   const [notices, setNotices] = useState<Notice[] | null>(null);
   const [noticeError, setNoticeError] = useState<string | null>(null);
   const [unseen, setUnseen] = useState(false);
+  const [noticesFirst, setNoticesFirst] = useState(false);
   const reminderRef = useRef(reminder);
   const unseenRef = useRef(unseen);
-  const sawHorn = useRef(false);
+  const sawNotice = useRef(false);
   const live = clock === null;
 
   actorsRef.current = actors;
@@ -105,7 +98,6 @@ export function OfficeStage({
   onClockRef.current = onClock;
   onRulesRef.current = onRules;
   onWaterRef.current = onWater;
-  onHornRef.current = onHorn;
   desksRef.current = desks;
   reminderRef.current = reminder;
   unseenRef.current = unseen;
@@ -146,7 +138,7 @@ export function OfficeStage({
       .then((board) => {
         if (gone) return;
         setNotices(board.notices);
-        if (!sawHorn.current) setUnseen(board.unseen);
+        if (!sawNotice.current) setUnseen(board.unseen);
         setNoticeError(null);
       })
       .catch((caught) => {
@@ -190,26 +182,24 @@ export function OfficeStage({
   }, [size, actors, drawn, room, desks, look, pets, wall, reminder, unseen]);
 
   function pick(event: React.MouseEvent<HTMLCanvasElement>) {
-    if (screen || board || clockOpen || rules || waterOpen || hornOpen) return;
+    if (screen || board || clockOpen || rules || waterOpen) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     const { scale, ox, oy } = roomTransform(rect.width, rect.height, room);
     const x = (event.clientX - rect.left - ox) / scale;
     const y = (event.clientY - rect.top - oy) / scale;
-    if (hornAt(x, y) && onHornRef.current) {
-      if (!sawHorn.current) {
-        sawHorn.current = true;
+    if (rulesAt(x, y) && onRulesRef.current) {
+      const fresh = unseenRef.current && !sawNotice.current;
+      setNoticesFirst(fresh);
+      if (!sawNotice.current) {
+        sawNotice.current = true;
         setUnseen(false);
         void seeNotices().catch(() => {
-          sawHorn.current = false;
+          sawNotice.current = false;
           setUnseen(true);
         });
       }
-      onHornRef.current();
-      return;
-    }
-    if (rulesAt(x, y) && onRulesRef.current) {
       onRulesRef.current();
       return;
     }
@@ -249,8 +239,8 @@ export function OfficeStage({
   const box = officeBox(size.w, size.h, room);
 
   return (
-    <div className={screen || board || clockOpen || rules || waterOpen || hornOpen ? "stage into" : "stage"} ref={wrapRef}>
-      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard || onClock || onRules || onWater || onHorn ? "pick" : ""} />
+    <div className={screen || board || clockOpen || rules || waterOpen ? "stage into" : "stage"} ref={wrapRef}>
+      <canvas ref={canvasRef} onClick={pick} className={onPick || onScreen || onBoard || onClock || onRules || onWater ? "pick" : ""} />
       {screen && onCloseScreen ? (
         <ScreenDesk title={screen.title} personId={screen.personId} onClose={onCloseScreen} box={paddedOffice(box)} />
       ) : null}
@@ -269,11 +259,17 @@ export function OfficeStage({
           onReminder={setReminder}
         />
       ) : null}
-      {hornOpen && onCloseHorn ? (
-        <NoticeDesk notices={notices} error={noticeError} box={boardBox(box)} face={look.wood} onClose={onCloseHorn} />
-      ) : null}
       {rules && onCloseRules && onSaveRules ? (
-        <RulesDesk text={rulesText} box={boardBox(box)} face={look.wood} onClose={onCloseRules} onSave={onSaveRules} />
+        <RulesDesk
+          text={rulesText}
+          notices={notices}
+          noticeError={noticeError}
+          noticesFirst={noticesFirst}
+          box={boardBox(box)}
+          face={look.wood}
+          onClose={onCloseRules}
+          onSave={onSaveRules}
+        />
       ) : null}
     </div>
   );

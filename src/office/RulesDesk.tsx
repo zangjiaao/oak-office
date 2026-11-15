@@ -1,19 +1,27 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { RULES_MAX } from "../people/department";
+import type { Notice } from "./notices";
 
 export function RulesDesk({
   text,
+  notices,
+  noticeError,
+  noticesFirst,
   box,
   face,
   onClose,
   onSave,
 }: {
   text: string;
+  notices: Notice[] | null;
+  noticeError: string | null;
+  noticesFirst: boolean;
   box: { left: number; top: number; width: number; height: number };
   face: string;
   onClose: () => void;
   onSave: (rules: string) => Promise<void>;
 }) {
+  const [tab, setTab] = useState<"rules" | "notices">(noticesFirst ? "notices" : "rules");
   const [rules, setRules] = useState(text);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -32,6 +40,7 @@ export function RulesDesk({
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
+    if (tab !== "rules") return;
     setSaving(true);
     setError(null);
     try {
@@ -49,29 +58,52 @@ export function RulesDesk({
       <form
         className="charter"
         role="dialog"
-        aria-label="部门制度"
+        aria-label="制度和公告"
         style={{ ...box, backgroundColor: face, color: ink(face) } as CSSProperties}
         onSubmit={(event) => void save(event)}
       >
         <header>
-          <strong>制度</strong>
-          <button type="button" aria-label="关上" onClick={onClose}>
+          <div className="charter-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={tab === "rules"} className={tab === "rules" ? "on" : ""} onClick={() => setTab("rules")}>
+              制度
+            </button>
+            <button type="button" role="tab" aria-selected={tab === "notices"} className={tab === "notices" ? "on" : ""} onClick={() => setTab("notices")}>
+              公告
+            </button>
+          </div>
+          <button type="button" className="close" aria-label="关上" onClick={onClose}>
             <CloseIcon />
           </button>
         </header>
-        <textarea
-          value={rules}
-          maxLength={RULES_MAX}
-          placeholder="比如：合同先由撰写人写完，交给盖章人，盖章人再交给主管。"
-          aria-label="部门制度"
-          onChange={(event) => setRules(event.target.value)}
-        />
-        {error ? <p className="quiet">{error}</p> : null}
-        <footer>
-          <button type="submit" disabled={saving}>
-            {saving ? "在写" : "保存"}
-          </button>
-        </footer>
+        {tab === "rules" ? (
+          <div className="charter-rules">
+            <textarea
+              value={rules}
+              maxLength={RULES_MAX}
+              placeholder="比如：合同先由撰写人写完，交给盖章人，盖章人再交给主管。"
+              aria-label="部门制度"
+              onChange={(event) => setRules(event.target.value)}
+            />
+            {error ? <p className="quiet">{error}</p> : null}
+            <footer>
+              <button type="submit" disabled={saving}>
+                {saving ? "在写" : "保存"}
+              </button>
+            </footer>
+          </div>
+        ) : (
+          <div className="notice-list" role="tabpanel" aria-label="公告">
+            {noticeError ? <p>{noticeError}</p> : null}
+            {!noticeError && notices === null ? <p>在取公告。</p> : null}
+            {!noticeError && notices && notices.length === 0 ? <p>还没有公告。</p> : null}
+            {(notices ?? []).map((notice) => (
+              <article key={notice.id}>
+                <strong>{notice.title}</strong>
+                <p>{notice.body}</p>
+              </article>
+            ))}
+          </div>
+        )}
       </form>
     </div>
   );
