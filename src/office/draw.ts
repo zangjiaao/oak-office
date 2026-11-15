@@ -50,6 +50,7 @@ function drawRoom(
   now: number,
   dripping: boolean,
   cup: { fill: number; due: boolean } | null,
+  hornAlert: boolean,
 ) {
   rect(ctx, 0, 0, room.w, 78, look.wall);
   rect(ctx, 0, 0, room.w, 8, shade(look.wall, -20));
@@ -83,6 +84,8 @@ function drawRoom(
     rect(ctx, 324, 30, 18, 6, "#f4f7fb");
     if (frame % 80 < 40) rect(ctx, 336, 18, 2, 2, "#f4f0c8");
   }
+
+  drawHorn(ctx, hornAlert);
 
   rect(ctx, 364, 70, 16, 28, "#d9e4ea");
   rect(ctx, 368, 74, 8, 10, look.trim);
@@ -232,12 +235,33 @@ const CLOCK = { x: 214, y: 22, w: 22, h: 22 };
 
 const RULES = { x: 18, y: 18, w: 46, h: 40 };
 
+const HORN = { x: 366, y: 8, w: 30, h: 34 };
+
 const COOLER = { x: 358, y: 66, w: 30, h: 38 };
 
 const CUP = { x: 366, y: 87, w: 12, h: 12 };
 
 export function cupAt(roomX: number, roomY: number) {
   return roomX >= CUP.x && roomX <= CUP.x + CUP.w && roomY >= CUP.y && roomY <= CUP.y + CUP.h;
+}
+
+export function hornAt(roomX: number, roomY: number) {
+  return roomX >= HORN.x && roomX <= HORN.x + HORN.w && roomY >= HORN.y && roomY <= HORN.y + HORN.h;
+}
+
+function drawHorn(ctx: CanvasRenderingContext2D, alert: boolean) {
+  rect(ctx, 390, 16, 3, 10, "#3e2918");
+  rect(ctx, 368, 20, 8, 14, "#c6a15b");
+  rect(ctx, 370, 23, 4, 8, "#1a1714");
+  rect(ctx, 376, 22, 8, 10, "#6b4428");
+  rect(ctx, 384, 24, 6, 6, "#8a5a32");
+  rect(ctx, 388, 30, 3, 8, "#3e2918");
+  if (!alert) return;
+  rect(ctx, 374, 8, 12, 10, "#fffaf2");
+  ctx.fillStyle = "#a8322a";
+  ctx.font = "8px ui-monospace, monospace";
+  ctx.textAlign = "center";
+  ctx.fillText("!", 380, 16);
 }
 
 export function coolerAt(roomX: number, roomY: number) {
@@ -470,6 +494,7 @@ export function drawOffice(
   now = Date.now(),
   dripping = false,
   cup: { fill: number; due: boolean } | null = null,
+  hornAlert = false,
 ) {
   ctx.clearRect(0, 0, width, height);
   ctx.fillStyle = "#1a1714";
@@ -483,7 +508,7 @@ export function drawOffice(
   roomCtx.clearRect(0, 0, buffer.width, buffer.height);
   roomCtx.setTransform(pixel, 0, 0, pixel, 0, 0);
   roomCtx.imageSmoothingEnabled = false;
-  drawRoom(roomCtx, frame, room, look, now, dripping, cup);
+  drawRoom(roomCtx, frame, room, look, now, dripping, cup, hornAlert);
 
   const layers: { y: number; draw: () => void }[] = desks.map((desk) => ({
     y: desk.y,

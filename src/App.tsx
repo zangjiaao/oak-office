@@ -75,6 +75,7 @@ export function App() {
   const [boardOpen, setBoardOpen] = useState(false);
   const [clockOpen, setClockOpen] = useState(false);
   const [waterOpen, setWaterOpen] = useState(false);
+  const [hornOpen, setHornOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [floorDraft, setFloorDraft] = useState<DepartmentDraft | null>(null);
   const [floorLive, setFloorLive] = useState<DepartmentDraft | null>(null);
@@ -172,17 +173,22 @@ export function App() {
     setPlaying(true);
   }
 
+  function closeDesks() {
+    setScreen(null);
+    setBoardOpen(false);
+    setClockOpen(false);
+    setWaterOpen(false);
+    setRulesOpen(false);
+    setHornOpen(false);
+  }
+
   function dropDraft() {
     setFloorDraft(null);
     setFloorLive(null);
   }
 
   async function choose(id: string) {
-    setScreen(null);
-    setBoardOpen(false);
-    setClockOpen(false);
-    setWaterOpen(false);
-    setRulesOpen(false);
+    closeDesks();
     dropDraft();
     localStorage.setItem(DEPARTMENT_KEY, id);
     setDepartmentId(id);
@@ -333,11 +339,7 @@ export function App() {
               type="button"
               className={mode === "work" ? "on" : ""}
               onClick={() => {
-                setScreen(null);
-                setBoardOpen(false);
-                setClockOpen(false);
-                setWaterOpen(false);
-                setRulesOpen(false);
+                closeDesks();
                 dropDraft();
                 setMode("work");
               }}
@@ -348,11 +350,7 @@ export function App() {
               type="button"
               className={mode === "roster" ? "on" : ""}
               onClick={() => {
-                setScreen(null);
-                setBoardOpen(false);
-                setClockOpen(false);
-                setWaterOpen(false);
-                setRulesOpen(false);
+                closeDesks();
                 setMode("roster");
               }}
             >
@@ -362,11 +360,7 @@ export function App() {
               type="button"
               className={mode === "rehearsal" ? "on" : ""}
               onClick={() => {
-                setScreen(null);
-                setBoardOpen(false);
-                setClockOpen(false);
-                setWaterOpen(false);
-                setRulesOpen(false);
+                closeDesks();
                 dropDraft();
                 setMode("rehearsal");
               }}
@@ -416,49 +410,40 @@ export function App() {
           pets={mode === "rehearsal" ? [] : floorDraft ? (petDraft ?? []) : (petDraft ?? petIds(department?.pets) ?? [])}
           onPick={mode === "roster" ? pick : undefined}
           onScreen={(desk, title, personId) => {
-            setBoardOpen(false);
-            setClockOpen(false);
-            setWaterOpen(false);
-            setRulesOpen(false);
+            closeDesks();
             setScreen({ x: desk.x, y: desk.y, title, personId });
           }}
           onCloseScreen={() => setScreen(null)}
           screen={screen}
           onBoard={mode !== "rehearsal" && !floorDraft && department ? () => {
-            setScreen(null);
-            setClockOpen(false);
-            setWaterOpen(false);
-            setRulesOpen(false);
+            closeDesks();
             setBoardOpen(true);
           } : undefined}
           onCloseBoard={() => setBoardOpen(false)}
           board={boardOpen && !floorDraft && mode !== "rehearsal"}
           onClock={mode !== "rehearsal" && !floorDraft && department ? () => {
-            setScreen(null);
-            setBoardOpen(false);
-            setRulesOpen(false);
-            setWaterOpen(false);
+            closeDesks();
             setClockOpen(true);
           } : undefined}
           onCloseClock={() => setClockOpen(false)}
           clockOpen={clockOpen && !floorDraft && mode !== "rehearsal"}
           onRules={mode !== "rehearsal" && !floorDraft && department ? () => {
-            setScreen(null);
-            setBoardOpen(false);
-            setClockOpen(false);
-            setWaterOpen(false);
+            closeDesks();
             setRulesOpen(true);
           } : undefined}
           onCloseRules={() => setRulesOpen(false)}
           onWater={mode !== "rehearsal" && !floorDraft && department ? () => {
-            setScreen(null);
-            setBoardOpen(false);
-            setClockOpen(false);
-            setRulesOpen(false);
+            closeDesks();
             setWaterOpen(true);
           } : undefined}
           onCloseWater={() => setWaterOpen(false)}
           waterOpen={waterOpen && !floorDraft && mode !== "rehearsal"}
+          onHorn={() => {
+            closeDesks();
+            setHornOpen(true);
+          }}
+          onCloseHorn={() => setHornOpen(false)}
+          hornOpen={hornOpen}
           rules={rulesOpen && !floorDraft && mode !== "rehearsal"}
           rulesText={department?.rules ?? ""}
           onSaveRules={saveRules}

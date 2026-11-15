@@ -2,6 +2,7 @@ import { createBoardTask, editBoardTask, listBoard, removeBoardTask } from "./bo
 import { callerEmail, listColleagues, readColleagueName, readEmail, removeColleague, saveColleague } from "./colleague";
 import { createDepartment, listDepartments, readDepartment, removeDepartment, updateDepartment } from "./department";
 import { cancelDuty, listDuties, runDue } from "./duty";
+import { NOTICE_YOU, readNotices, seeNotices } from "./notice";
 import { WATER_YOU, clearWater, drinkWater, readWater, saveWater, type WaterReminder } from "./water";
 import { forget } from "./memory";
 import { dismissPerson, readDraft, hirePerson, listPeople, RosterDbError, updatePerson } from "./people";
@@ -172,6 +173,13 @@ export default {
         const personId = await cancelDuty(env.DB, id);
         if (!personId) return json({ error: "没有这个定时。" }, 404);
         await settleShift(env, personId);
+        return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
+      }
+      if (url.pathname === "/api/notices") {
+        const email = callerEmail(request) ?? NOTICE_YOU;
+        if (request.method === "GET") return json(await readNotices(env.DB, email));
+        if (request.method !== "POST") return new Response(null, { status: 405, headers: { allow: "GET, POST" } });
+        await seeNotices(env.DB, email);
         return new Response(null, { status: 204, headers: { "cache-control": "no-store" } });
       }
       if (url.pathname === "/api/water") {
