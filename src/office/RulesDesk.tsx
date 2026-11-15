@@ -98,8 +98,12 @@ export function RulesDesk({
             {!noticeError && notices && notices.length === 0 ? <p>还没有公告。</p> : null}
             {(notices ?? []).map((notice) => (
               <article key={notice.id}>
-                <strong>{notice.title}</strong>
-                <p>{notice.body}</p>
+                <time dateTime={notice.at}>{noticeDate(notice.at)}</time>
+                <ul>
+                  {notice.changes.map((change) => (
+                    <li key={change}>{change}</li>
+                  ))}
+                </ul>
               </article>
             ))}
           </div>
@@ -107,6 +111,12 @@ export function RulesDesk({
       </form>
     </div>
   );
+}
+
+function noticeDate(at: string) {
+  const [year, month, day] = at.split("-");
+  if (!year || !month || !day) return at;
+  return `${year}年${Number(month)}月${Number(day)}日`;
 }
 
 function CloseIcon() {

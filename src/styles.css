@@ -995,9 +995,36 @@ button, input, textarea {
   color: #241c16;
 }
 
-.notice-list article strong { display: block; }
+.notice-list article time {
+  display: block;
+  color: #6b5344;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
 
-.notice-list article p { margin-top: 6px; }
+.notice-list ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.notice-list li {
+  position: relative;
+  padding-left: 14px;
+  line-height: 1.5;
+}
+
+.notice-list li + li { margin-top: 4px; }
+
+.notice-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 5px;
+  height: 5px;
+  background: #6b4428;
+}
 
 .slate form {
   display: flex;
