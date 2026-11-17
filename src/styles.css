@@ -36,14 +36,14 @@ button, input, textarea {
 
 .floor {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
   background: #1a1714;
   color: #f3ead7;
 }
 
-.floor-bar, .poses, .chat header, .chat form {
+.floor-bar, .chat header, .chat form {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -73,7 +73,7 @@ button, input, textarea {
   font-variant-numeric: tabular-nums;
 }
 
-.transport button, .modes button, .poses span {
+.transport button, .modes button {
   border: 1px solid #6b5340;
   background: transparent;
   color: #f3ead7;
@@ -1065,22 +1065,7 @@ button, input, textarea {
   padding: 8px 14px;
 }
 
-.poses {
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  padding: 8px 16px 14px;
-}
-
-.poses span {
-  font-size: 12px;
-  letter-spacing: 0.04em;
-}
-
-.poses .on {
-  background: #c6a15b;
-  border-color: #c6a15b;
-  color: #1a1714;
-}
+.office-toggle { display: none; }
 
 .chat {
   display: grid;
@@ -1887,17 +1872,23 @@ dialog.sheet-dialog {
   }
   .floor-bar .floors::-webkit-scrollbar { display: none; }
   .floor-bar .floors button { flex: none; white-space: nowrap; }
+  .floor-bar .floors.with-toggle { grid-column: 1; }
   .floor-bar .transport { grid-column: 1 / -1; }
-
-  .poses {
-    flex-wrap: nowrap;
-    overflow-x: auto;
+  .office-toggle {
+    display: block;
+    grid-column: 2;
+    grid-row: 2;
+    border: 1px solid #6b5340;
+    background: transparent;
+    color: #f3ead7;
+    padding: 4px 7px;
     white-space: nowrap;
-    scrollbar-width: none;
-    padding: 5px 12px;
+    cursor: pointer;
   }
-  .poses::-webkit-scrollbar { display: none; }
-  .poses span { flex: none; }
+
+  .app.office-collapsed { grid-template-rows: auto minmax(0, 1fr); }
+  .office-collapsed .floor { grid-template-rows: auto; }
+  .office-collapsed .stage, .office-collapsed .split { display: none; }
 
   .split {
     position: relative;

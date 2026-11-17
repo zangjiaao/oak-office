@@ -6,11 +6,10 @@ import { OfficeStage } from "./office/OfficeStage";
 import { Markdown } from "./work/MarkdownView";
 import { ROOM } from "./office/roster";
 import { DURATION } from "./office/script";
-import { activePoses, actorsAt, linesAt } from "./office/scene";
+import { actorsAt, linesAt } from "./office/scene";
 import { rosterView, type DraftPreview } from "./office/seats";
 import { nameLabel, shift, useNow } from "./office/shift";
 import { useWalk } from "./office/walk";
-import { POSE_NAME, type Pose } from "./office/types";
 import { createDepartment, deleteDepartment, listDepartments, listPeople, updateDepartment } from "./people/api";
 import type { Department, DepartmentDraft } from "./people/department";
 import { RosterPanel } from "./people/RosterPanel";
@@ -21,23 +20,10 @@ import type { DutyHold, FloorMark } from "./work/api";
 
 const CHAT_WIDTH_KEY = "oak-office-chat-width";
 const CHAT_HEIGHT_KEY = "oak-office-chat-height-share";
+const OFFICE_COLLAPSED_KEY = "oak-office-mobile-collapsed";
 const DEPARTMENT_KEY = "oak-office-department";
 const CHAT_MIN = 280;
 const CHAT_MAX = 720;
-
-const POSES: Pose[] = [
-  "idle",
-  "arrive",
-  "think",
-  "read",
-  "type",
-  "run",
-  "wait",
-  "handoff",
-  "report",
-  "done",
-  "error",
-];
 
 type Mode = "work" | "roster" | "rehearsal";
 
@@ -103,6 +89,7 @@ export function App() {
   const [chatWidth, setChatWidth] = useState(readChatWidth);
   const chatWidthRef = useRef(chatWidth);
   const [chatHeightShare, setChatHeightShare] = useState(readChatHeightShare);
+  const [officeCollapsed, setOfficeCollapsed] = useState(() => localStorage.getItem(OFFICE_COLLAPSED_KEY) === "1");
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
   const chatHeight = clampChatHeight(chatHeightShare * viewport.height, viewport.height);
   const chatHeightLimits = chatHeightRange(viewport.height);
@@ -186,7 +173,6 @@ export function App() {
   );
   const stood = useWalk(roster.actors, mode === "work");
   const actors = mode === "rehearsal" ? rehearsalActors : stood;
-  const poses = activePoses(time);
   useTabStatus(mode === "work", Object.values(shownFloor));
 
   useEffect(() => {
@@ -308,6 +294,12 @@ export function App() {
     localStorage.setItem(CHAT_HEIGHT_KEY, String(share));
   }
 
+  function toggleOffice() {
+    if (!officeCollapsed) closeDesks();
+    setOfficeCollapsed(!officeCollapsed);
+    localStorage.setItem(OFFICE_COLLAPSED_KEY, officeCollapsed ? "0" : "1");
+  }
+
   function dragChat(event: ReactPointerEvent<HTMLDivElement>) {
     event.preventDefault();
     const handle = event.currentTarget;
@@ -331,7 +323,7 @@ export function App() {
   }
 
   return (
-    <main className="app" style={{ "--chat-width": `${chatWidth}px`, "--chat-height": `${chatHeight}px` } as CSSProperties}>
+    <main className={mobile && mode === "work" && officeCollapsed ? "app office-collapsed" : "app"} style={{ "--chat-width": `${chatWidth}px`, "--chat-height": `${chatHeight}px` } as CSSProperties}>
       <section className="floor">
         <header className="floor-bar">
           <div>
@@ -349,7 +341,7 @@ export function App() {
             </span>
           </div>
           {mode === "rehearsal" ? null : (
-            <nav className="floors">
+            <nav className={mode === "work" ? "floors with-toggle" : "floors"}>
               {(departments ?? []).map((item) => (
                 <button
                   key={item.id}
@@ -401,6 +393,17 @@ export function App() {
               排练
             </button>
           </div>
+          {mode === "work" ? (
+            <button
+              className="office-toggle"
+              type="button"
+              aria-label={officeCollapsed ? "展开办公室画布" : "收起办公室画布"}
+              aria-expanded={!officeCollapsed}
+              onClick={toggleOffice}
+            >
+              {officeCollapsed ? "展开办公室" : "收起办公室"}
+            </button>
+          ) : null}
           {mode === "rehearsal" ? (
             <div className="transport">
               <span>{format(time)}</span>
@@ -477,15 +480,6 @@ export function App() {
           departmentId={department?.id ?? ""}
           people={(people ?? []).map((person) => ({ id: person.id, name: person.name }))}
         />
-        {mode === "rehearsal" || mode === "work" ? (
-          <footer className="poses">
-            {POSES.map((pose) => (
-              <span key={pose} className={(mode === "rehearsal" ? poses : new Set(actors.map((actor) => actor.pose))).has(pose) ? "on" : ""}>
-                {POSE_NAME[pose]}
-              </span>
-            ))}
-          </footer>
-        ) : null}
       </section>
       <div
         className="split"
