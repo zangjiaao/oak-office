@@ -50,7 +50,7 @@ function clampChatHeight(height: number, viewport: number, headerHeight: number)
 }
 
 function chatHeightRange(viewport: number, headerHeight: number) {
-  const max = Math.max(0, viewport - headerHeight - 28);
+  const max = Math.max(0, viewport - headerHeight - 14);
   return { min: Math.min(180, Math.round(viewport * 0.4), max), max };
 }
 
