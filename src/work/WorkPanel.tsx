@@ -278,21 +278,23 @@ export function WorkPanel({
   }, [who, speakers]);
 
   return (
-    <aside className="chat">
+    <aside className="chat work-chat">
       <header>
         <div>
           <strong>{lead?.name ?? "主管"}</strong>
           <span>{departmentName}主管</span>
         </div>
         {speakers.length > 0 ? (
-          <select aria-label="按人看" value={who} onChange={(event) => setWho(event.target.value)}>
-            <option value="all">全部</option>
-            {speakers.map(([email, label]) => (
-              <option key={email} value={email}>
-                {label}
-              </option>
-            ))}
-          </select>
+          <div className="speaker-filter">
+            <select aria-label="按人看" value={who} onChange={(event) => setWho(event.target.value)}>
+              <option value="all">全部</option>
+              {speakers.map(([email, label]) => (
+                <option key={email} value={email}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
         ) : null}
       </header>
       <div className="log" ref={logRef}>
