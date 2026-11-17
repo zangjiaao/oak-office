@@ -12,7 +12,8 @@ export type Block =
   | { kind: "pre"; text: string }
   | { kind: "ul"; items: Inline[][] }
   | { kind: "ol"; items: Inline[][] }
-  | { kind: "quote"; children: Inline[] };
+  | { kind: "quote"; children: Inline[] }
+  | { kind: "table"; headers: Inline[][]; aligns: ("left" | "center" | "right" | null)[]; rows: Inline[][][] };
 
 export function parseMarkdown(source: string): Block[] {
   const text = source.replace(/\r\n/g, "\n");
@@ -59,6 +60,19 @@ function pushFlow(blocks: Block[], source: string) {
       blocks.push({ kind: "quote", children: inline(quoted.join("\n")) });
       continue;
     }
+    const aligns = tableAligns(lines, index);
+    if (aligns) {
+      const headers = splitTableRow(line).map(inline);
+      const rows: Inline[][][] = [];
+      index += 2;
+      while (index < lines.length && lines[index].trim() !== "" && lines[index].includes("|") && !special(lines[index])) {
+        const cells = splitTableRow(lines[index]).slice(0, headers.length);
+        rows.push(Array.from({ length: headers.length }, (_, column) => inline(cells[column] ?? "")));
+        index += 1;
+      }
+      blocks.push({ kind: "table", headers, aligns, rows });
+      continue;
+    }
     const bullet = /^[-*]\s+/.test(line);
     const ordered = /^\d+\.\s+/.test(line);
     if (bullet || ordered) {
@@ -72,12 +86,39 @@ function pushFlow(blocks: Block[], source: string) {
       continue;
     }
     const paragraph: string[] = [];
-    while (index < lines.length && lines[index].trim() !== "" && !special(lines[index])) {
+    while (index < lines.length && lines[index].trim() !== "" && !special(lines[index]) && !tableAligns(lines, index)) {
       paragraph.push(lines[index]);
       index += 1;
     }
     blocks.push({ kind: "p", children: inline(paragraph.join("\n")) });
   }
+}
+
+function tableAligns(lines: string[], index: number): ("left" | "center" | "right" | null)[] | null {
+  if (index + 1 >= lines.length || !lines[index].includes("|")) return null;
+  const headers = splitTableRow(lines[index]);
+  const separators = splitTableRow(lines[index + 1]);
+  if (headers.length !== separators.length || !separators.every((cell) => /^:?-+:?$/.test(cell))) return null;
+  return separators.map((cell) => cell.startsWith(":") ? (cell.endsWith(":") ? "center" : "left") : cell.endsWith(":") ? "right" : null);
+}
+
+function splitTableRow(line: string): string[] {
+  const row = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  const cells: string[] = [];
+  let cell = "";
+  for (let index = 0; index < row.length; index += 1) {
+    if (row[index] === "\\" && row[index + 1] === "|") {
+      cell += "|";
+      index += 1;
+    } else if (row[index] === "|") {
+      cells.push(cell.trim());
+      cell = "";
+    } else {
+      cell += row[index];
+    }
+  }
+  cells.push(cell.trim());
+  return cells;
 }
 
 export function shortUrl(href: string) {
