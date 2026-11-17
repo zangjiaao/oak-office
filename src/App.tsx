@@ -41,17 +41,17 @@ function clampChat(width: number, viewport: number) {
 
 function readChatHeightShare() {
   const saved = Number(localStorage.getItem(CHAT_HEIGHT_KEY));
-  return Number.isFinite(saved) && saved >= 0.2 && saved <= 0.7 ? saved : 0.35;
+  return Number.isFinite(saved) && saved >= 0.1 && saved <= 1 ? saved : 0.35;
 }
 
-function clampChatHeight(height: number, viewport: number) {
-  const { min, max } = chatHeightRange(viewport);
+function clampChatHeight(height: number, viewport: number, headerHeight: number) {
+  const { min, max } = chatHeightRange(viewport, headerHeight);
   return Math.min(max, Math.max(min, Math.round(height)));
 }
 
-function chatHeightRange(viewport: number) {
-  const min = Math.min(180, Math.round(viewport * 0.4));
-  return { min, max: Math.max(min, viewport - 240) };
+function chatHeightRange(viewport: number, headerHeight: number) {
+  const max = Math.max(0, viewport - headerHeight - 28);
+  return { min: Math.min(180, Math.round(viewport * 0.4), max), max };
 }
 
 function format(ms: number) {
@@ -86,19 +86,29 @@ export function App() {
   const timeRef = useRef(0);
   const modeRef = useRef<Mode>("work");
   const logRef = useRef<HTMLDivElement>(null);
+  const floorBarRef = useRef<HTMLElement>(null);
+  const draggedSplitRef = useRef(false);
   const [chatWidth, setChatWidth] = useState(readChatWidth);
   const chatWidthRef = useRef(chatWidth);
   const [chatHeightShare, setChatHeightShare] = useState(readChatHeightShare);
   const [officeCollapsed, setOfficeCollapsed] = useState(() => localStorage.getItem(OFFICE_COLLAPSED_KEY) === "1");
+  const [headerHeight, setHeaderHeight] = useState(90);
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
-  const chatHeight = clampChatHeight(chatHeightShare * viewport.height, viewport.height);
-  const chatHeightLimits = chatHeightRange(viewport.height);
+  const chatHeight = clampChatHeight(chatHeightShare * viewport.height, viewport.height, headerHeight);
+  const chatHeightLimits = chatHeightRange(viewport.height, headerHeight);
   const mobile = viewport.width <= 800;
 
   useEffect(() => {
     const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
+  }, []);
+  useEffect(() => {
+    const header = floorBarRef.current;
+    if (!header) return;
+    const observer = new ResizeObserver(() => setHeaderHeight(header.getBoundingClientRect().height));
+    observer.observe(header);
+    return () => observer.disconnect();
   }, []);
   const onDraft = useCallback((next: DraftPreview | null) => setDraft(next), []);
   const onLook = useCallback((next: RoomLook | null) => setRoomDraft(next), []);
@@ -289,7 +299,16 @@ export function App() {
   }
 
   function resizeChatHeight(next: number) {
-    const share = clampChatHeight(next, window.innerHeight) / window.innerHeight;
+    const { max } = chatHeightRange(window.innerHeight, floorBarRef.current?.getBoundingClientRect().height ?? headerHeight);
+    if (mode === "work" && next >= max - 12) {
+      if (localStorage.getItem(OFFICE_COLLAPSED_KEY) !== "1") closeDesks();
+      setOfficeCollapsed(true);
+      localStorage.setItem(OFFICE_COLLAPSED_KEY, "1");
+      return;
+    }
+    setOfficeCollapsed(false);
+    localStorage.setItem(OFFICE_COLLAPSED_KEY, "0");
+    const share = clampChatHeight(next, window.innerHeight, headerHeight) / window.innerHeight;
     setChatHeightShare(share);
     localStorage.setItem(CHAT_HEIGHT_KEY, String(share));
   }
@@ -301,14 +320,16 @@ export function App() {
   }
 
   function dragChat(event: ReactPointerEvent<HTMLDivElement>) {
-    event.preventDefault();
+    draggedSplitRef.current = false;
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
     const startX = event.clientX;
     const startY = event.clientY;
     const startW = chatWidthRef.current;
-    const startH = chatHeight;
+    const startH = officeCollapsed && mobile && mode === "work" ? chatHeightLimits.max : chatHeight;
     function move(next: PointerEvent) {
+      if (Math.hypot(next.clientX - startX, next.clientY - startY) < 6 && !draggedSplitRef.current) return;
+      draggedSplitRef.current = true;
       if (mobile) resizeChatHeight(startH - (next.clientY - startY));
       else resizeChat(startW - (next.clientX - startX));
     }
@@ -325,7 +346,7 @@ export function App() {
   return (
     <main className={mobile && mode === "work" && officeCollapsed ? "app office-collapsed" : "app"} style={{ "--chat-width": `${chatWidth}px`, "--chat-height": `${chatHeight}px` } as CSSProperties}>
       <section className="floor">
-        <header className="floor-bar">
+        <header className="floor-bar" ref={floorBarRef}>
           <div>
             <strong>Oak Office</strong>
             <span>
@@ -341,7 +362,7 @@ export function App() {
             </span>
           </div>
           {mode === "rehearsal" ? null : (
-            <nav className={mode === "work" ? "floors with-toggle" : "floors"}>
+            <nav className="floors">
               {(departments ?? []).map((item) => (
                 <button
                   key={item.id}
@@ -393,17 +414,6 @@ export function App() {
               排练
             </button>
           </div>
-          {mode === "work" ? (
-            <button
-              className="office-toggle"
-              type="button"
-              aria-label={officeCollapsed ? "展开办公室画布" : "收起办公室画布"}
-              aria-expanded={!officeCollapsed}
-              onClick={toggleOffice}
-            >
-              {officeCollapsed ? "展开办公室" : "收起办公室"}
-            </button>
-          ) : null}
           {mode === "rehearsal" ? (
             <div className="transport">
               <span>{format(time)}</span>
@@ -485,18 +495,29 @@ export function App() {
         className="split"
         role="separator"
         aria-orientation={mobile ? "horizontal" : "vertical"}
-        aria-label={mobile ? "调整对话框高度" : "调整对话框宽度"}
+        aria-label={mobile ? "拖动调整对话框高度，点击切换办公室显示" : "调整对话框宽度"}
         aria-valuemin={mobile ? chatHeightLimits.min : CHAT_MIN}
         aria-valuemax={mobile ? chatHeightLimits.max : CHAT_MAX}
-        aria-valuenow={mobile ? chatHeight : chatWidth}
+        aria-valuenow={mobile ? (officeCollapsed && mode === "work" ? chatHeightLimits.max : chatHeight) : chatWidth}
         tabIndex={0}
         onPointerDown={dragChat}
-        onDoubleClick={() => { if (mobile) resizeChatHeight(window.innerHeight * 0.35); }}
+        onClick={() => {
+          if (draggedSplitRef.current) {
+            draggedSplitRef.current = false;
+            return;
+          }
+          if (mobile && mode === "work") toggleOffice();
+        }}
         onKeyDown={(event) => {
+          if (mobile && mode === "work" && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            toggleOffice();
+            return;
+          }
           if (mobile && event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
           if (!mobile && event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
           event.preventDefault();
-          if (mobile) resizeChatHeight(chatHeight + (event.key === "ArrowUp" ? 24 : -24));
+          if (mobile) resizeChatHeight((officeCollapsed && mode === "work" ? chatHeightLimits.max : chatHeight) + (event.key === "ArrowUp" ? 24 : -24));
           else resizeChat(chatWidthRef.current + (event.key === "ArrowLeft" ? 24 : -24));
         }}
       />
