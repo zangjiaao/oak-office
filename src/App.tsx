@@ -6,11 +6,10 @@ import { OfficeStage } from "./office/OfficeStage";
 import { Markdown } from "./work/MarkdownView";
 import { ROOM } from "./office/roster";
 import { DURATION } from "./office/script";
-import { activePoses, actorsAt, linesAt } from "./office/scene";
+import { actorsAt, linesAt } from "./office/scene";
 import { rosterView, type DraftPreview } from "./office/seats";
 import { nameLabel, shift, useNow } from "./office/shift";
 import { useWalk } from "./office/walk";
-import { POSE_NAME, type Pose } from "./office/types";
 import { createDepartment, deleteDepartment, listDepartments, listPeople, updateDepartment } from "./people/api";
 import type { Department, DepartmentDraft } from "./people/department";
 import { RosterPanel } from "./people/RosterPanel";
@@ -20,23 +19,11 @@ import { WorkPanel } from "./work/WorkPanel";
 import type { DutyHold, FloorMark } from "./work/api";
 
 const CHAT_WIDTH_KEY = "oak-office-chat-width";
+const CHAT_HEIGHT_KEY = "oak-office-chat-height-share";
+const OFFICE_COLLAPSED_KEY = "oak-office-mobile-collapsed";
 const DEPARTMENT_KEY = "oak-office-department";
 const CHAT_MIN = 280;
 const CHAT_MAX = 720;
-
-const POSES: Pose[] = [
-  "idle",
-  "arrive",
-  "think",
-  "read",
-  "type",
-  "run",
-  "wait",
-  "handoff",
-  "report",
-  "done",
-  "error",
-];
 
 type Mode = "work" | "roster" | "rehearsal";
 
@@ -50,6 +37,21 @@ function readChatWidth() {
 function clampChat(width: number, viewport: number) {
   const max = Math.max(CHAT_MIN, Math.min(CHAT_MAX, viewport - 360));
   return Math.min(max, Math.max(CHAT_MIN, Math.round(width)));
+}
+
+function readChatHeightShare() {
+  const saved = Number(localStorage.getItem(CHAT_HEIGHT_KEY));
+  return Number.isFinite(saved) && saved >= 0.1 && saved <= 1 ? saved : 0.35;
+}
+
+function clampChatHeight(height: number, viewport: number, headerHeight: number) {
+  const { min, max } = chatHeightRange(viewport, headerHeight);
+  return Math.min(max, Math.max(min, Math.round(height)));
+}
+
+function chatHeightRange(viewport: number, headerHeight: number) {
+  const max = Math.max(0, viewport - headerHeight - 14);
+  return { min: Math.min(180, Math.round(viewport * 0.4), max), max };
 }
 
 function format(ms: number) {
@@ -84,8 +86,30 @@ export function App() {
   const timeRef = useRef(0);
   const modeRef = useRef<Mode>("work");
   const logRef = useRef<HTMLDivElement>(null);
+  const floorBarRef = useRef<HTMLElement>(null);
+  const draggedSplitRef = useRef(false);
   const [chatWidth, setChatWidth] = useState(readChatWidth);
   const chatWidthRef = useRef(chatWidth);
+  const [chatHeightShare, setChatHeightShare] = useState(readChatHeightShare);
+  const [officeCollapsed, setOfficeCollapsed] = useState(() => localStorage.getItem(OFFICE_COLLAPSED_KEY) === "1");
+  const [headerHeight, setHeaderHeight] = useState(90);
+  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const chatHeight = clampChatHeight(chatHeightShare * viewport.height, viewport.height, headerHeight);
+  const chatHeightLimits = chatHeightRange(viewport.height, headerHeight);
+  const mobile = viewport.width <= 800;
+
+  useEffect(() => {
+    const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+  useEffect(() => {
+    const header = floorBarRef.current;
+    if (!header) return;
+    const observer = new ResizeObserver(() => setHeaderHeight(header.getBoundingClientRect().height));
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
   const onDraft = useCallback((next: DraftPreview | null) => setDraft(next), []);
   const onLook = useCallback((next: RoomLook | null) => setRoomDraft(next), []);
   const onPets = useCallback((next: PetId[] | null) => setPetDraft(next), []);
@@ -159,7 +183,6 @@ export function App() {
   );
   const stood = useWalk(roster.actors, mode === "work");
   const actors = mode === "rehearsal" ? rehearsalActors : stood;
-  const poses = activePoses(time);
   useTabStatus(mode === "work", Object.values(shownFloor));
 
   useEffect(() => {
@@ -275,15 +298,40 @@ export function App() {
     localStorage.setItem(CHAT_WIDTH_KEY, String(width));
   }
 
+  function resizeChatHeight(next: number) {
+    const { max } = chatHeightRange(window.innerHeight, floorBarRef.current?.getBoundingClientRect().height ?? headerHeight);
+    if (mode === "work" && next >= max - 12) {
+      if (localStorage.getItem(OFFICE_COLLAPSED_KEY) !== "1") closeDesks();
+      setOfficeCollapsed(true);
+      localStorage.setItem(OFFICE_COLLAPSED_KEY, "1");
+      return;
+    }
+    setOfficeCollapsed(false);
+    localStorage.setItem(OFFICE_COLLAPSED_KEY, "0");
+    const share = clampChatHeight(next, window.innerHeight, headerHeight) / window.innerHeight;
+    setChatHeightShare(share);
+    localStorage.setItem(CHAT_HEIGHT_KEY, String(share));
+  }
+
+  function toggleOffice() {
+    if (!officeCollapsed) closeDesks();
+    setOfficeCollapsed(!officeCollapsed);
+    localStorage.setItem(OFFICE_COLLAPSED_KEY, officeCollapsed ? "0" : "1");
+  }
+
   function dragChat(event: ReactPointerEvent<HTMLDivElement>) {
-    if (window.innerWidth <= 800) return;
-    event.preventDefault();
+    draggedSplitRef.current = false;
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
     const startX = event.clientX;
+    const startY = event.clientY;
     const startW = chatWidthRef.current;
+    const startH = officeCollapsed && mobile && mode === "work" ? chatHeightLimits.max : chatHeight;
     function move(next: PointerEvent) {
-      resizeChat(startW - (next.clientX - startX));
+      if (Math.hypot(next.clientX - startX, next.clientY - startY) < 6 && !draggedSplitRef.current) return;
+      draggedSplitRef.current = true;
+      if (mobile) resizeChatHeight(startH - (next.clientY - startY));
+      else resizeChat(startW - (next.clientX - startX));
     }
     function up() {
       handle.removeEventListener("pointermove", move);
@@ -296,9 +344,9 @@ export function App() {
   }
 
   return (
-    <main className="app" style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}>
+    <main className={mobile && mode === "work" && officeCollapsed ? "app office-collapsed" : "app"} style={{ "--chat-width": `${chatWidth}px`, "--chat-height": `${chatHeight}px` } as CSSProperties}>
       <section className="floor">
-        <header className="floor-bar">
+        <header className="floor-bar" ref={floorBarRef}>
           <div>
             <strong>Oak Office</strong>
             <span>
@@ -442,30 +490,35 @@ export function App() {
           departmentId={department?.id ?? ""}
           people={(people ?? []).map((person) => ({ id: person.id, name: person.name }))}
         />
-        {mode === "rehearsal" || mode === "work" ? (
-          <footer className="poses">
-            {POSES.map((pose) => (
-              <span key={pose} className={(mode === "rehearsal" ? poses : new Set(actors.map((actor) => actor.pose))).has(pose) ? "on" : ""}>
-                {POSE_NAME[pose]}
-              </span>
-            ))}
-          </footer>
-        ) : null}
       </section>
       <div
         className="split"
         role="separator"
-        aria-orientation="vertical"
-        aria-label="调整对话框宽度"
-        aria-valuemin={CHAT_MIN}
-        aria-valuemax={CHAT_MAX}
-        aria-valuenow={chatWidth}
+        aria-orientation={mobile ? "horizontal" : "vertical"}
+        aria-label={mobile ? "拖动调整对话框高度，点击切换办公室显示" : "调整对话框宽度"}
+        aria-valuemin={mobile ? chatHeightLimits.min : CHAT_MIN}
+        aria-valuemax={mobile ? chatHeightLimits.max : CHAT_MAX}
+        aria-valuenow={mobile ? (officeCollapsed && mode === "work" ? chatHeightLimits.max : chatHeight) : chatWidth}
         tabIndex={0}
         onPointerDown={dragChat}
+        onClick={() => {
+          if (draggedSplitRef.current) {
+            draggedSplitRef.current = false;
+            return;
+          }
+          if (mobile && mode === "work") toggleOffice();
+        }}
         onKeyDown={(event) => {
-          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          if (mobile && mode === "work" && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            toggleOffice();
+            return;
+          }
+          if (mobile && event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+          if (!mobile && event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
           event.preventDefault();
-          resizeChat(chatWidthRef.current + (event.key === "ArrowLeft" ? 24 : -24));
+          if (mobile) resizeChatHeight((officeCollapsed && mode === "work" ? chatHeightLimits.max : chatHeight) + (event.key === "ArrowUp" ? 24 : -24));
+          else resizeChat(chatWidthRef.current + (event.key === "ArrowLeft" ? 24 : -24));
         }}
       />
       <div className={mode === "work" ? "pane-on" : "pane-off"}>
