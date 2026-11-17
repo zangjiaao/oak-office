@@ -27,6 +27,18 @@ function drawBlock(block: ReturnType<typeof parseMarkdown>[number], key: number)
       </Tag>
     );
   }
+  if (block.kind === "table") {
+    return (
+      <div className="md-table-scroll" key={key}>
+        <table>
+          <thead><tr>{block.headers.map((cell, index) => <th key={index} style={{ textAlign: block.aligns[index] ?? undefined }} scope="col">{drawInline(cell)}</th>)}</tr></thead>
+          <tbody>{block.rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>{row.map((cell, index) => <td key={index} style={{ textAlign: block.aligns[index] ?? undefined }}>{drawInline(cell)}</td>)}</tr>
+          ))}</tbody>
+        </table>
+      </div>
+    );
+  }
   if (block.kind === "quote") return <blockquote key={key}>{drawInline(block.children)}</blockquote>;
   return <p key={key}>{drawInline(block.children)}</p>;
 }
