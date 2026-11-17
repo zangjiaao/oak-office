@@ -1861,7 +1861,62 @@ dialog.sheet-dialog {
 .staff-bar button:disabled { opacity: 0.55; cursor: default; }
 
 @media (max-width: 800px) {
-  .app { grid-template-columns: 1fr; grid-template-rows: minmax(280px, 1fr) minmax(240px, 42vh); }
-  .split { display: none; }
-  .chat { border-top: 8px solid #6b4428; }
+  .app {
+    height: 100dvh;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) 14px minmax(0, var(--chat-height, 35dvh));
+  }
+
+  .floor-bar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 10px;
+    padding: 8px 12px;
+  }
+
+  .floor-bar > div:first-child { min-width: 0; }
+  .floor-bar .modes { grid-column: 2; grid-row: 1; flex-wrap: nowrap; }
+  .floor-bar .modes button { padding: 4px 7px; white-space: nowrap; }
+  .floor-bar .floors {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex-wrap: nowrap;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .floor-bar .floors::-webkit-scrollbar { display: none; }
+  .floor-bar .floors button { flex: none; white-space: nowrap; }
+  .floor-bar .transport { grid-column: 1 / -1; }
+
+  .poses {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none;
+    padding: 5px 12px;
+  }
+  .poses::-webkit-scrollbar { display: none; }
+  .poses span { flex: none; }
+
+  .split {
+    position: relative;
+    cursor: row-resize;
+    border: 0;
+  }
+  .split::after {
+    content: "";
+    position: absolute;
+    width: 42px;
+    height: 4px;
+    border-radius: 4px;
+    background: #d5b985;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+  }
+  .split:focus-visible { outline: 2px solid #f3ead7; outline-offset: -2px; }
+  .chat { min-width: 0; }
+  .chat header, .chat form { padding: 8px 12px; }
+  .log { padding: 10px 12px; }
 }

@@ -20,6 +20,7 @@ import { WorkPanel } from "./work/WorkPanel";
 import type { DutyHold, FloorMark } from "./work/api";
 
 const CHAT_WIDTH_KEY = "oak-office-chat-width";
+const CHAT_HEIGHT_KEY = "oak-office-chat-height-share";
 const DEPARTMENT_KEY = "oak-office-department";
 const CHAT_MIN = 280;
 const CHAT_MAX = 720;
@@ -50,6 +51,21 @@ function readChatWidth() {
 function clampChat(width: number, viewport: number) {
   const max = Math.max(CHAT_MIN, Math.min(CHAT_MAX, viewport - 360));
   return Math.min(max, Math.max(CHAT_MIN, Math.round(width)));
+}
+
+function readChatHeightShare() {
+  const saved = Number(localStorage.getItem(CHAT_HEIGHT_KEY));
+  return Number.isFinite(saved) && saved >= 0.2 && saved <= 0.7 ? saved : 0.35;
+}
+
+function clampChatHeight(height: number, viewport: number) {
+  const { min, max } = chatHeightRange(viewport);
+  return Math.min(max, Math.max(min, Math.round(height)));
+}
+
+function chatHeightRange(viewport: number) {
+  const min = Math.min(180, Math.round(viewport * 0.4));
+  return { min, max: Math.max(min, viewport - 240) };
 }
 
 function format(ms: number) {
@@ -86,6 +102,17 @@ export function App() {
   const logRef = useRef<HTMLDivElement>(null);
   const [chatWidth, setChatWidth] = useState(readChatWidth);
   const chatWidthRef = useRef(chatWidth);
+  const [chatHeightShare, setChatHeightShare] = useState(readChatHeightShare);
+  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }));
+  const chatHeight = clampChatHeight(chatHeightShare * viewport.height, viewport.height);
+  const chatHeightLimits = chatHeightRange(viewport.height);
+  const mobile = viewport.width <= 800;
+
+  useEffect(() => {
+    const resize = () => setViewport({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
   const onDraft = useCallback((next: DraftPreview | null) => setDraft(next), []);
   const onLook = useCallback((next: RoomLook | null) => setRoomDraft(next), []);
   const onPets = useCallback((next: PetId[] | null) => setPetDraft(next), []);
@@ -275,15 +302,23 @@ export function App() {
     localStorage.setItem(CHAT_WIDTH_KEY, String(width));
   }
 
+  function resizeChatHeight(next: number) {
+    const share = clampChatHeight(next, window.innerHeight) / window.innerHeight;
+    setChatHeightShare(share);
+    localStorage.setItem(CHAT_HEIGHT_KEY, String(share));
+  }
+
   function dragChat(event: ReactPointerEvent<HTMLDivElement>) {
-    if (window.innerWidth <= 800) return;
     event.preventDefault();
     const handle = event.currentTarget;
     handle.setPointerCapture(event.pointerId);
     const startX = event.clientX;
+    const startY = event.clientY;
     const startW = chatWidthRef.current;
+    const startH = chatHeight;
     function move(next: PointerEvent) {
-      resizeChat(startW - (next.clientX - startX));
+      if (mobile) resizeChatHeight(startH - (next.clientY - startY));
+      else resizeChat(startW - (next.clientX - startX));
     }
     function up() {
       handle.removeEventListener("pointermove", move);
@@ -296,7 +331,7 @@ export function App() {
   }
 
   return (
-    <main className="app" style={{ "--chat-width": `${chatWidth}px` } as CSSProperties}>
+    <main className="app" style={{ "--chat-width": `${chatWidth}px`, "--chat-height": `${chatHeight}px` } as CSSProperties}>
       <section className="floor">
         <header className="floor-bar">
           <div>
@@ -455,17 +490,20 @@ export function App() {
       <div
         className="split"
         role="separator"
-        aria-orientation="vertical"
-        aria-label="调整对话框宽度"
-        aria-valuemin={CHAT_MIN}
-        aria-valuemax={CHAT_MAX}
-        aria-valuenow={chatWidth}
+        aria-orientation={mobile ? "horizontal" : "vertical"}
+        aria-label={mobile ? "调整对话框高度" : "调整对话框宽度"}
+        aria-valuemin={mobile ? chatHeightLimits.min : CHAT_MIN}
+        aria-valuemax={mobile ? chatHeightLimits.max : CHAT_MAX}
+        aria-valuenow={mobile ? chatHeight : chatWidth}
         tabIndex={0}
         onPointerDown={dragChat}
+        onDoubleClick={() => { if (mobile) resizeChatHeight(window.innerHeight * 0.35); }}
         onKeyDown={(event) => {
-          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          if (mobile && event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+          if (!mobile && event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
           event.preventDefault();
-          resizeChat(chatWidthRef.current + (event.key === "ArrowLeft" ? 24 : -24));
+          if (mobile) resizeChatHeight(chatHeight + (event.key === "ArrowUp" ? 24 : -24));
+          else resizeChat(chatWidthRef.current + (event.key === "ArrowLeft" ? 24 : -24));
         }}
       />
       <div className={mode === "work" ? "pane-on" : "pane-off"}>
