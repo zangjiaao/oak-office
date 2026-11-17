@@ -1919,3 +1919,20 @@ dialog.sheet-dialog {
   .floor-bar .floors button { flex: none; white-space: nowrap; }
   .floor-bar .transport { grid-column: 1 / -1; }
 }
+
+@media (orientation: landscape) and (max-height: 600px) and (pointer: coarse) {
+  .work-chat header { padding: 8px 12px; }
+  .work-chat header > div:first-child {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+  }
+  .work-chat header strong { flex: none; }
+  .work-chat header > div:first-child > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

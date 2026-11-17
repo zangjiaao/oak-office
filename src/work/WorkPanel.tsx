@@ -278,7 +278,7 @@ export function WorkPanel({
   }, [who, speakers]);
 
   return (
-    <aside className="chat">
+    <aside className="chat work-chat">
       <header>
         <div>
           <strong>{lead?.name ?? "主管"}</strong>
